@@ -11,7 +11,7 @@
 Prove NFR-L4 (p99 ≤ 3 s at 20 req/s on production-scale data) and keep proving it on every nightly build.
 
 ## Scope
-1. **Data generator** `tools/DocHub.DataGen` (.NET console app): builds the NFR-L2 volume with set-based inserts (`SqlBulkCopy`) into a deployed DACPAC database. Deterministic seed, configurable scale (`--scale 0.1` for CI, `1.0` for the full test). It creates 50 500 users, 100 folders, 10 000 documents with 5 versions each, realistic tree shapes (depth distribution, 1–2 000 nodes), content produced from the Content Schema fixtures (with derived columns and `ContentStyleUsage` rows), grants, comments and signatures. The audit triggers are disabled during the bulk load, and the generator writes one synthetic audit row per entity so history queries have data.
+1. **Data generator** `tools/DocHub.DataGen` (.NET console app): builds the NFR-L2 volume with set-based inserts (`SqlBulkCopy`) into a deployed DACPAC database. Deterministic seed, configurable scale (`--scale 0.1` for CI, `1.0` for the full test). It creates 50 500 users, 100 folders, 10 000 documents with 5 versions each, realistic tree shapes (depth distribution, 1–2 000 nodes), content produced from the Content Schema fixtures (with derived columns and `ContentStyleUsage` rows), grants, comments and signatures. The audit triggers are disabled during the bulk load, and the generator writes one synthetic audit row per entity so history queries have data. This is by definition a trigger bypass (T21), so the generator finishes by inserting the **reconciliation baseline** (`audit.ReconciliationBaseline`, T21 §4): reconciliation ignores transactions older than the first baseline.
 2. **Load scenarios** with **NBomber** (`tests/DocHub.LoadTests`), following the NFR-L3 mix:
    - Reader: list folder (with title filter) → open document → read 5 nodes.
    - Editor: open draft → autosave content every 3 s × 10 → view node history → compare with latest signed.
@@ -30,4 +30,5 @@ Prove NFR-L4 (p99 ≤ 3 s at 20 req/s on production-scale data) and keep proving
 - [ ] Full-scale run: p99 ≤ 3 s for every endpoint at 20 req/s, and the burst at 40 req/s has 0 % 5xx.
 - [ ] Soak: p95 drifts by no more than +10 % between the first and the last 10 minutes; no memory growth trend in the API.
 - [ ] Every NFR-L5 budget is met, or a defect is filed and linked in the work queue.
+- [ ] The nightly reconciliation (T21) over a 48 h window of the load run finishes in < 10 min and does not push API p99 above 3 s while it runs; the generated data produces no findings (baseline).
 - [ ] **NFR-L6**: while the 20 req/s load runs, a Playwright probe measures main window ready and document form first-section visible — both ≤ 3 s (p95 of 20 probes).

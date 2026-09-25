@@ -25,6 +25,7 @@ Source requirements: [requirements/](../requirements/README.md) · Decisions: [a
 | [T17](T17-web-admin-tab.md) | Web: Admin tab (folders, node types, styles, users, audit) | T05, T11, T14 | M | M3 Web UI |
 
 | ~~T18~~ | *Search — out of scope (decisions log Q13)* | – | – | – |
+| [T21](T21-tamper-evident-audit.md) | Tamper-evident audit: temporal + ledger, deploy-script guard, reconciliation | T03, T04 | L | M0 Foundation |
 | [T20](T20-pdf-export.md) | PDF export: async jobs, headless Chromium, cache, UI | T05, T07, T09, T10, T15 | L | M3 Web UI |
 | [T19](T19-load-and-performance.md) | Load & performance harness + tuning | T07–T09 (harness), T10–T15, T20 (full mix) | L | M4 Performance |
 
@@ -68,6 +69,10 @@ flowchart TD
   T11 --> T17
   T05 --> T14
   T10 --> T15
+  T03 --> T21[T21 Tamper-evident audit]
+  T04 --> T21
+  T21 --> T11
+  T21 --> T17
   T09 --> T19[T19 Load & perf]
   T15 --> T19
   T09 --> T20[T20 PDF export]
@@ -90,7 +95,7 @@ Items with a different lane letter in the work queue can run concurrently in sep
 
 | Lane | Scope | Order |
 |---|---|---|
-| A — backend core / DB | schema, audit, foundation, documents, tree, content, history | Q01 → Q02 → Q03 → Q04 → Q07 → Q10 → Q11 → Q14 |
+| A — backend core / DB | schema, audit, foundation, documents, tree, content, history | Q01 → Q02 → Q03 → Q04 → Q22 (T21) → Q07 → Q10 → Q11 → Q14 |
 | B — backend features | dictionaries, folders, permissions, comments, compare, export, load | Q05, Q06 → Q09 → Q13 → Q15 → Q21 → Q19 |
 | C — frontend | SPA against the committed OpenAPI snapshot | Q08 → Q12 → Q16 → Q17 |
 

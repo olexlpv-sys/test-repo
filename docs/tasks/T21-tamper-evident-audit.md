@@ -5,7 +5,7 @@
 | **Depends on** | T03 (audit), T04 (API foundation) |
 | **Blocks** | T11 (history can use `FOR SYSTEM_TIME AS OF`), T17 (Admin → Audit shows findings) |
 | **Size** | L ([sizing](../process.md#9-sizing-and-agent-effort)) |
-| **Requirements** | FR-H1, FR-H3, FR-H5, FR-D4, decisions log Q18 |
+| **Requirements** | FR-H6, FR-H1, FR-H3, FR-H5, FR-D4, decisions log Q18 |
 | **Read first** (nothing else) | [04-change-tracking](../requirements/04-change-tracking.md) · [T03](T03-database-change-tracking.md) §1–§3 · [11-data-access](../requirements/11-data-access.md) (FR-D4) · [process](../process.md) |
 
 ## Goal
@@ -26,41 +26,32 @@ inside the database can *prevent* that. This task makes every such change **evid
 ## Scope
 
 ### 1. System-versioned (temporal) + updatable ledger tables
-- All 11 audited `app` tables (T03 §2) become **temporal and updatable ledger tables** in the DB project:
-  - hidden period columns `ValidFrom` / `ValidTo` (`GENERATED ALWAYS AS ROW START/END HIDDEN`, `datetime2(7)`);
-  - `PERIOD FOR SYSTEM_TIME`;
-  - `WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [history].[<Table>]), LEDGER = ON)`;
-  - history tables in a new schema `history`.
-- **What this gives:**
-  - `FOR SYSTEM_TIME AS OF` point-in-time queries (T11 "view as of" can use them);
-  - the ledger view `<Table>_Ledger` shows every change with its ledger transaction;
-  - `sys.database_ledger_transactions` records the principal of each transaction;
-  - `SYSTEM_VERSIONING` can't be turned off and history rows can't be updated or deleted — by anyone, `sa` included (verified on SQL Server 2022).
-- EF Core keeps mapping only the visible columns; the hidden period and ledger columns are not mapped. The schema-drift test (T04) ignores hidden columns (`sys.columns.is_hidden`).
-- `app.VersionStamp` and `app.ContentStyleUsage` (derived data) stay regular tables.
+- All 11 audited `app` tables (T03 §2) become **temporal and updatable ledger tables**: hidden period columns `ValidFrom` / `ValidTo` (`GENERATED ALWAYS AS ROW START/END HIDDEN`, `datetime2(7)`), `PERIOD FOR SYSTEM_TIME`, `WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [history].[<Table>]), LEDGER = ON)`; history tables in a new schema `history`.
+- `app.VersionStamp` becomes an **updatable ledger** table (not temporal): nobody can silently clear `TamperedAt`; changes to it outside the triggers are found by reconciliation (§4, rule 3). `app.ContentStyleUsage` (derived, API-maintained) stays a regular table.
+- Gives: `FOR SYSTEM_TIME AS OF` (T11 "view as of" may use it), the ledger views `<Table>_Ledger` (every change with its ledger transaction), `sys.database_ledger_transactions` (principal of every transaction); `SYSTEM_VERSIONING` can't be switched off and history rows can't be updated/deleted — by anyone, `sa` included (verified on SQL Server 2022, together with triggers, `IDENTITY`, `ON DELETE CASCADE` into ledger tables, partitioning + page compression).
+- EF Core maps only the visible columns; hidden period/ledger columns are never mapped (the T04 drift test ignores hidden columns).
+- **Upgrade path (verified limitation):** an existing regular table can't be switched to ledger (`ALTER TABLE … SET (LEDGER = ON)` doesn't exist) and SqlPackage fails when publishing the ledger model onto a database whose tables are still regular. T21 is applied **before any production data exists**: every existing database (local compose, test) is **recreated** (drop + publish). `database/README.md` documents this, and the rules for later changes of ledger tables: only additive, nullable (or defaulted) columns via a normal publish; anything else (type change, drop, rename) = a new table + data copy with `sys.sp_copy_data_in_batches` in a reviewed one-off release step (dropped ledger tables/columns are kept by SQL Server, renamed).
 
 ### 2. Append-only ledger change log
-- `audit.ChangeLog` becomes `LEDGER = ON (APPEND_ONLY = ON)`: nobody, `dbo` included, can update or delete audit rows.
-- New column `TransactionId bigint` = `CURRENT_TRANSACTION_ID()` written by the triggers (generator change). It links every audit row to its ledger transaction.
-- Verify that monthly partitioning and page compression are kept on a ledger table. If partitioning is not supported, drop it and keep compression; record the decision here.
+- `audit.ChangeLog` becomes `LEDGER = ON (APPEND_ONLY = ON)` (keeps monthly partitioning and page compression — verified). Nobody, `dbo` included, can update or delete audit rows.
+- No application-written transaction id: `CURRENT_TRANSACTION_ID()` is **not** the ledger transaction id, and any column the triggers write is also writable by `dbo`. Correlation uses the ledger's own hidden `ledger_start_transaction_id` of the `ChangeLog` row (written by SQL Server, immutable) against the audited table's `ledger_transaction_id` in its `<Table>_Ledger` view.
+- New append-only ledger tables: `audit.ReconciliationFinding` (findings, §4) and `audit.ReconciliationBaseline` (`Id`, `CreatedAt`, `Reason`): reconciliation ignores ledger transactions older than the **first** baseline row (append-only, so the first baseline can't be moved; a later insert changes nothing). Written once at go-live (runbook) or by the T19 data generator after its bulk load.
 
 ### 3. Deploy-script guard (repository side)
-A DB test (`DeployScriptGuardTests`) parses every script under `Scripts/PreDeployment/` and `Scripts/PostDeployment/` with the T-SQL parser (`Microsoft.SqlServer.TransactSql.ScriptDom`) and fails on any of:
-- DML against anything except the seed tables (`app.User`, `app.NodeType`, `app.ContentStyle`, `app.Folder`);
-- any statement touching `audit.*` or `history.*`;
-- `DISABLE TRIGGER`, `ALTER TABLE … NOCHECK`, `SET (SYSTEM_VERSIONING …)` or `LEDGER` options;
-- `sp_set_session_context`;
-- dynamic SQL (`EXEC(@sql)`, `sp_executesql`).
-
-So a pre/post-deploy script that could forge data can't be merged unnoticed. It still needs review (process §2), and the guard is part of the test suite.
+A DB test (`DeployScriptGuardTests`) parses every script under `Scripts/PreDeployment/` and `Scripts/PostDeployment/` with `Microsoft.SqlServer.TransactSql.ScriptDom` and fails on: DML against anything except the seed tables (`app.User`, `app.NodeType`, `app.ContentStyle`, `app.Folder`); any statement touching `audit.*` or `history.*` (except the documented baseline insert in a go-live script, if ever added); `DISABLE TRIGGER`, `ALTER TABLE … NOCHECK`, `SYSTEM_VERSIONING`/`LEDGER` options; `sp_set_session_context`; dynamic SQL (`EXEC(@sql)`, `sp_executesql`). Pre/post-deploy scripts that could forge data therefore can't be merged unnoticed (they still need review, process §2).
 
 ### 4. Reconciliation
-- **`audit.usp_ReconcileLedger @From datetime2, @To datetime2`** (DB project) finds:
-  1. **Trigger bypass:** ledger transactions that changed an audited table without a matching `audit.ChangeLog` row for the same table, entity and `TransactionId`.
-  2. **Forged attribution:** `ChangeLog` rows with `Source = 'App'` whose ledger transaction principal is not a member of `app_api`. Also `ChangeLog` rows whose `TransactionId` has no ledger transaction, i.e. they were inserted outside the triggers.
-  3. **Ledger integrity:** the result of `sys.sp_verify_database_ledger_from_digest_storage`, where digest storage is configured (Azure). Local and test runs use `sys.sp_verify_database_ledger` with a digest taken by the test.
-- Findings go to **`audit.ReconciliationFinding`**, itself an append-only ledger table: kind, table, entity, version, transaction, principal, detected-at. Every document version touched by a finding gets `VersionStamp.TamperedAt` set, so "modified after signing" (FR-H5) and the tampering view pick it up.
-- **Scheduling:** an API hosted service `LedgerReconciliationService` runs nightly as the `system` user, covering the last 48 h with overlap. Admins can trigger it via `POST /api/admin/audit/reconcile` and list findings via `GET /api/admin/audit/findings` (T17 shows them in Admin → Audit).
+**`audit.usp_ReconcileLedger @From datetime2, @To datetime2`** (DB project, executed with the grants below) compares, per audited table, the ledger history with `audit.ChangeLog`, **using the same change rules as the triggers** (T03): the before/after images of a ledger transaction (the `DELETE`/`INSERT` pair of `<Table>_Ledger` for one key) are compared on the audited columns only, strings as `VARBINARY`; derived-only `NodeContent` changes count only when the transaction principal is **not** an `app_api` member.
+1. **Trigger bypass** — a ledger change that the trigger rules would have audited (insert, delete, or an audited column changed) with no `ChangeLog` row for the same table + entity whose `ledger_start_transaction_id` equals the change's ledger transaction. No-op updates, API derived-only rebuilds (refresher) and anything before the baseline are **not** findings.
+2. **Forged audit row** — a `ChangeLog` row whose ledger transaction didn't change the referenced table + entity (inserted outside the triggers), or a `Source = 'App'` row whose transaction principal is not an `app_api` member, or a `Source = 'Script'` row whose `DbLogin` differs from the transaction principal.
+3. **Stamp tampering** — a `VersionStamp` ledger change in a transaction without an audited change of that version.
+4. **Ledger integrity** — `sys.sp_verify_database_ledger_from_digest_storage` where automatic digest storage is configured (Azure); locally/tests `sys.sp_verify_database_ledger` with a digest taken by the test.
+
+Effects of a finding (in the same transaction, idempotent per finding): insert into `audit.ReconciliationFinding` (kind, table, entity, document, version, ledger transaction, principal, detected-at); for every affected document version: set `VersionStamp.TamperedAt` (if null) **and advance `VersionStamp.LastChangeLogId`** (so cached trees/contents/ETags are invalidated, NFR-L9 — it writes a `ChangeLog` row of kind `Reconciliation` whose id is used); for `NodeContent` bypasses set `DerivedStale = 1` (forged `ContentHtml`/`PlainText` get re-rendered, T09 rule 8). The FR-H5 flag "modified after signing" = `TamperedAt IS NOT NULL` **or** a finding exists for the version (so even a cleared stamp keeps the flag).
+
+**Grants (`Security/`):** reading `sys.database_ledger_transactions` and verifying the ledger require database permissions that ownership chaining doesn't cover. Role **`ledger_reader`** gets `VIEW LEDGER CONTENT` and `VIEW DATABASE STATE`; `app_api` is a member (read-only permissions; the API runs reconciliation). The DB tests run reconciliation as an `app_api` user.
+
+**Scheduling:** API hosted service `LedgerReconciliationService`, nightly, as the `system` user, window = last 48 h (overlap; idempotent), plus `POST /api/admin/audit/reconcile` (admin) and `GET /api/admin/audit/findings` (admin, paged) — shown in Admin → Audit (T17).
 
 ### 5. Runbook for the product owner (Azure side, outside the code)
 Write `docs/runbooks/tamper-evidence-azure.md` with exact steps:
@@ -73,15 +64,17 @@ Write `docs/runbooks/tamper-evidence-azure.md` with exact steps:
 - **Alerts:** reconciliation findings and ledger verification failures → security mailbox.
 
 ## Out of scope
-Retention or purging of audit and history data: ledger data is kept by design. Implementing the Azure infrastructure itself (a human action, see process §10).
+Retention/purging of audit and history data (ledger data is kept by design). A data-preserving migration of existing non-empty databases (none exist before go-live; see §1 upgrade path). Implementing the Azure infrastructure itself (human action, process §10).
 
 ## Acceptance criteria (automated in `tests/DocHub.Database.Tests` unless stated)
-- [ ] DACPAC deploys the temporal + ledger tables. Re-deploy shows no drift. `FOR SYSTEM_TIME AS OF` returns the earlier state of a `NodeContent` row.
-- [ ] As `dbo`: `ALTER TABLE … SET (SYSTEM_VERSIONING = OFF)`, `UPDATE`/`DELETE` on a history table and `UPDATE`/`DELETE` on `audit.ChangeLog` all fail.
-- [ ] **Trigger bypass is detected:** as `dbo`, disable `TR_NodeContent_Audit`, update a signed version's content and re-enable the trigger. Reconciliation reports a *trigger bypass* for that node and transaction, and the version gets `TamperedAt`.
-- [ ] **Forged audit row is detected:** as `dbo`, `INSERT` a `ChangeLog` row with `Source = 'App'`, `UserId = 2`. Reconciliation reports *forged attribution*.
-- [ ] Normal API and support-script changes produce **no** findings.
-- [ ] Ledger verification with a digest taken before a manual page-level change is out of scope for tests. The test verifies that `sp_verify_database_ledger` passes on an untouched database with the stored digest.
-- [ ] Deploy-script guard: fixtures with a forbidden statement fail the guard, and the real seed scripts pass.
-- [ ] API (in `tests/DocHub.Api.Tests`): reconcile and findings endpoints are admin-only (authorization matrix). A finding created in the DB is listed.
-- [ ] The runbook exists and names every Azure setting above with the exact portal/CLI steps.
+- [ ] A fresh DACPAC publish creates the temporal + ledger tables; re-deploy shows no drift; `FOR SYSTEM_TIME AS OF` returns the earlier state of a `NodeContent` row. `database/README.md` documents the recreate-only upgrade path and the allowed changes of ledger tables.
+- [ ] As `dbo`: `SET (SYSTEM_VERSIONING = OFF)`, `UPDATE`/`DELETE` on a history table and on `audit.ChangeLog`/`ReconciliationFinding`/`ReconciliationBaseline` all fail.
+- [ ] **Trigger bypass is detected:** as `dbo`, disable `TR_NodeContent_Audit`, update a signed version's `ContentJson`, re-enable → reconciliation (run as an `app_api` user) reports a trigger bypass for that node + transaction; the version gets `TamperedAt`, its `LastChangeLogId` advances and the node is `DerivedStale`.
+- [ ] **Forged audit row is detected:** as `dbo`, `INSERT` a `ChangeLog` row with `Source = 'App'`, `UserId = 2` → *forged audit row*.
+- [ ] **Stamp tampering is detected:** as `dbo`, clear `TamperedAt` of a tampered version → *stamp tampering*; the version is still flagged "modified after signing" (finding-based).
+- [ ] **No false positives:** normal API writes (as `app_api`, incl. an API content save and a derived-only refresher update), support-script changes (`support_writer`, with and without context), no-op updates, and bulk changes before the baseline produce **no** findings.
+- [ ] Reconciliation is idempotent (running twice over the same window adds no findings).
+- [ ] `sp_verify_database_ledger` passes on an untouched database with the stored digest.
+- [ ] Deploy-script guard: fixtures with each forbidden statement fail; the real seed scripts pass.
+- [ ] API (`tests/DocHub.Api.Tests`, API connecting as `app_api`): `POST /api/admin/audit/reconcile` succeeds and `GET /api/admin/audit/findings` lists a finding created in the DB; both are admin-only in the authorization matrix.
+- [ ] The runbook exists and names every Azure setting of §5 with the exact portal/CLI steps.
