@@ -17,6 +17,7 @@ Goal: **maximum quality** — every acceptance criterion and every REQ ID is pro
 | Performance | tagged integration tests with generated data | NFR-6 tree load, draft copy, compare, SP single-request targets (FR-D5) | nightly + before release |
 | Load & soak | `tools/DocHub.DataGen` + NBomber (`tests/DocHub.LoadTests`) — [T19](tasks/T19-load-and-performance.md) | NFR-L3 traffic mix at 20 req/s (burst 40), p99 ≤ 3 s, 1 h soak; scale 0.1 nightly in CI, 1.0 on Azure SQL before release | nightly (0.1) + before release (1.0) |
 | Security | integration + unit | XSS/injection payload fixtures for content, links, names; authz matrix; test-mode auth disabled in Production | every PR |
+| PDF visual regression | T20 — render fixtures to PDF, rasterize pages, pixel-diff against approved snapshots | page layout, styles, TOC page numbers, watermark | every PR |
 | Accessibility | `@axe-core/playwright` | main window, document form, admin tab: no serious/critical violations | nightly |
 
 ## 2. Quality gates (CI fails otherwise)

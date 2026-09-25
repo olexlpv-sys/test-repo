@@ -64,6 +64,9 @@ Table/TableRow/TableHeader/TableCell, plus **small custom extensions**: FontSize
 ParagraphStyle (`styleId`), TableCellShading/Borders, PageBreak. Style catalog CSS is generated from `app.ContentStyle`
 so the editor looks like the Word output.
 
-## 3. Future: Word export / import (backlog, not in T01–T17)
+## 3. Export
+- **PDF** (in scope, [T20](tasks/T20-pdf-export.md)): the server HTML renderer + style catalog CSS + print stylesheet → headless Chromium. The editor, the HTML and the PDF therefore share one rendering path.
+
+## 3a. Future: Word export / import (backlog)
 - **Export**: `GET /api/versions/{id}/export.docx` — Open XML SDK: styles from `app.ContentStyle` → `styles.xml`; tree nodes → headings with the node title (heading level = tree depth, or per node type) followed by the node's content blocks; numbering → `numbering.xml`.
 - **Import**: upload `.docx` → build the tree from heading levels, content from paragraphs/tables between headings; unknown properties → `wordExt`.

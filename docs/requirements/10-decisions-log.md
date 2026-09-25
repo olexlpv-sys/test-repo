@@ -37,4 +37,5 @@ Every answer from the product owner is recorded here; the affected requirement f
 | Q12 | Node-level Editor grant includes descendants? | **Yes** |
 | Q13 | Search technique | **Full-text (word/prefix)** — forced by the load profile (NFR-L7) |
 | Q15 | Where is change history shown? | **Inside the editor, per section/node**: inline timeline + track changes with authors |
+| Q16 | Export | **PDF export** (async, cached for signed versions) — [13-export](13-export.md) |
 | Q14 | Load profile | 50 k readers, 500 editors/owners, 10 k documents, 100 folders, **≤ 3 s at 20 req/s** ([12-load-and-performance](12-load-and-performance.md)) |

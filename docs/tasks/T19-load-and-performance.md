@@ -15,7 +15,7 @@ Prove NFR-L4 (p99 ≤ 3 s at 20 req/s on production-scale data) and keep proving
 2. **Load scenarios** with **NBomber** (`tests/DocHub.LoadTests`), following the NFR-L3 mix:
    - Reader: list folder → open document → read 5 nodes → search.
    - Editor: open draft → autosave content every 3 s × 10 → view node history → compare with latest signed.
-   - Other: comment, sign/withdraw, admin reads.
+   - Other: comment, sign/withdraw, admin reads, **PDF export** (≈ 1 % of traffic, T20).
    - Users are picked from the generated population through the test-mode `X-User-Id` header.
 3. **Runs:**
    - Nightly at scale 0.1 in CI (a SQL container, smoke thresholds).

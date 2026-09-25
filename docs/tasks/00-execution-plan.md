@@ -25,9 +25,10 @@ Source requirements: [requirements/](../requirements/README.md) · Decisions: [a
 | [T17](T17-web-admin-tab.md) | Web: Admin tab (folders, node types, styles, users, audit) | T05, T11, T14 | M · 2–2.5 d | M3 Web UI |
 
 | [T18](T18-search.md) | Search: full-text stored procedures, API, UI | T07, T09, T14, T15 | M · 2–2.5 d | M3 Web UI |
+| [T20](T20-pdf-export.md) | PDF export: async jobs, headless Chromium, cache, UI | T05, T07, T09, T10, T15 | L · 3.5–4 d | M3 Web UI |
 | [T19](T19-load-and-performance.md) | Load & performance harness + tuning | T07–T09 (harness), T10–T13, T18 (full mix) | L · 4 d | M4 Performance |
 
-**Total effort ≈ 51–58 developer-days.** Load profile: [12-load-and-performance](../requirements/12-load-and-performance.md).
+**Total effort ≈ 55–62 developer-days.** Load profile: [12-load-and-performance](../requirements/12-load-and-performance.md).
 
 ## 2. Dependency graph
 
@@ -71,6 +72,9 @@ flowchart TD
   T15 --> T18
   T09 --> T19[T19 Load & perf]
   T18 --> T19
+  T09 --> T20[T20 PDF export]
+  T15 --> T20
+  T20 --> T19
   T14 --> T17
 
   classDef crit fill:#fde2e1,stroke:#c0392b,color:#000;
