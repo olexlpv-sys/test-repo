@@ -34,4 +34,49 @@ public static class SiblingOrder
         var sortOrder = (index + 1) * Gap;
         return (sortOrder, renumbered);
     }
+
+    /// <summary>
+    /// The items that kept their relative order between two orderings (a longest common subsequence): the others were
+    /// reordered. Inserting or removing an item reorders nothing; swapping two reorders one.
+    /// </summary>
+    public static HashSet<T> Stayed<T>(IReadOnlyList<T> before, IReadOnlyList<T> after)
+        where T : notnull
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+        var stayed = new HashSet<T>();
+        if (before.SequenceEqual(after))
+        {
+            stayed.UnionWith(before);
+            return stayed;
+        }
+
+        var lcs = new int[before.Count + 1, after.Count + 1];
+        for (var i = before.Count - 1; i >= 0; i--)
+        {
+            for (var j = after.Count - 1; j >= 0; j--)
+            {
+                lcs[i, j] = EqualityComparer<T>.Default.Equals(before[i], after[j]) ? lcs[i + 1, j + 1] + 1 : Math.Max(lcs[i + 1, j], lcs[i, j + 1]);
+            }
+        }
+
+        for (int i = 0, j = 0; i < before.Count && j < after.Count;)
+        {
+            if (EqualityComparer<T>.Default.Equals(before[i], after[j]))
+            {
+                stayed.Add(before[i]);
+                (i, j) = (i + 1, j + 1);
+            }
+            else if (lcs[i + 1, j] >= lcs[i, j + 1])
+            {
+                i++;
+            }
+            else
+            {
+                j++;
+            }
+        }
+
+        return stayed;
+    }
 }

@@ -337,38 +337,7 @@ public sealed class ChangeTracking(DocHubDbContext db, ChangeHistory history, IC
         var (a, b) = (Order(before, old.Parent, common), Order(after, neu.Parent, common));
         a = a.Where(b.Contains).ToList();
         b = b.Where(a.Contains).ToList();
-        if (a.SequenceEqual(b))
-        {
-            return false;
-        }
-
-        var lcs = new int[a.Count + 1, b.Count + 1];
-        for (var i = a.Count - 1; i >= 0; i--)
-        {
-            for (var j = b.Count - 1; j >= 0; j--)
-            {
-                lcs[i, j] = a[i] == b[j] ? lcs[i + 1, j + 1] + 1 : Math.Max(lcs[i + 1, j], lcs[i, j + 1]);
-            }
-        }
-
-        var stayed = new HashSet<Guid>();
-        for (int i = 0, j = 0; i < a.Count && j < b.Count;)
-        {
-            if (a[i] == b[j])
-            {
-                stayed.Add(a[i]);
-                (i, j) = (i + 1, j + 1);
-            }
-            else if (lcs[i + 1, j] >= lcs[i, j + 1])
-            {
-                i++;
-            }
-            else
-            {
-                j++;
-            }
-        }
-
+        var stayed = Domain.Ordering.SiblingOrder.Stayed(a, b);
         return !stayed.Contains(logicalNodeId);
     }
 
