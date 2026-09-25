@@ -27,7 +27,7 @@ internal sealed class PermissionEndpoints : IEndpointModule
                 return TypedResults.Ok(await PermissionsAsync(db, id, ct));
             })
             .WithName("GetDocumentPermissions")
-            .WithSummary("The owner and all grants; node grants carry the node title from the draft (else the current version).");
+            .WithSummary("The owner and all grants; node grants carry the node title from the draft (else the latest signed version) and whether the node is in the draft.");
 
         group.MapGet("/my-permissions", async Task<Ok<MyRoles>> (int id, DocHubDbContext db, IDocumentAuthorization authorization, ICurrentUser user, CancellationToken ct) =>
             {
@@ -116,9 +116,11 @@ internal sealed class PermissionEndpoints : IEndpointModule
                         ?? throw DomainException.NotFound("Grant", grantId);
                     db.DocumentPermissions.Remove(grant);
                     await db.SaveChangesAsync(ct);
-                    // T07 rule 2: without this approver the draft may now carry every required signature.
+                    // A former approver's signature no longer counts; without them the draft may now carry every
+                    // required signature (T07 rule 2).
                     if (grant.Role == DocumentRole.Approver)
                     {
+                        await signing.WithdrawRevokedApproverAsync(id, grant.UserId, ct);
                         await signing.FinalizeDraftIfCompleteAsync(id, ct);
                     }
 
@@ -127,12 +129,15 @@ internal sealed class PermissionEndpoints : IEndpointModule
                 return TypedResults.NoContent();
             })
             .WithName("RevokeDocumentRole")
-            .WithSummary("Owner: revokes a grant; revoking an approver re-checks whether the draft is now fully signed.");
+            .WithSummary("Owner: revokes a grant; revoking an approver withdraws their signature on the draft and re-checks whether it is now fully signed.");
     }
 
     /// <summary>The draft and the latest signed version (where a node grant's node is looked up).</summary>
     private static IQueryable<int> CurrentVersions(DocHubDbContext db, int documentId) =>
-        db.DocumentVersions.Where(v => v.DocumentId == documentId && (v.Status == VersionStatus.Draft || v.IsCurrent)).Select(v => v.Id);
+        db.DocumentVersions.Where(v => v.DocumentId == documentId
+                && (v.Status == VersionStatus.Draft
+                    || (v.Status == VersionStatus.Signed && v.VersionNumber == db.DocumentVersions.Where(s => s.DocumentId == documentId && s.Status == VersionStatus.Signed).Max(s => s.VersionNumber))))
+            .Select(v => v.Id);
 
     private static async Task<DocumentPermissions> PermissionsAsync(DocHubDbContext db, int documentId, CancellationToken ct)
     {
@@ -148,27 +153,31 @@ internal sealed class PermissionEndpoints : IEndpointModule
                             select new { p.Id, User = new UserRef(u.Id, u.DisplayName), p.Role, p.LogicalNodeId, p.GrantedAt, GrantedBy = new UserRef(g.Id, g.DisplayName) })
             .ToListAsync(ct);
 
-        // Node titles from the draft if there is one, else from the current version.
-        var versions = await db.DocumentVersions.AsNoTracking()
-            .Where(v => v.DocumentId == documentId && (v.Status == VersionStatus.Draft || v.IsCurrent))
-            .Select(v => new { v.Id, IsDraft = v.Status == VersionStatus.Draft }).ToListAsync(ct);
-        var version = versions.OrderByDescending(v => v.IsDraft).FirstOrDefault();
+        // Node titles from the draft if there is one, else (and for nodes deleted in the draft) from the latest signed version.
+        var versions = await CurrentVersions(db, documentId)
+            .Join(db.DocumentVersions, id => id, v => v.Id, (_, v) => new { v.Id, IsDraft = v.Status == VersionStatus.Draft })
+            .ToListAsync(ct);
         var logicalIds = grants.Where(g => g.LogicalNodeId != null).Select(g => g.LogicalNodeId!.Value).Distinct().ToList();
-        var titles = version is null || logicalIds.Count == 0
+        var versionIds = versions.Select(v => v.Id).ToList();
+        var nodes = logicalIds.Count == 0
             ? []
             : await db.DocumentNodes.AsNoTracking()
-                .Where(n => n.DocumentVersionId == version.Id && logicalIds.Contains(n.LogicalNodeId))
-                .ToDictionaryAsync(n => n.LogicalNodeId, n => n.Title, ct);
+                .Where(n => versionIds.Contains(n.DocumentVersionId) && logicalIds.Contains(n.LogicalNodeId))
+                .Select(n => new { n.LogicalNodeId, n.DocumentVersionId, n.Title })
+                .ToListAsync(ct);
+        var current = versions.OrderByDescending(v => v.IsDraft).FirstOrDefault()?.Id;
+        var inCurrent = nodes.Where(n => n.DocumentVersionId == current).Select(n => n.LogicalNodeId).ToHashSet();
+        var titles = nodes.OrderByDescending(n => n.DocumentVersionId == current).GroupBy(n => n.LogicalNodeId).ToDictionary(g => g.Key, g => g.First().Title);
 
         return new DocumentPermissions(owner, grants.Select(g => new Grant(
                 g.Id, g.User, g.Role, g.LogicalNodeId, g.LogicalNodeId is { } l ? titles.GetValueOrDefault(l) : null,
-                g.LogicalNodeId is { } n ? titles.ContainsKey(n) : null, g.GrantedAt, g.GrantedBy))
+                g.LogicalNodeId is { } n ? inCurrent.Contains(n) : null, g.GrantedAt, g.GrantedBy))
             .ToList());
     }
 
     public sealed record DocumentPermissions(UserRef Owner, IReadOnlyList<Grant> Grants);
 
-    /// <summary>A grant; for node grants, <c>nodeInCurrentVersion</c> tells whether the node is in the draft (else current) version — without it the grant has no effect there.</summary>
+    /// <summary>A grant; for node grants, <c>nodeInCurrentVersion</c> tells whether the node is in the draft (else the latest signed version) — where it isn't, the grant has no effect.</summary>
     public sealed record Grant(int Id, UserRef User, DocumentRole Role, Guid? LogicalNodeId, string? NodeTitle, bool? NodeInCurrentVersion, DateTime GrantedAt, UserRef GrantedBy);
 
     public sealed class CreateGrant

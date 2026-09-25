@@ -35,6 +35,9 @@ public sealed class PermissionsTests(DocHubApiFactory factory) : IClassFixture<D
         await ApiClient.ExpectAsync(factory, user, HttpMethod.Get, $"/api/versions/{doc.Draft}/tree", null, HttpStatusCode.OK);
         await ApiClient.ExpectAsync(factory, user, HttpMethod.Get, $"/api/nodes/{doc.Section}/content", null, HttpStatusCode.OK);
         await ApiClient.ExpectAsync(factory, user, HttpMethod.Get, $"/api/documents/{doc.Id}/permissions", null, HttpStatusCode.OK);
+        await ApiClient.ExpectAsync(factory, user, HttpMethod.Get, $"/api/versions/{doc.Draft}", null, HttpStatusCode.OK);
+        await ApiClient.ExpectAsync(factory, user, HttpMethod.Get, $"/api/versions/{doc.Draft}/signatures", null, HttpStatusCode.OK);
+        await ApiClient.ExpectAsync(factory, user, HttpMethod.Get, $"/api/versions/{doc.Draft}/content?nodeIds={doc.Chapter1},{doc.Section}", null, HttpStatusCode.OK);
 
         // Structure: owner only (also inside the node editor's chapter).
         await ApiClient.ExpectAsync(factory, user, HttpMethod.Post, $"/api/versions/{doc.Draft}/nodes", new { parentNodeId = doc.Chapter2, nodeTypeId = 1, title = "New" }, Allowed(HttpStatusCode.Created, Owner));
@@ -45,7 +48,7 @@ public sealed class PermissionsTests(DocHubApiFactory factory) : IClassFixture<D
         await SaveAsync(user, doc.Chapter2, Allowed(HttpStatusCode.OK, Owner, DocEditor, NodeEditor));
         await SaveAsync(user, doc.Subsection, Allowed(HttpStatusCode.OK, Owner, DocEditor, NodeEditor));
 
-        // Comment / resolve (T13 endpoints use these rights): effective permissions.
+        // Comment / resolve: the comment endpoints (T13) enforce these rights; until then the effective permissions.
         var mine = await ApiClient.ExpectAsync(factory, user, HttpMethod.Get, $"/api/documents/{doc.Id}/my-permissions", null, HttpStatusCode.OK);
         Assert.Equal(user is Owner or DocEditor or NodeEditor or Approver, mine.GetProperty("canComment").GetBoolean());
         Assert.Equal(user is Owner or Approver, mine.GetProperty("canResolve").GetBoolean());
@@ -78,6 +81,25 @@ public sealed class PermissionsTests(DocHubApiFactory factory) : IClassFixture<D
 
         // Move to another folder: owner or admin.
         await ApiClient.ExpectAsync(factory, user, HttpMethod.Post, $"/api/documents/{doc.Id}/move", new { folderId = 1, rowVersion = await _arrange.RowVersionAsync(doc.Id) }, Allowed(HttpStatusCode.OK, Owner, Admin));
+    }
+
+    [Theory]
+    [MemberData(nameof(Roles))]
+    public async Task New_draft_discard_and_delete_are_owner_only(int user)
+    {
+        var doc = await ArrangeAsync();
+        await ApiClient.ExpectAsync(factory, Approver, HttpMethod.Post, $"/api/versions/{doc.Draft}/signatures", new { }, HttpStatusCode.OK);
+        var created = await ApiClient.SendAsync(factory, user, HttpMethod.Post, $"/api/documents/{doc.Id}/drafts", null);
+        Assert.Equal(user == Owner ? HttpStatusCode.Created : HttpStatusCode.Forbidden, created.Status);
+        var draft = user == Owner
+            ? created.Body.GetProperty("id").GetInt32()
+            : (await ApiClient.ExpectAsync(factory, Owner, HttpMethod.Post, $"/api/documents/{doc.Id}/drafts", null, HttpStatusCode.Created)).GetProperty("id").GetInt32();
+        created.Response.Dispose();
+
+        var draftRowVersion = Uri.EscapeDataString((await _arrange.VersionAsync(draft)).GetProperty("rowVersion").GetString()!);
+        await ApiClient.ExpectAsync(factory, user, HttpMethod.Delete, $"/api/versions/{draft}?rowVersion={draftRowVersion}", null, user == Owner ? HttpStatusCode.NoContent : HttpStatusCode.Forbidden);
+        await ApiClient.ExpectAsync(factory, user, HttpMethod.Delete, $"/api/documents/{doc.Id}?rowVersion={Uri.EscapeDataString(await _arrange.RowVersionAsync(doc.Id))}", null,
+            user == Owner ? HttpStatusCode.NoContent : HttpStatusCode.Forbidden);
     }
 
     [Theory]
@@ -178,7 +200,12 @@ public sealed class PermissionsTests(DocHubApiFactory factory) : IClassFixture<D
         var grants = (await ApiClient.ExpectAsync(factory, Owner, HttpMethod.Get, $"/api/documents/{doc.Id}/permissions", null, HttpStatusCode.OK)).GetProperty("grants");
         var nodeGrant = grants.EnumerateArray().Single(g => g.GetProperty("user").GetProperty("id").GetInt32() == NodeEditor);
         Assert.False(nodeGrant.GetProperty("nodeInCurrentVersion").GetBoolean());
-        Assert.Equal(JsonValueKind.Null, nodeGrant.GetProperty("nodeTitle").ValueKind);
+        Assert.Equal("Chapter 2", nodeGrant.GetProperty("nodeTitle").GetString()); // from the latest signed version
+
+        // A node that is only in the latest signed version can still be granted.
+        var granted = await ApiClient.ExpectAsync(factory, Owner, HttpMethod.Post, $"/api/documents/{doc.Id}/permissions", new { userId = Other, role = "Editor", logicalNodeId = doc.Chapter2Logical }, HttpStatusCode.Created);
+        Assert.Equal("Chapter 2", granted.GetProperty("nodeTitle").GetString());
+        Assert.False(granted.GetProperty("nodeInCurrentVersion").GetBoolean());
     }
 
     [Fact]
@@ -194,7 +221,25 @@ public sealed class PermissionsTests(DocHubApiFactory factory) : IClassFixture<D
     }
 
     [Fact]
-    public async Task A_signature_racing_the_revocation_of_its_approver_is_never_recorded()
+    public async Task A_revoked_approvers_signature_no_longer_counts_even_when_granted_again()
+    {
+        var doc = await ArrangeAsync();
+        await ApiClient.ExpectAsync(factory, Owner, HttpMethod.Post, $"/api/documents/{doc.Id}/permissions", new { userId = Other, role = "Approver" }, HttpStatusCode.Created);
+        await ApiClient.ExpectAsync(factory, Approver, HttpMethod.Post, $"/api/versions/{doc.Draft}/signatures", new { }, HttpStatusCode.OK);
+        var carol = await GrantIdAsync(doc.Id, Approver);
+        await ApiClient.ExpectAsync(factory, Owner, HttpMethod.Delete, $"/api/documents/{doc.Id}/permissions/{carol}", null, HttpStatusCode.NoContent);
+        await ApiClient.ExpectAsync(factory, Owner, HttpMethod.Delete, $"/api/documents/{doc.Id}/permissions/{await GrantIdAsync(doc.Id, Other)}", null, HttpStatusCode.NoContent);
+        await ApiClient.ExpectAsync(factory, Owner, HttpMethod.Post, $"/api/documents/{doc.Id}/permissions", new { userId = Approver, role = "Approver" }, HttpStatusCode.Created);
+
+        var status = await ApiClient.ExpectAsync(factory, Owner, HttpMethod.Get, $"/api/versions/{doc.Draft}/signatures", null, HttpStatusCode.OK);
+        Assert.False(status.GetProperty("isComplete").GetBoolean());
+        Assert.Equal([Approver], status.GetProperty("pendingApprovers").EnumerateArray().Select(a => a.GetProperty("id").GetInt32()));
+        await ApiClient.ExpectAsync(factory, Approver, HttpMethod.Post, $"/api/versions/{doc.Draft}/signatures", new { }, HttpStatusCode.OK);
+        Assert.Equal("Signed", (await _arrange.VersionAsync(doc.Draft)).GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task A_signature_racing_the_revocation_of_its_approver_never_counts()
     {
         for (var round = 0; round < 10; round++)
         {
@@ -209,8 +254,9 @@ public sealed class PermissionsTests(DocHubApiFactory factory) : IClassFixture<D
             Assert.Equal(HttpStatusCode.NoContent, results[1].Status);
             Assert.Contains(results[0].Status, new[] { HttpStatusCode.OK, HttpStatusCode.Forbidden });
             await using var dbo = await SqlSession.OpenAsync(factory.AdminConnectionString);
-            var signatures = await dbo.ScalarAsync<int>("SELECT COUNT(*) FROM app.VersionSignature WHERE DocumentVersionId = @v AND UserId = @u AND WithdrawnAt IS NULL;", ("@v", doc.Draft), ("@u", Approver));
-            Assert.Equal(results[0].Status == HttpStatusCode.OK ? 1 : 0, signatures);
+            // Signed first: the revocation withdraws it. Revoked first: never recorded.
+            Assert.Equal(0, await dbo.ScalarAsync<int>("SELECT COUNT(*) FROM app.VersionSignature WHERE DocumentVersionId = @v AND UserId = @u AND WithdrawnAt IS NULL;", ("@v", doc.Draft), ("@u", Approver)));
+            Assert.Equal(results[0].Status == HttpStatusCode.OK ? 1 : 0, await dbo.ScalarAsync<int>("SELECT COUNT(*) FROM app.VersionSignature WHERE DocumentVersionId = @v AND UserId = @u;", ("@v", doc.Draft), ("@u", Approver)));
             foreach (var r in results)
             {
                 r.Response.Dispose();
@@ -237,6 +283,10 @@ public sealed class PermissionsTests(DocHubApiFactory factory) : IClassFixture<D
         await ApiClient.ExpectAsync(factory, Owner, HttpMethod.Post, $"/api/documents/{documentId}/permissions", new { userId = NodeEditor, role = "Editor", logicalNodeId = logical[chapter2] }, HttpStatusCode.Created);
         return new ArrangedDocument(documentId, draft, chapter1, chapter2, section, subsection, logical[chapter1], logical[chapter2], logical[section], logical[subsection]);
     }
+
+    private async Task<int> GrantIdAsync(int documentId, int userId) =>
+        (await ApiClient.ExpectAsync(factory, Owner, HttpMethod.Get, $"/api/documents/{documentId}/permissions", null, HttpStatusCode.OK))
+            .GetProperty("grants").EnumerateArray().Single(g => g.GetProperty("user").GetProperty("id").GetInt32() == userId).GetProperty("id").GetInt32();
 
     private async Task SaveAsync(int user, int nodeId, HttpStatusCode expected)
     {

@@ -38,11 +38,11 @@ public sealed class DocumentProcedureTests(DocHubDatabaseFixture database) : ICl
     public async Task Check_permission_follows_the_role_matrix(string action, int user, bool allowedWhenActive, bool allowedWhenDeleted)
     {
         await using var db = await database.OpenRolledBackTransactionAsync(Ct);
-        var (documentId, _) = await DocumentWithGrantsAsync(db);
+        var (documentId, versionId) = await DocumentWithGrantsAsync(db);
 
-        Assert.Equal(allowedWhenActive, await CheckAsync(db, documentId, user, action));
+        Assert.Equal(allowedWhenActive, await CheckAsync(db, documentId, user, action, versionId));
         await db.ExecuteAsync("UPDATE app.Document SET DeletedAt = SYSUTCDATETIME(), DeletedByUserId = @u WHERE Id = @d;", ("@u", Owner), ("@d", documentId));
-        Assert.Equal(allowedWhenDeleted, await CheckAsync(db, documentId, user, action));
+        Assert.Equal(allowedWhenDeleted, await CheckAsync(db, documentId, user, action, versionId));
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public sealed class DocumentProcedureTests(DocHubDatabaseFixture database) : ICl
         Assert.True(await CheckAsync(db, documentId, NodeEditor, "EditContent", versionId, granted));
         Assert.True(await CheckAsync(db, documentId, NodeEditor, "EditContent", versionId, child));
         Assert.False(await CheckAsync(db, documentId, NodeEditor, "EditContent", versionId, sibling));
-        Assert.False(await CheckAsync(db, documentId, NodeEditor, "EditContent"));
+        Assert.False(await CheckAsync(db, documentId, NodeEditor, "EditContent", versionId));
     }
 
     public static TheoryData<int> MatrixUsers() => new(Owner, Other, Approver, NodeEditor, DocEditor, Admin, 0, 999999);
@@ -84,7 +84,7 @@ public sealed class DocumentProcedureTests(DocHubDatabaseFixture database) : ICl
                 ("CanResolve", "Resolve"), ("CanSign", "Sign"), ("CanManage", "Manage"), ("CanMove", "Move"), ("CanRestore", "Restore"),
             })
             {
-                Assert.True(await CheckAsync(db, documentId, user, action) == (bool)flags[flag]!, $"{flag} of user {user}, deleted = {deleted}");
+                Assert.True(await CheckAsync(db, documentId, user, action, versionId) == (bool)flags[flag]!, $"{flag} of user {user}, deleted = {deleted}");
             }
 
             // Every node the set lists is editable by the single check, and no other node of the version is (unless all are).
@@ -134,12 +134,14 @@ public sealed class DocumentProcedureTests(DocHubDatabaseFixture database) : ICl
     }
 
     [Fact]
-    public async Task Check_permission_rejects_unknown_actions_and_missing_documents()
+    public async Task Check_permission_rejects_unknown_actions_edit_content_without_a_version_and_missing_documents()
     {
         await using var db = await database.OpenRolledBackTransactionAsync(Ct);
 
         var error = await Assert.ThrowsAsync<SqlException>(() => CheckAsync(db, 1, Owner, "Delete"));
         Assert.Equal(50010, error.Number);
+        var noVersion = await Assert.ThrowsAsync<SqlException>(() => CheckAsync(db, 1, Owner, "EditContent"));
+        Assert.Equal(50011, noVersion.Number);
         Assert.False(await CheckAsync(db, 999999, Admin, "View"));
     }
 

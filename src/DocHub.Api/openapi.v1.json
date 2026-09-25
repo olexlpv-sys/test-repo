@@ -1905,7 +1905,7 @@
         "tags": [
           "Permissions"
         ],
-        "summary": "The owner and all grants; node grants carry the node title from the draft (else the current version).",
+        "summary": "The owner and all grants; node grants carry the node title from the draft (else the latest signed version) and whether the node is in the draft.",
         "operationId": "GetDocumentPermissions",
         "parameters": [
           {
@@ -2022,7 +2022,7 @@
         "tags": [
           "Permissions"
         ],
-        "summary": "Owner: revokes a grant; revoking an approver re-checks whether the draft is now fully signed.",
+        "summary": "Owner: revokes a grant; revoking an approver withdraws their signature on the draft and re-checks whether it is now fully signed.",
         "operationId": "RevokeDocumentRole",
         "parameters": [
           {

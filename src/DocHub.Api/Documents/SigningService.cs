@@ -154,6 +154,24 @@ public sealed class SigningService(DocHubDbContext db, ICurrentUser user, TimePr
         }, cancellationToken);
 
     /// <summary>
+    /// Withdraws a former approver's active signature on the document's draft (T10: revoking an approver) — it no longer
+    /// counts, also not if the role is granted again. Call inside a transaction holding <see cref="LockResource"/>.
+    /// </summary>
+    public async Task WithdrawRevokedApproverAsync(int documentId, int userId, CancellationToken cancellationToken)
+    {
+        var active = await (from s in db.VersionSignatures
+                            join v in db.DocumentVersions on s.DocumentVersionId equals v.Id
+                            where v.DocumentId == documentId && v.Status == VersionStatus.Draft && s.UserId == userId && s.WithdrawnAt == null
+                            select s).ToListAsync(cancellationToken);
+        foreach (var signature in active)
+        {
+            signature.WithdrawnAt = time.GetUtcNow().UtcDateTime;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// Re-checks finalization of the document's draft (e.g. after an approver grant was revoked, T10). Call inside a
     /// transaction holding <see cref="LockResource"/>.
     /// </summary>

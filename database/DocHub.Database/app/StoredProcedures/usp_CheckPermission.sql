@@ -3,7 +3,8 @@ Single permission check (FR-D2): returns one row with Allowed (bit). Actions:
   View          any user for a non-deleted document; owner or admin for a deleted one (FR-P5)
   Manage        owner: lifecycle (new draft, discard, delete, rename) and roles
   EditStructure owner (FR-P1)
-  EditContent   owner, document-level editor, or editor of @LogicalNodeId or one of its ancestors in @DocumentVersionId (FR-P2)
+  EditContent   owner, document-level editor, or editor of @LogicalNodeId or one of its ancestors in @DocumentVersionId
+                (FR-P2); @DocumentVersionId is required, @LogicalNodeId optional (without it: "all content")
   Comment       owner, editor or approver
   Resolve       owner or approver
   Sign          approver (FR-P3); the owner is never an approver
@@ -24,8 +25,9 @@ BEGIN
     IF @Action NOT IN ('View', 'Manage', 'EditStructure', 'EditContent', 'Comment', 'Resolve', 'Sign', 'Move', 'Restore')
         THROW 50010, N'Unknown permission action.', 1;
 
-    IF @Action = 'EditContent' AND @LogicalNodeId IS NOT NULL AND @DocumentVersionId IS NULL
-        THROW 50011, N'EditContent on a node requires @DocumentVersionId.', 1;
+    -- The version being edited decides which tree node grants are resolved in (FR-D2).
+    IF @Action = 'EditContent' AND @DocumentVersionId IS NULL
+        THROW 50011, N'EditContent requires @DocumentVersionId.', 1;
 
     DECLARE @OwnerUserId INT, @Deleted BIT;
     SELECT @OwnerUserId = [OwnerUserId], @Deleted = CASE WHEN [DeletedAt] IS NULL THEN 0 ELSE 1 END
