@@ -4,7 +4,7 @@
 |---|---|
 | **Depends on** | T02 |
 | **Blocks** | T04 (session context interceptor), T11 |
-| **Size** | M (2 days) |
+| **Size** | M ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-H1, FR-H3, FR-H5 |
 | **Read first** (nothing else) | [04-change-tracking](../requirements/04-change-tracking.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 

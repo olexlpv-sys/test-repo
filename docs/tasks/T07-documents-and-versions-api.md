@@ -4,7 +4,7 @@
 |---|---|
 | **Depends on** | T04, T06 |
 | **Blocks** | T08, T10, T12, T13, T14 |
-| **Size** | L (3.5–4 days) |
+| **Size** | L ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-F3, FR-V1 … FR-V8, FR-H5, FR-P5, FR-D1 … FR-D3, FR-D5 |
 | **Read first** (nothing else) | [01-folders](../requirements/01-folders.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) · [06-permissions](../requirements/06-permissions.md) (FR-P5) · [11-data-access](../requirements/11-data-access.md) · [04-change-tracking](../requirements/04-change-tracking.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 

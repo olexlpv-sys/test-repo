@@ -4,7 +4,7 @@
 |---|---|
 | **Depends on** | T04 |
 | **Blocks** | T08, T09, T17 |
-| **Size** | M (1.5–2 days) |
+| **Size** | M ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-H2, FR-N1, FR-N2, FR-T6 |
 | **Read first** (nothing else) | [04-change-tracking](../requirements/04-change-tracking.md) · [02-document-tree](../requirements/02-document-tree.md) · [content-format](../content-format.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 

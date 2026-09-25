@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Depends on** | T09 (HTML renderer), T05 (style CSS), T07 (signatures, version stamp), T10 (`EnsureCanView`), T15 (UI entry point) |
-| **Size** | L (3.5–4 days) |
+| **Size** | L ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-E1 … FR-E8, FR-P5, NFR-L4, NFR-L9 |
 | **Read first** (nothing else) | [13-export](../requirements/13-export.md) · [content-format](../content-format.md) §2 "Rendering" · [12-load-and-performance](../requirements/12-load-and-performance.md) (NFR-L4, L9) · [11-data-access](../requirements/11-data-access.md) · [process](../process.md) |
 

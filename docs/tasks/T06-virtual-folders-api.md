@@ -4,7 +4,7 @@
 |---|---|
 | **Depends on** | T04 |
 | **Blocks** | T07, T14 |
-| **Size** | S–M (1–1.5 days) |
+| **Size** | S–M ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-F1 … FR-F4 |
 | **Read first** (nothing else) | [01-folders](../requirements/01-folders.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 

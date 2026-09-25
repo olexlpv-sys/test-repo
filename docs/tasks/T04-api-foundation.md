@@ -4,7 +4,7 @@
 |---|---|
 | **Depends on** | T01, T02, T03 |
 | **Blocks** | T05–T13 |
-| **Size** | M (2–3 days) |
+| **Size** | M ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-H2, NFR-2, NFR-3, NFR-4, NFR-7, FR-D1, FR-D2 |
 | **Read first** (nothing else) | [04-change-tracking](../requirements/04-change-tracking.md) · [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [11-data-access](../requirements/11-data-access.md) · [process](../process.md) |
 

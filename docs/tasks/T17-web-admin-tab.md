@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Depends on** | T05, T11, T14 |
-| **Size** | M (2–2.5 days) |
+| **Size** | M ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-UI3, FR-N1, FR-N2, FR-T6, FR-F5 |
 | **Read first** (nothing else) | [08-web-ui](../requirements/08-web-ui.md) · [02-document-tree](../requirements/02-document-tree.md) · [01-folders](../requirements/01-folders.md) · [content-format](../content-format.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 

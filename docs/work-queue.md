@@ -8,7 +8,7 @@ The single source of "what's next". Process rules: [process.md](process.md). Dep
 3. Implement with tests ([testing strategy](testing-strategy.md)); CI green; open PR.
 4. Set `in-review`; request review with the template in [process §5](process.md#5-review-request-template-keep-it-this-small) in a fresh context.
 5. Fix valid findings → re-review delta → repeat until **GREEN**.
-6. Merge, set `done`, write a handoff note (≤ 5 lines) in the table below.
+6. Merge, set `done`, write a handoff note (≤ 5 lines) in the table below, including actuals: wall-clock, review rounds (process §9).
 
 Status: `todo` · `in-progress` · `in-review` · `done` · `blocked`
 
@@ -43,4 +43,4 @@ Lanes: **A** backend core / DB · **B** backend features · **C** frontend.
 
 ## Handoff notes
 - **Q00** — Doc set reviewed in 7 fresh-context rounds (process §4, REQ/SPEC rule): 19 → 12 → 11 → 7 → 7 → 1 → 0 valid findings, all fixed. Product input added during review (data access via EF + SPs, load profile, in-editor history, PDF export) was reviewed in the same loop. Next: Q01.
-- **Q01** — .NET 10 solution (`DocHub.slnx`), CPM, warnings-as-errors, `/health`, OpenAPI+Scalar (dev only), xUnit v3 on Microsoft.Testing.Platform (`dotnet test --solution`), docker-compose SQL 2022, CI on every push/PR (green). Deviation: SDK installed from Ubuntu apt (dot.net blocked by proxy); CI now runs on all branch pushes. Review: 2 findings fixed → GREEN.
+- **Q01** — .NET 10 solution (`DocHub.slnx`), CPM, warnings-as-errors, `/health`, OpenAPI+Scalar (dev only), xUnit v3 on Microsoft.Testing.Platform (`dotnet test --solution`), docker-compose SQL 2022, CI on every push/PR (green). Deviation: SDK installed from Ubuntu apt (dot.net blocked by proxy); CI now runs on all branch pushes. Review: 2 findings fixed → GREEN. Actuals: ≈ 40 min wall-clock (incl. SDK install and one CI run), 2 review rounds.

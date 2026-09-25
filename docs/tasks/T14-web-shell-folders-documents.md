@@ -4,7 +4,7 @@
 |---|---|
 | **Depends on** | T05, T06, T07 (can start against the OpenAPI contract / mocks after T04) |
 | **Blocks** | T15, T16, T17 |
-| **Size** | M (2–3 days) |
+| **Size** | M ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-UI1, FR-UI4, FR-F5, FR-V8 |
 | **Read first** (nothing else) | [08-web-ui](../requirements/08-web-ui.md) · [01-folders](../requirements/01-folders.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) (FR-V8 only) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 

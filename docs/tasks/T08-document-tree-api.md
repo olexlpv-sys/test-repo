@@ -4,7 +4,7 @@
 |---|---|
 | **Depends on** | T05, T07 |
 | **Blocks** | T09, T11, T12, T15 |
-| **Size** | M (2–3 days) |
+| **Size** | M ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-T1 … FR-T3, FR-T5, FR-V4, NFR-6, FR-D3 |
 | **Read first** (nothing else) | [02-document-tree](../requirements/02-document-tree.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) · [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [11-data-access](../requirements/11-data-access.md) · [06-permissions](../requirements/06-permissions.md) (FR-P5) · [12-load-and-performance](../requirements/12-load-and-performance.md) (NFR-L9) · [process](../process.md) |
 

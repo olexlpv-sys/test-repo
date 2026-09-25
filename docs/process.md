@@ -60,3 +60,24 @@ See [execution plan §5](tasks/00-execution-plan.md#5-definition-of-done-applies
 
 ## 8. Git
 One branch + PR per queue item, conventional commit messages (`feat(api): …`, `test(db): …`, `docs(req): …`). The PR description lists the queue item, REQ IDs and the review result table.
+
+## 9. Sizing and agent effort
+Development is done by agents. Sizes therefore describe **agent work**, not person-days:
+
+| Size | Typical scope | Agent wall-clock incl. review loop (initial guess) |
+|---|---|---|
+| S | one project/area, ≤ ~10 files, no new infrastructure | 0.5–1.5 h |
+| M | one feature slice (DB + API + tests), a few endpoints | 1.5–4 h |
+| L | several interacting rules or a new subsystem (signing, diff engine, export) | 4–8 h |
+| XL | large UI surface or cross-cutting behavior | 8–14 h |
+
+Every queue item records its **actuals** in the handoff note: wall-clock, review rounds, and — when available — tokens. After Q02–Q04 the table above is recalibrated from these actuals.
+The bottleneck is usually not agent time but **human touchpoints** (§10) and CI/review turnaround.
+
+## 10. Human role (product owner)
+The human does not write code. The human:
+- makes product decisions and answers open questions / confirms assumptions (decisions log);
+- approves outward-facing or irreversible actions: opening/merging PRs, protected-branch pushes, anything touching shared environments;
+- provides what an agent cannot create itself: Azure subscription & resources, secrets, network/tool access, GitHub settings;
+- performs acceptance at milestones (demo criteria in the execution plan).
+Agents batch questions for the human and keep working on items that are not blocked.

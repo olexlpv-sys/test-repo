@@ -5,7 +5,7 @@
 | **Depends on** | T07 |
 | **Blocks** | T13 (full rules), T16 (permissions dialog) |
 | **Can run in parallel with** | T08, T09 (they call `IDocumentAuthorization`) |
-| **Size** | M (2 days) |
+| **Size** | M ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-P1 … FR-P6, FR-V6, FR-D2 |
 | **Read first** (nothing else) | [06-permissions](../requirements/06-permissions.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) (FR-V6 only) · [11-data-access](../requirements/11-data-access.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 

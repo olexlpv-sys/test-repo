@@ -4,31 +4,31 @@ Source requirements: [requirements/](../requirements/README.md) · Decisions: [a
 
 ## 1. Task index
 
-| ID | Task | Depends on | Size | Milestone |
+| ID | Task | Depends on | Size ([sizing](../process.md#9-sizing-and-agent-effort)) | Milestone |
 |---|---|---|---|---|
-| [T01](T01-api-solution-setup.md) | .NET API solution setup | — | S · 0.5–1 d | M0 Foundation |
-| [T02](T02-database-project-and-schema.md) | Database project & core schema | T01 | M · 2–3 d | M0 Foundation |
-| [T03](T03-database-change-tracking.md) | DB-level change tracking (audit triggers) | T02 | M · 2 d | M0 Foundation |
-| [T04](T04-api-foundation.md) | API foundation: EF Core, current user, errors, tests | T01, T02, T03 | M · 2–3 d | M0 Foundation |
-| [T05](T05-users-and-node-types-api.md) | Users, node types & content styles API | T04 | M · 1.5–2 d | M1 Core API |
-| [T06](T06-virtual-folders-api.md) | Virtual folders API | T04 | S–M · 1–1.5 d | M1 Core API |
-| [T07](T07-documents-and-versions-api.md) | Documents, multi-approver signing, restore | T04, T06 | L · 3.5–4 d | M1 Core API |
-| [T08](T08-document-tree-api.md) | Document tree API | T05, T07 | M · 2–3 d | M1 Core API |
-| [T09](T09-node-content-api.md) | Word-like styled content API (JSON schema) | T05, T08 | L · 3–4 d | M1 Core API |
-| [T10](T10-permissions.md) | Permissions (Owner/Editor/Approver) | T07 | M · 2 d | M2 Advanced API |
-| [T11](T11-change-history-api.md) | Change history API + diff engine + attributed diff | T03, T09 | L · 3.5–4 d | M2 Advanced API |
-| [T12](T12-version-comparison-api.md) | Version comparison API | T09 (+ diff engine) | M · 2 d | M2 Advanced API |
-| [T13](T13-comments-api.md) | Comments API | T07, T10 | S–M · 1.5 d | M2 Advanced API |
-| [T14](T14-web-shell-folders-documents.md) | Web: shell, folder tree, document list | T05, T06, T07 | M · 2–3 d | M3 Web UI |
-| [T15](T15-web-document-editor.md) | Web: section editor with inline per-section history & track changes, tree, signing | T08, T09, T10, T11, T14 | XL · 7–8 d | M3 Web UI |
-| [T16](T16-web-compare-comments-permissions.md) | Web: compare, comments, permissions | T10, T12, T13, T15 | M–L · 3–4 d | M3 Web UI |
-| [T17](T17-web-admin-tab.md) | Web: Admin tab (folders, node types, styles, users, audit) | T05, T11, T14 | M · 2–2.5 d | M3 Web UI |
+| [T01](T01-api-solution-setup.md) | .NET API solution setup | — | S | M0 Foundation |
+| [T02](T02-database-project-and-schema.md) | Database project & core schema | T01 | M | M0 Foundation |
+| [T03](T03-database-change-tracking.md) | DB-level change tracking (audit triggers) | T02 | M | M0 Foundation |
+| [T04](T04-api-foundation.md) | API foundation: EF Core, current user, errors, tests | T01, T02, T03 | M | M0 Foundation |
+| [T05](T05-users-and-node-types-api.md) | Users, node types & content styles API | T04 | M | M1 Core API |
+| [T06](T06-virtual-folders-api.md) | Virtual folders API | T04 | S–M | M1 Core API |
+| [T07](T07-documents-and-versions-api.md) | Documents, multi-approver signing, restore | T04, T06 | L | M1 Core API |
+| [T08](T08-document-tree-api.md) | Document tree API | T05, T07 | M | M1 Core API |
+| [T09](T09-node-content-api.md) | Word-like styled content API (JSON schema) | T05, T08 | L | M1 Core API |
+| [T10](T10-permissions.md) | Permissions (Owner/Editor/Approver) | T07 | M | M2 Advanced API |
+| [T11](T11-change-history-api.md) | Change history API + diff engine + attributed diff | T03, T09 | L | M2 Advanced API |
+| [T12](T12-version-comparison-api.md) | Version comparison API | T09 (+ diff engine) | M | M2 Advanced API |
+| [T13](T13-comments-api.md) | Comments API | T07, T10 | S–M | M2 Advanced API |
+| [T14](T14-web-shell-folders-documents.md) | Web: shell, folder tree, document list | T05, T06, T07 | M | M3 Web UI |
+| [T15](T15-web-document-editor.md) | Web: section editor with inline per-section history & track changes, tree, signing | T08, T09, T10, T11, T14 | XL | M3 Web UI |
+| [T16](T16-web-compare-comments-permissions.md) | Web: compare, comments, permissions | T10, T12, T13, T15 | M–L | M3 Web UI |
+| [T17](T17-web-admin-tab.md) | Web: Admin tab (folders, node types, styles, users, audit) | T05, T11, T14 | M | M3 Web UI |
 
-| [T18](T18-search.md) | Search: full-text stored procedures, API, UI | T07, T09, T14, T15 | M · 2–2.5 d | M3 Web UI |
-| [T20](T20-pdf-export.md) | PDF export: async jobs, headless Chromium, cache, UI | T05, T07, T09, T10, T15 | L · 3.5–4 d | M3 Web UI |
-| [T19](T19-load-and-performance.md) | Load & performance harness + tuning | T07–T09 (harness), T10–T15, T18, T20 (full mix) | L · 4 d | M4 Performance |
+| [T18](T18-search.md) | Search: full-text stored procedures, API, UI | T07, T09, T14, T15 | M | M3 Web UI |
+| [T20](T20-pdf-export.md) | PDF export: async jobs, headless Chromium, cache, UI | T05, T07, T09, T10, T15 | L | M3 Web UI |
+| [T19](T19-load-and-performance.md) | Load & performance harness + tuning | T07–T09 (harness), T10–T15, T18, T20 (full mix) | L | M4 Performance |
 
-**Total effort ≈ 55–62 developer-days.** Load profile: [12-load-and-performance](../requirements/12-load-and-performance.md).
+**Effort** is measured in agent work, not person-days — see [process §9](../process.md#9-sizing-and-agent-effort). Initial estimate: ≈ 60–90 agent-hours in total, ≈ 30–40 h wall-clock with three parallel lanes, plus waiting time on product-owner decisions; recalibrated from the actuals in the work queue after Q02–Q04. Load profile: [12-load-and-performance](../requirements/12-load-and-performance.md).
 
 ## 2. Dependency graph
 
@@ -80,23 +80,21 @@ flowchart TD
   classDef crit fill:#fde2e1,stroke:#c0392b,color:#000;
   class T01,T02,T03,T04,T06,T07,T08,T09,T11,T15,T16 crit;
 ```
-Red = **critical path**: T01 → T02 → T03 → T04 → T06 → T07 → T08 → T09 → T11 → T15 → T16 (≈ 31 days for one developer).
+Red = **critical path**: T01 → T02 → T03 → T04 → T06 → T07 → T08 → T09 → T11 → T15 → T16 (the longest sequential chain of queue items).
 
 ## 3. Suggested sequencing
 
-### Option A — one developer (strict order)
+### One agent at a time
 Follow [work-queue.md](../work-queue.md) top to bottom.
 
-### Option B — three parallel tracks (≈ 5 weeks)
+### Parallel agents (three lanes)
+Items with a different lane letter in the work queue can run concurrently in separate agent sessions (each on its own branch), as soon as their dependencies are done:
 
-| Week | Track 1 — Backend / DB | Track 2 — Backend / API | Track 3 — Frontend |
-|---|---|---|---|
-| 1 | T01 → T02 → T03 | help T02: seed, DB tests | UI kit choice, T14 scaffold against mocks from the OpenAPI draft |
-| 2 | T04 | T05, T06 | T14 (shell, user switcher, folder tree) |
-| 3 | T07 | T10 (on the T07 authorization seam) | T14 finish (doc list), T17 |
-| 4 | T08 → T09 | T13, diff engine (T11 §3), content schema validator/renderer | T15 (tree panel, signing panel, TipTap custom extensions) |
-| 5 | T11 | T12 | T15 (editor, history) → T16 |
-| 6 | stabilization, performance tests | stabilization | T16, Playwright smoke suite |
+| Lane | Scope | Order |
+|---|---|---|
+| A — backend core / DB | schema, audit, foundation, documents, tree, content, history | Q01 → Q02 → Q03 → Q04 → Q07 → Q10 → Q11 → Q14 |
+| B — backend features | dictionaries, folders, permissions, comments, compare, search, export, load | Q05, Q06 → Q09 → Q13 → Q15 → Q18 → Q21 → Q19 |
+| C — frontend | SPA against the committed OpenAPI snapshot | Q08 → Q12 → Q16 → Q17 |
 
 Parallelization seams already designed into the tasks:
 - **`IDocumentAuthorization`** (T07) lets T08/T09/T13 proceed while T10 is in progress.

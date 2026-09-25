@@ -5,7 +5,7 @@
 | **Depends on** | T03, T09 |
 | **Blocks** | T15 (history panel) |
 | **Can run in parallel with** | T12 (shares the diff engine — agree on who builds it first, see §3) |
-| **Size** | L (3.5–4 days) |
+| **Size** | L ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-H1, FR-H3, FR-H4, FR-H5 |
 | **Read first** (nothing else) | [04-change-tracking](../requirements/04-change-tracking.md) · [content-format](../content-format.md) · [architecture](../architecture.md) (only sections linked in the text) · [06-permissions](../requirements/06-permissions.md) (FR-P5) · [process](../process.md) |
 

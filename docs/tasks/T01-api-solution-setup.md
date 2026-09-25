@@ -4,7 +4,7 @@
 |---|---|
 | **Depends on** | — |
 | **Blocks** | T04 and all API tasks |
-| **Size** | S (0.5–1 day) |
+| **Size** | S ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | NFR-1, NFR-2 |
 | **Read first** (nothing else) | [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 

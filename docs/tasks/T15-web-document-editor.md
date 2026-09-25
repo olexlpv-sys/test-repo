@@ -4,7 +4,7 @@
 |---|---|
 | **Depends on** | T08, T09, T10, T11, T14 |
 | **Blocks** | T16 |
-| **Size** | XL (7–8 days) |
+| **Size** | XL ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-UI2, FR-UI5, FR-T*, FR-V*, FR-H4, NFR-L6 |
 | **Read first** (nothing else) | [08-web-ui](../requirements/08-web-ui.md) · [02-document-tree](../requirements/02-document-tree.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) · [04-change-tracking](../requirements/04-change-tracking.md) · [content-format](../content-format.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 

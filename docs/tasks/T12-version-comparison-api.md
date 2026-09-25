@@ -4,7 +4,7 @@
 |---|---|
 | **Depends on** | T09 (content), T11 §3 diff engine (or builds it) |
 | **Blocks** | T16 (compare view) |
-| **Size** | M (2 days) |
+| **Size** | M ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-C1, FR-C2 |
 | **Read first** (nothing else) | [05-version-comparison](../requirements/05-version-comparison.md) · [content-format](../content-format.md) · [architecture](../architecture.md) (only sections linked in the text) · [06-permissions](../requirements/06-permissions.md) (FR-P5) · [12-load-and-performance](../requirements/12-load-and-performance.md) (NFR-L9) · [process](../process.md) |
 

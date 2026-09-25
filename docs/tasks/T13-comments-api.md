@@ -4,7 +4,7 @@
 |---|---|
 | **Depends on** | T07, T10 (for full role rules; can start with the T07 owner-only seam) |
 | **Blocks** | T16 (comments panel) |
-| **Size** | S–M (1.5 days) |
+| **Size** | S–M ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-CM1, FR-CM2, FR-P3 |
 | **Read first** (nothing else) | [07-comments](../requirements/07-comments.md) · [06-permissions](../requirements/06-permissions.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 

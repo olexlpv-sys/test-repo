@@ -4,7 +4,7 @@
 |---|---|
 | **Depends on** | T01 (test projects) |
 | **Blocks** | T03, T04 |
-| **Size** | M (2–3 days) |
+| **Size** | M ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | FR-D4, NFR-L8, NFR-L10, FR-F*, FR-T*, FR-N*, FR-V*, FR-P*, FR-CM*, FR-H2, NFR-1, NFR-4 |
 | **Read first** (nothing else) | [01-folders](../requirements/01-folders.md) · [02-document-tree](../requirements/02-document-tree.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) · [06-permissions](../requirements/06-permissions.md) · [07-comments](../requirements/07-comments.md) · [04-change-tracking](../requirements/04-change-tracking.md) · [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [11-data-access](../requirements/11-data-access.md) · [process](../process.md) |
 
