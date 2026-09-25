@@ -174,6 +174,273 @@
         }
       }
     },
+    "/api/versions/{versionId}/tree": {
+      "get": {
+        "tags": [
+          "Tree"
+        ],
+        "summary": "The nested tree of a version (any status) with numbering; ETag = version stamp.",
+        "operationId": "GetTree",
+        "parameters": [
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TreeNode"
+                  }
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified"
+          }
+        }
+      }
+    },
+    "/api/nodes/{nodeId}": {
+      "get": {
+        "tags": [
+          "Tree"
+        ],
+        "summary": "A node with its ancestors (path).",
+        "operationId": "GetNode",
+        "parameters": [
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Tree"
+        ],
+        "summary": "Owner, draft only: renames a node and/or changes its type (rowVersion required).",
+        "operationId": "UpdateNode",
+        "parameters": [
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Tree"
+        ],
+        "summary": "Owner, draft only: deletes a node with its whole subtree and contents (usp_DeleteSubtree; ?rowVersion=base64).",
+        "operationId": "DeleteNode",
+        "parameters": [
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "rowVersion",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedNodes"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/versions/{versionId}/nodes": {
+      "post": {
+        "tags": [
+          "Tree"
+        ],
+        "summary": "Owner, draft only: adds a node (with empty content) under a parent at a position (default last).",
+        "operationId": "CreateNode",
+        "parameters": [
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/nodes/{nodeId}/move": {
+      "post": {
+        "tags": [
+          "Tree"
+        ],
+        "summary": "Owner, draft only: re-parents and/or reorders a node within its version; position = 0-based index (default last).",
+        "operationId": "MoveNode",
+        "parameters": [
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveNode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/audit/reconcile": {
       "post": {
         "tags": [
@@ -1657,6 +1924,50 @@
           }
         }
       },
+      "CreateNode": {
+        "required": [
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "parentNodeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "nodeTypeId": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "position": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "CreateNodeType": {
         "required": [
           "code",
@@ -1689,6 +2000,22 @@
             ]
           },
           "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "DeletedNodes": {
+        "required": [
+          "deletedCount"
+        ],
+        "type": "object",
+        "properties": {
+          "deletedCount": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "integer",
@@ -2205,6 +2532,41 @@
           }
         }
       },
+      "MoveNode": {
+        "required": [
+          "rowVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "newParentNodeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "position": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "rowVersion": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "byte"
+          }
+        }
+      },
       "MyRoles": {
         "required": [
           "isOwner",
@@ -2232,6 +2594,149 @@
             "items": {
               "type": "string",
               "format": "uuid"
+            }
+          }
+        }
+      },
+      "NodeRef": {
+        "required": [
+          "id",
+          "title",
+          "number"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          }
+        }
+      },
+      "NodeResponse": {
+        "required": [
+          "id",
+          "versionId",
+          "documentId",
+          "logicalNodeId",
+          "parentNodeId",
+          "nodeTypeId",
+          "title",
+          "number",
+          "hasContent",
+          "sortOrder",
+          "rowVersion",
+          "createdAt",
+          "createdByUserId",
+          "modifiedAt",
+          "modifiedByUserId",
+          "path"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "versionId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "documentId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "logicalNodeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parentNodeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "nodeTypeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "hasContent": {
+            "type": "boolean"
+          },
+          "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "rowVersion": {
+            "type": "string",
+            "format": "byte"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdByUserId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedByUserId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "path": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NodeRef"
             }
           }
         }
@@ -2641,6 +3146,69 @@
           }
         }
       },
+      "TreeNode": {
+        "required": [
+          "id",
+          "logicalNodeId",
+          "nodeTypeId",
+          "title",
+          "number",
+          "hasContent",
+          "sortOrder",
+          "rowVersion",
+          "children"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "logicalNodeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nodeTypeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "hasContent": {
+            "type": "boolean"
+          },
+          "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "rowVersion": {
+            "type": "string",
+            "format": "byte"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TreeNode"
+            }
+          }
+        }
+      },
       "UpdateContentStyle": {
         "required": [
           "rowVersion",
@@ -2677,6 +3245,38 @@
           },
           "properties": {
             "$ref": "#/components/schemas/JsonElement"
+          }
+        }
+      },
+      "UpdateNode": {
+        "required": [
+          "rowVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nodeTypeId": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "rowVersion": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "byte"
           }
         }
       },
@@ -2912,6 +3512,9 @@
     },
     {
       "name": "Documents"
+    },
+    {
+      "name": "Tree"
     },
     {
       "name": "Admin"

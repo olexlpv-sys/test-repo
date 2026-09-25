@@ -17,6 +17,9 @@ public interface IDbProcedures
 
     /// <summary><c>app.usp_CopyVersionToDraft</c> — deep copy of a version into a new draft; returns the new version id.</summary>
     Task<int> CopyVersionToDraftAsync(int sourceVersionId, int userId, CancellationToken cancellationToken);
+
+    /// <summary><c>app.usp_DeleteSubtree</c> — deletes a node with its subtree; returns the number of deleted nodes.</summary>
+    Task<int> DeleteSubtreeAsync(int nodeId, CancellationToken cancellationToken);
 }
 
 /// <summary>Actions of <c>app.usp_CheckPermission</c>.</summary>

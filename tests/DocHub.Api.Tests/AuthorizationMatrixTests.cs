@@ -22,7 +22,7 @@ public sealed class AuthorizationMatrixTests(DocHubApiFactory factory) : IClassF
         await AuthorizationMatrix.AssertAsync(factory, cases, TestContext.Current.CancellationToken);
     }
 
-    /// <summary>T05–T07: dictionaries, folders and documents are readable by every user; writes are admin-only (non-existing ids/invalid bodies: no side effects).</summary>
+    /// <summary>T05–T08: dictionaries, folders, documents and trees are readable by every user; writes are admin-only (non-existing ids/invalid bodies: no side effects).</summary>
     [Fact]
     public async Task Dictionary_endpoints_follow_the_matrix()
     {
@@ -69,6 +69,13 @@ public sealed class AuthorizationMatrixTests(DocHubApiFactory factory) : IClassF
                 new AccessCase("POST", "/api/versions/999999/signatures", user, Missing, new { }),
                 new AccessCase("DELETE", "/api/versions/999999/signatures/mine", user, Missing),
                 new AccessCase("DELETE", "/api/versions/999999?rowVersion=AAAAAAAAAAA=", user, Missing),
+                // T08 tree.
+                new AccessCase("GET", "/api/versions/999999/tree", user, Missing),
+                new AccessCase("GET", "/api/nodes/999999", user, Missing),
+                new AccessCase("POST", "/api/versions/999999/nodes", user, Missing, new { nodeTypeId = 1, title = "x" }),
+                new AccessCase("PATCH", "/api/nodes/999999", user, Missing, new { title = "x", rowVersion = "AAAAAAAAAAA=" }),
+                new AccessCase("POST", "/api/nodes/999999/move", user, Missing, new { rowVersion = "AAAAAAAAAAA=" }),
+                new AccessCase("DELETE", "/api/nodes/999999?rowVersion=AAAAAAAAAAA=", user, Missing),
             };
         });
 

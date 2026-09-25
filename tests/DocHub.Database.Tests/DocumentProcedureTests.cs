@@ -110,6 +110,21 @@ public sealed class DocumentProcedureTests(DocHubDatabaseFixture database) : ICl
         Assert.Equal(1, await db.ScalarAsync<int>("SELECT COUNT(*) FROM app.DocumentVersion WHERE DocumentId = @d AND Status = 1;", ("@d", documentId)));
     }
 
+    [Fact]
+    public async Task Delete_subtree_removes_the_node_its_descendants_and_their_content()
+    {
+        await using var db = await database.OpenRolledBackTransactionAsync(Ct);
+        var (_, versionId) = await DocumentWithGrantsAsync(db);
+        var root = await db.ScalarAsync<int>("SELECT Id FROM app.DocumentNode WHERE DocumentVersionId = @v AND Title = N'Root';", ("@v", versionId));
+
+        Assert.Equal(2, await db.ScalarAsync<int>("EXEC app.usp_DeleteSubtree @NodeId = @n;", ("@n", root)));
+
+        Assert.Equal(["Other"], (await db.QueryAsync("SELECT Title FROM app.DocumentNode WHERE DocumentVersionId = @v;", ("@v", versionId))).Select(r => (string)r["Title"]!));
+        Assert.Equal(1, await db.ScalarAsync<int>("SELECT COUNT(*) FROM app.NodeContent WHERE DocumentVersionId = @v;", ("@v", versionId)));
+        var error = await Assert.ThrowsAsync<SqlException>(() => db.ExecuteAsync("EXEC app.usp_DeleteSubtree @NodeId = 999999;"));
+        Assert.Equal(50050, error.Number);
+    }
+
     [Theory]
     [InlineData("@SortBy = 'x'", 50021)]
     [InlineData("@Status = 'x'", 50020)]

@@ -63,12 +63,17 @@ internal static class ApiSetup
         services.AddSingleton<IEndpointModule, FolderEndpoints>();
         services.AddSingleton<IEndpointModule, DocumentEndpoints>();
         services.AddSingleton<IEndpointModule, VersionEndpoints>();
+        services.AddSingleton<IEndpointModule, NodeEndpoints>();
 
         // Documents and versions (T07): the authorization seam, guards, signing and read models.
         services.AddScoped<IDocumentAuthorization, DocumentAuthorization>();
         services.AddScoped<IVersionGuard, VersionGuard>();
         services.AddScoped<SigningService>();
         services.AddScoped<DocumentViews>();
+        services.AddScoped<NodeRules>();
+
+        // Signed-version trees and contents (NFR-L9).
+        services.AddHybridCache();
 
         // Style catalog schema (docs/content-format.md §2); the font list is configurable.
         services.AddSingleton(new StyleProperties(configuration.GetSection("Content:FontFamilies").Get<string[]>() is { Length: > 0 } fonts ? fonts : StyleProperties.DefaultFontFamilies));

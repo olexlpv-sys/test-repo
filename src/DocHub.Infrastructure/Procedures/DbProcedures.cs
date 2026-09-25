@@ -65,6 +65,14 @@ internal sealed class DbProcedures(DocHubDbContext db) : IDbProcedures
         return reader.GetInt32(0);
     }
 
+    public async Task<int> DeleteSubtreeAsync(int nodeId, CancellationToken cancellationToken)
+    {
+        await using var command = await CreateCommandAsync("app.usp_DeleteSubtree", cancellationToken, ("@NodeId", nodeId)).ConfigureAwait(false);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        await ReadSingleRowAsync(reader, "app.usp_DeleteSubtree", cancellationToken).ConfigureAwait(false);
+        return reader.GetInt32(0);
+    }
+
     private static int? NullableInt(DbDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetInt32(ordinal);
 
     /// <summary>Creates a stored-procedure command on the context's connection (opened through EF, so the session context is set).</summary>
