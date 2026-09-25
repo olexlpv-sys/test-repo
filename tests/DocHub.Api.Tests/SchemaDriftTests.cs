@@ -72,8 +72,11 @@ public sealed class SchemaDriftTests(DocHubApiFactory factory) : IClassFixture<D
             """
             SELECT TABLE_SCHEMA + '.' + TABLE_NAME AS [Table], COLUMN_NAME AS [Name], DATA_TYPE AS [Type],
                    CHARACTER_MAXIMUM_LENGTH AS [Length], DATETIME_PRECISION AS [Precision], IS_NULLABLE AS [Nullable]
-            FROM INFORMATION_SCHEMA.COLUMNS
+            FROM INFORMATION_SCHEMA.COLUMNS AS c
             WHERE TABLE_SCHEMA IN ('app', 'audit')
+              -- Ledger views and history tables are SQL Server-managed projections, not mapped entities.
+              AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES AS t
+                          WHERE t.TABLE_SCHEMA = c.TABLE_SCHEMA AND t.TABLE_NAME = c.TABLE_NAME AND t.TABLE_TYPE = 'BASE TABLE')
               -- Hidden columns (temporal period / ledger columns) are managed by SQL Server and never mapped.
               AND COLUMNPROPERTY(OBJECT_ID(QUOTENAME(TABLE_SCHEMA) + '.' + QUOTENAME(TABLE_NAME)), COLUMN_NAME, 'IsHidden') = 0;
             """);

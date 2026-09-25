@@ -7,6 +7,8 @@
     <DefaultCollation>SQL_Latin1_General_CP1_CI_AS</DefaultCollation>
     <CompatibilityMode>160</CompatibilityMode>
     <TreatTSqlWarningsAsErrors>True</TreatTSqlWarningsAsErrors>
+    <!-- Required by sys.sp_verify_database_ledger (T21). -->
+    <AllowSnapshotIsolation>True</AllowSnapshotIsolation>
     <SqlServerVerification>False</SqlServerVerification>
     <IncludeCompositeObjects>True</IncludeCompositeObjects>
   </PropertyGroup>
@@ -17,6 +19,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Ledger views (<Table>_Ledger) are created by SQL Server and not part of the DacFx model (T21). -->
+    <Build Update="audit\StoredProcedures\usp_ReconcileLedger.sql" SuppressTSqlWarnings="71502" />
     <Build Remove="Scripts\**\*.sql" />
     <PostDeploy Include="Scripts\PostDeployment\Script.PostDeployment.sql" />
     <None Include="Scripts\PostDeployment\*.sql" Exclude="Scripts\PostDeployment\Script.PostDeployment.sql" />

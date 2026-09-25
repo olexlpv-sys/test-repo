@@ -1,13 +1,15 @@
-using System.Xml.Linq;
 using Microsoft.Data.SqlClient;
 using Microsoft.SqlServer.Dac;
 
 namespace DocHub.Testing.Database;
 
 /// <summary>Deploys the DocHub DACPAC (the only deployment path, FR-D4) into a database of a SQL Server instance.</summary>
-public static class DacpacDeployer
+public static partial class DacpacDeployer
 {
     public const string DacpacFileName = "DocHub.Database.dacpac";
+
+    /// <summary>First line of Script.PostDeployment.sql.</summary>
+    public const string PostDeploymentMarker = "-- <post-deployment>";
 
     public static string DacpacPath
     {
@@ -20,25 +22,43 @@ public static class DacpacDeployer
         }
     }
 
-    public static void Deploy(string masterConnectionString, string databaseName)
+    public static void Deploy(string masterConnectionString, string databaseName, string? dacpacPath = null)
     {
-        using var package = DacPackage.Load(DacpacPath);
+        using var package = DacPackage.Load(dacpacPath ?? DacpacPath);
         var services = new DacServices(masterConnectionString);
         services.Deploy(package, databaseName, upgradeExisting: true, CreateOptions());
     }
 
-    /// <summary>Returns the operations a new deployment would perform — empty when the database matches the DACPAC (no drift).</summary>
-    public static IReadOnlyList<string> GetPendingOperations(string masterConnectionString, string databaseName)
+    /// <summary>
+    /// Schema drift: the DDL statements a new deployment would execute — empty when the database matches the DACPAC.
+    /// The deploy <em>report</em> can't be used for this: DacFx lists every ledger table as an (empty) "Alter" on each
+    /// redeploy, so drift is measured on the generated script (T21 §1).
+    /// </summary>
+    public static IReadOnlyList<string> GetPendingOperations(string masterConnectionString, string databaseName, string? dacpacPath = null)
     {
-        using var package = DacPackage.Load(DacpacPath);
+        using var package = DacPackage.Load(dacpacPath ?? DacpacPath);
         var services = new DacServices(masterConnectionString);
-        var report = XDocument.Parse(services.GenerateDeployReport(package, databaseName, CreateOptions()));
+        var script = services.GenerateDeployScript(package, databaseName, CreateOptions());
+        return DriftStatements(script);
+    }
 
-        return report.Descendants()
-            .Where(e => e.Name.LocalName == "Item" && e.Parent?.Name.LocalName == "Operation")
-            .Select(e => $"{e.Parent!.Attribute("Name")?.Value}: {e.Attribute("Value")?.Value}")
+    /// <summary>
+    /// DDL statements of a deploy script (CREATE/ALTER/DROP/rename) before the post-deployment part (marked
+    /// <c>&lt;post-deployment&gt;</c>, which runs on every deployment by design).
+    /// </summary>
+    public static IReadOnlyList<string> DriftStatements(string deployScript)
+    {
+        ArgumentNullException.ThrowIfNull(deployScript);
+        var postDeployment = deployScript.IndexOf(PostDeploymentMarker, StringComparison.Ordinal);
+        var schemaPart = postDeployment < 0 ? deployScript : deployScript[..postDeployment];
+        return schemaPart.Split('\n')
+            .Select(l => l.Trim())
+            .Where(l => DdlStatement().IsMatch(l))
             .ToList();
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^(CREATE|ALTER|DROP)\s|sp_rename", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex DdlStatement();
 
     /// <summary>
     /// Connection string for tests. Pooling is off: tests impersonate database users (EXECUTE AS) and set session context,
@@ -50,6 +70,8 @@ public static class DacpacDeployer
     private static DacDeployOptions CreateOptions() => new()
     {
         BlockOnPossibleDataLoss = true,
+        // Ledger tables can't be rebuilt to keep column order; additive columns are appended (T21 §1).
+        IgnoreColumnOrder = true,
         DropObjectsNotInSource = true,
         // Roles and permissions are part of the model; users/logins are environment-specific.
         DoNotDropObjectTypes = [ObjectType.Users, ObjectType.Logins, ObjectType.RoleMembership],

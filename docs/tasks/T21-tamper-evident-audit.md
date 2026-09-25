@@ -74,6 +74,18 @@ Write `docs/runbooks/tamper-evidence-azure.md` with exact steps:
 ## Out of scope
 Retention/purging of audit and history data (ledger data is kept by design). A data-preserving migration of existing non-empty databases (none exist before go-live; see §1 upgrade path). Implementing the Azure infrastructure itself (human action, process §10).
 
+## Implementation notes (Q22)
+Where the implementation refines the spec above:
+- **`EXECUTE AS OWNER`** on `usp_ReconcileLedger`: rule 5 / §2 read renamed, transferred and dropped baseline/finding tables by object id through dynamic SQL, which ownership chaining doesn't cover (the tables can be moved into any schema). Ledger transactions still record the caller's login. `ledger_reader` is kept for the API's own reads (module definitions, `sp_verify_database_ledger`); its membership `app_api ∈ ledger_reader` is set by the post-deployment script, because deployments exclude role memberships.
+- **Generated procedure:** `usp_ReconcileLedger` is generated with the triggers (same column lists and change rules) and embeds the allow-list, taken from the table scripts: every ledger table (not only the audited ones) and its columns plus the columns SQL Server adds. Ledger views aren't in the DacFx model, so `SQL71502` is suppressed for this one file (the DB tests execute every branch).
+- **Pairing:** the INSERT/DELETE images of one key in one transaction are paired by ordinal (n-th INSERT with n-th DELETE). An insert and a delete of the same row inside one transaction with triggers disabled therefore nets out (no data change remains; the rows stay in the history table).
+- **Rule 3** is stricter than "an audited change of the version in the same transaction": the change must also not clear/move `TamperedAt` nor move `LastChangeLogId` back (a `dbo` combining an audited edit with clearing the stamp is found). Identical before/after images are ignored like no-op updates.
+- **Rule 6** covers every module of the `audit` schema (functions, procedures, views — `vModifiedAfterSigning` computes the flag) and the audit triggers, and additionally reports disabled audit triggers and `audit` modules the project doesn't define. Findings without a ledger transaction (rules 4 and 6) are unique by kind + object + detail; the unique index is filtered to rows with a ledger transaction.
+- **Flag storage:** each finding stores `AfterSigning` (its transaction committed at or after the version's ledger signing transaction) when it is recorded; this can't change later because the signing transaction is the first one that made the version Signed. `audit.vModifiedAfterSigning` = Signed versions with `TamperedAt` or an `AfterSigning` finding (for T07).
+- **`audit.ChangeLog`** declares its ledger columns explicitly so `IX_ChangeLog_LedgerTransaction` can index `ledger_start_transaction_id` (rules 1–3 look rows up by transaction).
+- **Drift:** DacFx reports every ledger table as an empty "Alter" on each redeploy, so drift = DDL in the generated deploy script before the `-- <post-deployment>` marker (first line of `Script.PostDeployment.sql`).
+- **Local development:** an API connecting as `sa` produces *forged audit row* findings by design (`database/README.md`).
+
 ## Acceptance criteria (automated in `tests/DocHub.Database.Tests` unless stated)
 - [ ] A fresh DACPAC publish creates the temporal + ledger tables; re-deploy shows no drift; `FOR SYSTEM_TIME AS OF` returns the earlier state of a `NodeContent` row. `database/README.md` documents the recreate-only upgrade path and the allowed changes of ledger tables.
 - [ ] As `dbo`: `SET (SYSTEM_VERSIONING = OFF)`, `UPDATE`/`DELETE` on a history table and on `audit.ChangeLog`/`ReconciliationFinding`/`ReconciliationBaseline` all fail.

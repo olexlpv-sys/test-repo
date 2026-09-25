@@ -10,7 +10,12 @@ public sealed class DeploymentTests(SqlServerContainerFixture server)
     [
         "app.Comment", "app.ContentStyle", "app.ContentStyleUsage", "app.Document", "app.DocumentNode",
         "app.DocumentPermission", "app.DocumentVersion", "app.Folder", "app.NodeContent", "app.NodeType",
-        "app.User", "app.VersionSignature", "app.VersionStamp", "audit.ChangeLog",
+        "app.User", "app.VersionSignature", "app.VersionStamp",
+        "audit.ChangeLog", "audit.ReconciliationBaseline", "audit.ReconciliationFinding",
+        // History tables of the temporal + ledger tables (T21).
+        "history.Comment", "history.ContentStyle", "history.Document", "history.DocumentNode", "history.DocumentPermission",
+        "history.DocumentVersion", "history.Folder", "history.NodeContent", "history.NodeType", "history.User",
+        "history.VersionSignature", "history.VersionStamp",
     ];
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -27,7 +32,9 @@ public sealed class DeploymentTests(SqlServerContainerFixture server)
         Assert.Equal(ExpectedTables.Order(StringComparer.Ordinal), tables);
 
         var roles = await QueryListAsync(connection, "SELECT name FROM sys.database_principals WHERE type = 'R' AND is_fixed_role = 0 AND name <> 'public' ORDER BY name");
-        Assert.Equal(["app_api", "readonly", "support_writer"], roles);
+        Assert.Equal(["app_api", "ledger_reader", "readonly", "support_writer"], roles);
+        // Role-in-role membership comes from the post-deployment script (deployments exclude memberships).
+        Assert.Equal(["1"], await QueryListAsync(connection, "SELECT CAST(IS_ROLEMEMBER(N'ledger_reader', N'app_api') AS NVARCHAR (1));"));
 
         Assert.Equal(SeedCounts.Expected, await SeedCounts.ReadAsync(connection));
     }

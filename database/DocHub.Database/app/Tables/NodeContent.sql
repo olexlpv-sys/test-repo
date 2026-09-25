@@ -1,3 +1,4 @@
+-- Temporal + updatable ledger table (T21): immutable history, FOR SYSTEM_TIME queries, principal of every transaction.
 CREATE TABLE [app].[NodeContent]
 (
     [NodeId]            INT              NOT NULL,
@@ -14,6 +15,9 @@ CREATE TABLE [app].[NodeContent]
     [ModifiedAt]        DATETIME2 (3)    NOT NULL CONSTRAINT [DF_NodeContent_ModifiedAt] DEFAULT (SYSUTCDATETIME()),
     [ModifiedByUserId]  INT              NOT NULL,
     [RowVersion]        ROWVERSION       NOT NULL,
+    [ValidFrom]         DATETIME2 (7)    GENERATED ALWAYS AS ROW START HIDDEN NOT NULL,
+    [ValidTo]           DATETIME2 (7)    GENERATED ALWAYS AS ROW END HIDDEN NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([ValidFrom], [ValidTo]),
     CONSTRAINT [PK_NodeContent] PRIMARY KEY CLUSTERED ([NodeId]),
     CONSTRAINT [FK_NodeContent_Node] FOREIGN KEY ([NodeId], [DocumentVersionId], [LogicalNodeId])
         REFERENCES [app].[DocumentNode] ([Id], [DocumentVersionId], [LogicalNodeId]) ON DELETE CASCADE,
@@ -21,7 +25,8 @@ CREATE TABLE [app].[NodeContent]
     CONSTRAINT [CK_NodeContent_ContentJson] CHECK (ISJSON([ContentJson]) = 1),
     CONSTRAINT [CK_NodeContent_SchemaVersion] CHECK ([SchemaVersion] >= 1),
     CONSTRAINT [CK_NodeContent_ContentHash] CHECK (DATALENGTH([ContentHash]) = 32)
-);
+)
+WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [history].[NodeContent]), LEDGER = ON (LEDGER_VIEW = [app].[NodeContent_Ledger] (TRANSACTION_ID_COLUMN_NAME = [ledger_transaction_id], SEQUENCE_NUMBER_COLUMN_NAME = [ledger_sequence_number], OPERATION_TYPE_COLUMN_NAME = [ledger_operation_type], OPERATION_TYPE_DESC_COLUMN_NAME = [ledger_operation_type_desc])));
 GO
 CREATE NONCLUSTERED INDEX [IX_NodeContent_DerivedStale]
     ON [app].[NodeContent] ([NodeId]) WHERE [DerivedStale] = 1;

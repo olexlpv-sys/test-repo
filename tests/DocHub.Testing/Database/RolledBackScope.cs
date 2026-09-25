@@ -3,7 +3,7 @@ using Microsoft.Data.SqlClient;
 namespace DocHub.Testing.Database;
 
 /// <summary>A connection + transaction that is always rolled back on dispose.</summary>
-public sealed class RolledBackScope(SqlConnection connection, SqlTransaction transaction) : IAsyncDisposable
+public sealed class RolledBackScope(SqlConnection connection, SqlTransaction transaction) : ISqlCommands, IAsyncDisposable
 {
     public SqlConnection Connection { get; } = connection;
 

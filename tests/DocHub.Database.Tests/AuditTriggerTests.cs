@@ -9,6 +9,7 @@ public sealed class AuditTriggerTests(DocHubDatabaseFixture database) : IClassFi
 {
     private const string NewJson = """{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Changed"}]}]}""";
     private const int PermissionDenied = 229;
+    private const int AppendOnlyLedgerViolation = 37359;
 
     private static readonly string[] AuditedTables =
     [
@@ -226,16 +227,24 @@ public sealed class AuditTriggerTests(DocHubDatabaseFixture database) : IClassFi
     [InlineData("app_api", "DELETE FROM audit.ChangeLog;")]
     [InlineData("support_writer", "UPDATE audit.ChangeLog SET Reason = N'x';")]
     [InlineData("support_writer", "DELETE FROM audit.ChangeLog;")]
-    public async Task Change_log_is_append_only_for_non_dbo_users(string role, string sql)
+    [InlineData("db_owner", "UPDATE audit.ChangeLog SET Reason = N'x';")]
+    [InlineData("db_owner", "DELETE FROM audit.ChangeLog;")]
+    [InlineData("dbo", "UPDATE audit.ChangeLog SET Reason = N'x';")]
+    [InlineData("dbo", "DELETE FROM audit.ChangeLog;")]
+    [InlineData("dbo", "UPDATE audit.ReconciliationFinding SET Detail = N'x';")]
+    [InlineData("dbo", "DELETE FROM audit.ReconciliationBaseline;")]
+    public async Task Append_only_ledger_tables_reject_updates_and_deletes_even_for_dbo(string role, string sql)
     {
         await using var db = await database.OpenRolledBackTransactionAsync(Ct);
         await db.Data.DocumentAsync();
-        var user = await db.Data.DatabaseUserInRoleAsync(role);
-        await AsUserAsync(db, user);
+        if (role != "dbo")
+        {
+            await AsUserAsync(db, await db.Data.DatabaseUserInRoleAsync(role));
+        }
 
         var exception = await Assert.ThrowsAsync<SqlException>(() => db.ExecuteAsync(sql));
 
-        Assert.Equal(PermissionDenied, exception.Number);
+        Assert.Equal(AppendOnlyLedgerViolation, exception.Number);
     }
 
     [Fact]

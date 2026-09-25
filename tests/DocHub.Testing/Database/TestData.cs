@@ -4,7 +4,7 @@ namespace DocHub.Testing.Database;
 /// Minimal SQL insert helpers for DB-level tests. Ids of the seeded users/types/folders are stable.
 /// Audited tables have triggers, so inserts return ids via SCOPE_IDENTITY() (OUTPUT without INTO is not allowed).
 /// </summary>
-public sealed class TestData(RolledBackScope scope)
+public sealed class TestData(ISqlCommands scope)
 {
     public const int AdminUserId = 1;
     public const int AliceUserId = 2;
@@ -20,7 +20,7 @@ public sealed class TestData(RolledBackScope scope)
 
     private static readonly byte[] EmptyHash = new byte[32];
 
-    /// <summary>Creates a database user without login in <paramref name="role"/> (rolled back with the scope) and returns its name.</summary>
+    /// <summary>Creates a database user without login in <paramref name="role"/> (rolled back with a <see cref="RolledBackScope"/>) and returns its name.</summary>
     public async Task<string> DatabaseUserInRoleAsync(string role)
     {
         var name = $"test_{role}_{Guid.NewGuid():N}";

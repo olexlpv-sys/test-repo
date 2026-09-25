@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using DocHub.Api.Audit;
 using DocHub.Api.Auth;
 using DocHub.Api.Endpoints;
 using DocHub.Api.Errors;
@@ -53,6 +54,11 @@ internal static class ApiSetup
 
         services.AddSingleton<IEndpointModule, SystemEndpoints>();
         services.AddSingleton<IEndpointModule, MeEndpoints>();
+        services.AddSingleton<IEndpointModule, AuditEndpoints>();
+
+        // Tamper evidence (T21 §4): nightly ledger reconciliation.
+        services.Configure<ReconciliationOptions>(configuration.GetSection(ReconciliationOptions.SectionName));
+        services.AddHostedService<LedgerReconciliationService>();
         return builder;
     }
 
@@ -102,6 +108,7 @@ internal static class ApiSetup
 
         // Everything requires an authenticated user unless an endpoint opts out with AllowAnonymous().
         builder.Services.AddAuthorizationBuilder()
-            .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+            .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())
+            .AddPolicy(AuthPolicies.Admin, policy => policy.RequireAuthenticatedUser().RequireRole(TestModeAuthenticationHandler.AdminRole));
     }
 }

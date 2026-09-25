@@ -74,10 +74,10 @@ jobs:
       - name: Generated audit triggers are up to date
         run: |
           dotnet run database/tools/GenerateAuditTriggers.cs
-          git status --porcelain database/DocHub.Database
-          if [ -n "$(git status --porcelain database/DocHub.Database)" ]; then
-            echo "::error::Generated audit SQL differs from the committed files. Run 'dotnet run database/tools/GenerateAuditTriggers.cs' and commit."
-            git diff database/DocHub.Database
+          git status --porcelain database/DocHub.Database src/DocHub.Infrastructure/Audit
+          if [ -n "$(git status --porcelain database/DocHub.Database src/DocHub.Infrastructure/Audit)" ]; then
+            echo "::error::Generated audit SQL or module hashes differ from the committed files. Run 'dotnet run database/tools/GenerateAuditTriggers.cs' and commit."
+            git diff database/DocHub.Database src/DocHub.Infrastructure/Audit
             exit 1
           fi
 
@@ -93,19 +93,18 @@ jobs:
 
       - name: Publish to SQL Server
         run: >-
-          dotnet sqlpackage /Action:Publish
+          dotnet sqlpackage /Action:Publish /p:IgnoreColumnOrder=True
           /SourceFile:database/DocHub.Database/bin/Release/DocHub.Database.dacpac
           /TargetConnectionString:"Server=localhost,1433;Database=DocHub;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
 
-      - name: Drift check (deploy report must be empty)
+      - name: Drift check (a redeploy must contain no DDL)
         run: |
-          dotnet sqlpackage /Action:DeployReport \
+          dotnet sqlpackage /Action:Script /p:IgnoreColumnOrder=True \
             /SourceFile:database/DocHub.Database/bin/Release/DocHub.Database.dacpac \
             /TargetConnectionString:"Server=localhost,1433;Database=DocHub;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True" \
-            /OutputPath:deploy-report.xml
-          cat deploy-report.xml
-          if grep -q "<Operation" deploy-report.xml; then
+            /OutputPath:redeploy.sql
+          # The deploy report can't be used: DacFx lists every ledger table as an empty "Alter" on each redeploy.
+          if sed '/^-- <post-deployment>/,$d' redeploy.sql | grep -nEi '^\s*(CREATE|ALTER|DROP)\s|sp_rename'; then
             echo "::error::Database differs from the DACPAC after publishing (drift)."
             exit 1
           fi
-

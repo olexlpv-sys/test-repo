@@ -1,3 +1,4 @@
+-- Temporal + updatable ledger table (T21): immutable history, FOR SYSTEM_TIME queries, principal of every transaction.
 CREATE TABLE [app].[DocumentVersion]
 (
     [Id]                INT            IDENTITY (1, 1) NOT NULL,
@@ -12,6 +13,9 @@ CREATE TABLE [app].[DocumentVersion]
     [SignedContentHash] VARBINARY (32) NULL,
     [IsCurrent]         BIT            NOT NULL CONSTRAINT [DF_DocumentVersion_IsCurrent] DEFAULT (0),
     [RowVersion]        ROWVERSION     NOT NULL,
+    [ValidFrom]         DATETIME2 (7)    GENERATED ALWAYS AS ROW START HIDDEN NOT NULL,
+    [ValidTo]           DATETIME2 (7)    GENERATED ALWAYS AS ROW END HIDDEN NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([ValidFrom], [ValidTo]),
     CONSTRAINT [PK_DocumentVersion] PRIMARY KEY CLUSTERED ([Id]),
     CONSTRAINT [FK_DocumentVersion_Document] FOREIGN KEY ([DocumentId]) REFERENCES [app].[Document] ([Id]),
     CONSTRAINT [FK_DocumentVersion_BasedOn] FOREIGN KEY ([BasedOnVersionId]) REFERENCES [app].[DocumentVersion] ([Id]),
@@ -24,7 +28,8 @@ CREATE TABLE [app].[DocumentVersion]
         OR ([Status] <> 2 AND [VersionNumber] IS NULL AND [SignedAt] IS NULL)),
     -- A discarded draft is never the current version.
     CONSTRAINT [CK_DocumentVersion_DeletedNotCurrent] CHECK ([Status] <> 3 OR [IsCurrent] = 0)
-);
+)
+WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [history].[DocumentVersion]), LEDGER = ON (LEDGER_VIEW = [app].[DocumentVersion_Ledger] (TRANSACTION_ID_COLUMN_NAME = [ledger_transaction_id], SEQUENCE_NUMBER_COLUMN_NAME = [ledger_sequence_number], OPERATION_TYPE_COLUMN_NAME = [ledger_operation_type], OPERATION_TYPE_DESC_COLUMN_NAME = [ledger_operation_type_desc])));
 GO
 -- At most one draft per document.
 CREATE UNIQUE NONCLUSTERED INDEX [UX_DocumentVersion_OneDraft]

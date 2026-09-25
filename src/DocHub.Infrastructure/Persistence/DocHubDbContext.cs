@@ -35,6 +35,8 @@ public sealed class DocHubDbContext(DbContextOptions<DocHubDbContext> options) :
 
     public DbSet<Comment> Comments => Set<Comment>();
 
+    public DbSet<ReconciliationFinding> ReconciliationFindings => Set<ReconciliationFinding>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);

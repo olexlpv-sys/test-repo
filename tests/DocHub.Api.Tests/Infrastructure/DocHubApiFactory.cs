@@ -32,6 +32,11 @@ public class DocHubApiFactory(SqlServerContainerFixture server) : WebApplication
 
     public string EnvironmentName { get; init; } = "Development";
 
+    /// <summary>Test-specific service replacements.</summary>
+    protected virtual void ConfigureServices(IServiceCollection services)
+    {
+    }
+
     /// <summary>Extra endpoint modules only the tests use (see <see cref="TestEndpoints"/>).</summary>
     protected virtual IEnumerable<IEndpointModule> AdditionalModules => [];
 
@@ -65,6 +70,9 @@ public class DocHubApiFactory(SqlServerContainerFixture server) : WebApplication
         ArgumentNullException.ThrowIfNull(builder);
         builder.UseEnvironment(EnvironmentName);
         builder.UseSetting("ConnectionStrings:DocHub", ApiConnectionString);
+        // The nightly reconciliation would start on its own schedule; tests run it explicitly.
+        builder.UseSetting("Audit:Reconciliation:Enabled", "false");
+        builder.ConfigureTestServices(ConfigureServices);
         builder.ConfigureTestServices(services =>
         {
             foreach (var module in AdditionalModules)

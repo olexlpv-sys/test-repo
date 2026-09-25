@@ -8,3 +8,17 @@ GO
 DENY INSERT, UPDATE, DELETE ON OBJECT::[app].[ContentStyleUsage] TO [support_writer];
 GO
 GRANT EXECUTE ON OBJECT::[audit].[usp_SetSupportContext] TO [support_writer];
+GO
+-- Ledger reconciliation (T21 §4): the API runs it and records module-integrity findings.
+GRANT EXECUTE ON OBJECT::[audit].[usp_ReconcileLedger] TO [app_api];
+GO
+GRANT EXECUTE ON OBJECT::[audit].[usp_RecordModuleIntegrityFinding] TO [app_api];
+GO
+-- Ledger views/verification and module definitions (rule 6) need database permissions ownership chaining doesn't cover.
+GRANT VIEW LEDGER CONTENT TO [ledger_reader];
+GO
+GRANT VIEW DATABASE STATE TO [ledger_reader];
+GO
+GRANT VIEW DEFINITION ON SCHEMA::[app] TO [ledger_reader];
+GO
+GRANT VIEW DEFINITION ON SCHEMA::[audit] TO [ledger_reader];
