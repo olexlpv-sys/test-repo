@@ -9,11 +9,13 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM inserted) AND NOT EXISTS (SELECT 1 FROM deleted)
         RETURN;
 
-    -- T03 §2a: a ContentJson change without all derived columns rewritten in the same statement leaves the
-    -- derived columns stale. Column-based only; session context cannot suppress it.
+    -- T03 §2a: derived columns become stale when ContentJson changes without all derived columns rewritten in the same
+    -- statement (the API save rewrites them), and whenever a script touches ContentJson or any derived column — the API
+    -- then re-renders them from ContentJson, so forged HTML/plain text is never served. Column- and role-based only.
+    DECLARE @Source VARCHAR (10) = (SELECT [Source] FROM [audit].[fn_ChangeContext]());
     DECLARE @DerivedRewritten BIT = CASE WHEN UPDATE([ContentHtml]) AND UPDATE([PlainText]) AND UPDATE([ContentHash]) THEN 1 ELSE 0 END;
 
-    IF UPDATE([ContentJson])
+    IF UPDATE([ContentJson]) OR UPDATE([ContentHtml]) OR UPDATE([PlainText]) OR UPDATE([ContentHash]) OR UPDATE([DerivedStale])
     BEGIN
         UPDATE [nc]
         SET [DerivedStale] = 1
@@ -21,16 +23,20 @@ BEGIN
         JOIN inserted AS [i] ON [i].[NodeId] = [nc].[NodeId]
         JOIN deleted AS [d] ON [d].[NodeId] = [i].[NodeId]
         WHERE [nc].[DerivedStale] = 0
-          AND CAST([i].[ContentJson] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[ContentJson] AS VARBINARY (MAX))
-          AND NOT (@DerivedRewritten = 1 AND [i].[ContentHash] IS DISTINCT FROM [d].[ContentHash]);
+          AND (
+                (CAST([i].[ContentJson] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[ContentJson] AS VARBINARY (MAX))
+                 AND NOT (@DerivedRewritten = 1 AND [i].[ContentHash] IS DISTINCT FROM [d].[ContentHash]))
+             OR (@Source = 'Script' AND (CAST([i].[ContentJson] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[ContentJson] AS VARBINARY (MAX))
+                                          OR CAST([i].[ContentHtml] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[ContentHtml] AS VARBINARY (MAX)) OR CAST([i].[PlainText] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[PlainText] AS VARBINARY (MAX)) OR [i].[ContentHash] IS DISTINCT FROM [d].[ContentHash]
+                                          OR [i].[DerivedStale] IS DISTINCT FROM [d].[DerivedStale])));
     END;
 
-    DECLARE @Logged TABLE ([Id] BIGINT NOT NULL, [DocumentVersionId] INT NULL);
+    DECLARE @Logged TABLE ([Id] BIGINT NOT NULL, [EntityId] INT NOT NULL);
 
     INSERT INTO [audit].[ChangeLog]
         ([TableName], [Operation], [EntityId], [DocumentId], [DocumentVersionId], [LogicalNodeId], [OldValues], [NewValues],
          [ChangedColumns], [UserId], [Source], [DbLogin], [AppName], [CorrelationId], [OperationContext], [Ticket], [Reason])
-    OUTPUT INSERTED.[Id], INSERTED.[DocumentVersionId] INTO @Logged ([Id], [DocumentVersionId])
+    OUTPUT INSERTED.[Id], INSERTED.[EntityId] INTO @Logged ([Id], [EntityId])
     SELECT
         N'app.NodeContent',
         CASE WHEN [d].[NodeId] IS NULL THEN 'I' WHEN [i].[NodeId] IS NULL THEN 'D' ELSE 'U' END,
@@ -48,6 +54,8 @@ BEGIN
                    CASE WHEN CAST([i].[ContentJson] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[ContentJson] AS VARBINARY (MAX)) THEN N'ContentJson' END,
                    CASE WHEN [i].[ModifiedAt] IS DISTINCT FROM [d].[ModifiedAt] THEN N'ModifiedAt' END,
                    CASE WHEN [i].[ModifiedByUserId] IS DISTINCT FROM [d].[ModifiedByUserId] THEN N'ModifiedByUserId' END,
+                   CASE WHEN CAST([i].[ContentHtml] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[ContentHtml] AS VARBINARY (MAX)) THEN N'ContentHtml' END,
+                   CASE WHEN CAST([i].[PlainText] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[PlainText] AS VARBINARY (MAX)) THEN N'PlainText' END,
                    CASE WHEN [i].[ContentHash] IS DISTINCT FROM [d].[ContentHash] THEN N'ContentHash' END), N'')
         END,
         [ctx].[UserId], [ctx].[Source], [ctx].[DbLogin], [ctx].[AppName], [ctx].[CorrelationId], [ctx].[OperationContext], [ctx].[Ticket], [ctx].[Reason]
@@ -60,15 +68,21 @@ BEGIN
            OR [i].[SchemaVersion] IS DISTINCT FROM [d].[SchemaVersion]
            OR CAST([i].[ContentJson] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[ContentJson] AS VARBINARY (MAX))
            OR [i].[ModifiedAt] IS DISTINCT FROM [d].[ModifiedAt]
-           OR [i].[ModifiedByUserId] IS DISTINCT FROM [d].[ModifiedByUserId];
+           OR [i].[ModifiedByUserId] IS DISTINCT FROM [d].[ModifiedByUserId]
+       OR ([ctx].[Source] = 'Script' AND (CAST([i].[ContentHtml] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[ContentHtml] AS VARBINARY (MAX)) OR CAST([i].[PlainText] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[PlainText] AS VARBINARY (MAX)) OR [i].[ContentHash] IS DISTINCT FROM [d].[ContentHash]))
+    ;
 
-    -- T03 §2b: advance the per-version stamp (cache key/ETag); flag the first change to a Signed version's nodes/content.
+    -- T03 §2b: advance the per-version stamp (cache key/ETag) of every version the change touches — old and new version
+    -- for rows that move between versions — and record the first tampering with a Signed version.
     MERGE [app].[VersionStamp] WITH (HOLDLOCK) AS [target]
     USING (
-        SELECT [l].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], MAX(CASE WHEN [v].[Status] = 2 THEN SYSUTCDATETIME() END) AS [TamperedAt]
+        SELECT [x].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], MAX(CASE WHEN [v].[Status] = 2 THEN SYSUTCDATETIME() END) AS [TamperedAt]
         FROM @Logged AS [l]
-        JOIN [app].[DocumentVersion] AS [v] ON [v].[Id] = [l].[DocumentVersionId]
-        GROUP BY [l].[DocumentVersionId]) AS [source]
+        LEFT JOIN inserted AS [i] ON [i].[NodeId] = [l].[EntityId]
+        LEFT JOIN deleted AS [d] ON [d].[NodeId] = [l].[EntityId]
+        CROSS APPLY (VALUES ([i].[DocumentVersionId]), ([d].[DocumentVersionId])) AS [x] ([DocumentVersionId])
+        JOIN [app].[DocumentVersion] AS [v] ON [v].[Id] = [x].[DocumentVersionId]
+        GROUP BY [x].[DocumentVersionId]) AS [source]
     ON [target].[DocumentVersionId] = [source].[DocumentVersionId]
     WHEN MATCHED THEN
         UPDATE SET [LastChangeLogId] = CASE WHEN [source].[LastChangeLogId] > [target].[LastChangeLogId] THEN [source].[LastChangeLogId] ELSE [target].[LastChangeLogId] END,

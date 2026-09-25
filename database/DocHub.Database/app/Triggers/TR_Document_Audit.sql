@@ -40,5 +40,6 @@ BEGIN
            OR [i].[OwnerUserId] IS DISTINCT FROM [d].[OwnerUserId]
            OR [i].[CreatedAt] IS DISTINCT FROM [d].[CreatedAt]
            OR [i].[DeletedAt] IS DISTINCT FROM [d].[DeletedAt]
-           OR [i].[DeletedByUserId] IS DISTINCT FROM [d].[DeletedByUserId];
+           OR [i].[DeletedByUserId] IS DISTINCT FROM [d].[DeletedByUserId]
+    ;
 END;

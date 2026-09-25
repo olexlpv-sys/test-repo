@@ -40,5 +40,6 @@ BEGIN
            OR [i].[Role] IS DISTINCT FROM [d].[Role]
            OR [i].[LogicalNodeId] IS DISTINCT FROM [d].[LogicalNodeId]
            OR [i].[GrantedAt] IS DISTINCT FROM [d].[GrantedAt]
-           OR [i].[GrantedByUserId] IS DISTINCT FROM [d].[GrantedByUserId];
+           OR [i].[GrantedByUserId] IS DISTINCT FROM [d].[GrantedByUserId]
+    ;
 END;

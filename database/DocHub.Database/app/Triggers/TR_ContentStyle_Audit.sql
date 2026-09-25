@@ -42,5 +42,6 @@ BEGIN
            OR CAST([i].[BasedOnStyleId] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[BasedOnStyleId] AS VARBINARY (MAX))
            OR CAST([i].[PropertiesJson] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[PropertiesJson] AS VARBINARY (MAX))
            OR [i].[IsBuiltIn] IS DISTINCT FROM [d].[IsBuiltIn]
-           OR [i].[IsActive] IS DISTINCT FROM [d].[IsActive];
+           OR [i].[IsActive] IS DISTINCT FROM [d].[IsActive]
+    ;
 END;

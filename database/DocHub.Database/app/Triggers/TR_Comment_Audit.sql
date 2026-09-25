@@ -50,5 +50,6 @@ BEGIN
            OR [i].[EditedAt] IS DISTINCT FROM [d].[EditedAt]
            OR [i].[DeletedAt] IS DISTINCT FROM [d].[DeletedAt]
            OR [i].[ResolvedAt] IS DISTINCT FROM [d].[ResolvedAt]
-           OR [i].[ResolvedByUserId] IS DISTINCT FROM [d].[ResolvedByUserId];
+           OR [i].[ResolvedByUserId] IS DISTINCT FROM [d].[ResolvedByUserId]
+    ;
 END;

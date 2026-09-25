@@ -9,12 +9,12 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM inserted) AND NOT EXISTS (SELECT 1 FROM deleted)
         RETURN;
 
-    DECLARE @Logged TABLE ([Id] BIGINT NOT NULL, [DocumentVersionId] INT NULL);
+    DECLARE @Logged TABLE ([Id] BIGINT NOT NULL, [EntityId] INT NOT NULL);
 
     INSERT INTO [audit].[ChangeLog]
         ([TableName], [Operation], [EntityId], [DocumentId], [DocumentVersionId], [LogicalNodeId], [OldValues], [NewValues],
          [ChangedColumns], [UserId], [Source], [DbLogin], [AppName], [CorrelationId], [OperationContext], [Ticket], [Reason])
-    OUTPUT INSERTED.[Id], INSERTED.[DocumentVersionId] INTO @Logged ([Id], [DocumentVersionId])
+    OUTPUT INSERTED.[Id], INSERTED.[EntityId] INTO @Logged ([Id], [EntityId])
     SELECT
         N'app.VersionSignature',
         CASE WHEN [d].[Id] IS NULL THEN 'I' WHEN [i].[Id] IS NULL THEN 'D' ELSE 'U' END,
@@ -43,15 +43,20 @@ BEGIN
            OR [i].[SignedAt] IS DISTINCT FROM [d].[SignedAt]
            OR [i].[ContentHash] IS DISTINCT FROM [d].[ContentHash]
            OR [i].[WithdrawnAt] IS DISTINCT FROM [d].[WithdrawnAt]
-           OR CAST([i].[Comment] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[Comment] AS VARBINARY (MAX));
+           OR CAST([i].[Comment] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[Comment] AS VARBINARY (MAX))
+    ;
 
-    -- T03 §2b: advance the per-version stamp (cache key/ETag); flag the first change to a Signed version's nodes/content.
+    -- T03 §2b: advance the per-version stamp (cache key/ETag) of every version the change touches — old and new version
+    -- for rows that move between versions — and record the first tampering with a Signed version.
     MERGE [app].[VersionStamp] WITH (HOLDLOCK) AS [target]
     USING (
-        SELECT [l].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], CAST(NULL AS DATETIME2 (3)) AS [TamperedAt]
+        SELECT [x].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], CAST(NULL AS DATETIME2 (7)) AS [TamperedAt]
         FROM @Logged AS [l]
-        JOIN [app].[DocumentVersion] AS [v] ON [v].[Id] = [l].[DocumentVersionId]
-        GROUP BY [l].[DocumentVersionId]) AS [source]
+        LEFT JOIN inserted AS [i] ON [i].[Id] = [l].[EntityId]
+        LEFT JOIN deleted AS [d] ON [d].[Id] = [l].[EntityId]
+        CROSS APPLY (VALUES ([i].[DocumentVersionId]), ([d].[DocumentVersionId])) AS [x] ([DocumentVersionId])
+        JOIN [app].[DocumentVersion] AS [v] ON [v].[Id] = [x].[DocumentVersionId]
+        GROUP BY [x].[DocumentVersionId]) AS [source]
     ON [target].[DocumentVersionId] = [source].[DocumentVersionId]
     WHEN MATCHED THEN
         UPDATE SET [LastChangeLogId] = CASE WHEN [source].[LastChangeLogId] > [target].[LastChangeLogId] THEN [source].[LastChangeLogId] ELSE [target].[LastChangeLogId] END,

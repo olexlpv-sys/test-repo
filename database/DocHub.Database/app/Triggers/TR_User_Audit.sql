@@ -38,5 +38,6 @@ BEGIN
            OR CAST([i].[DisplayName] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[DisplayName] AS VARBINARY (MAX))
            OR CAST([i].[Email] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[Email] AS VARBINARY (MAX))
            OR [i].[IsAdmin] IS DISTINCT FROM [d].[IsAdmin]
-           OR [i].[IsActive] IS DISTINCT FROM [d].[IsActive];
+           OR [i].[IsActive] IS DISTINCT FROM [d].[IsActive]
+    ;
 END;

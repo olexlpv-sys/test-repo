@@ -57,13 +57,13 @@ Requirements for triggers:
 - String columns are compared as `VARBINARY` (the database collation is case-insensitive, so `=` would miss case-only and trailing-space changes).
 
 ### 2a. Derived-content flag
-The `app.NodeContent` trigger sets `DerivedStale = 1` for every row whose `ContentJson` changed **unless the same statement also updated all derived columns** (`ContentHtml`, `PlainText`, `ContentHash` — checked with `UPDATE()` and a value comparison), which is what the API content save does. The decision never depends on session context, so scripts cannot suppress it; a script that deliberately rewrites derived columns too is still fully audited (below).
+The `app.NodeContent` trigger sets `DerivedStale = 1` (a) for every row whose `ContentJson` changed **unless the same statement also updated all derived columns** (`ContentHtml`, `PlainText`, `ContentHash` — checked with `UPDATE()` and a value comparison), which is what the API content save does, and (b) for **every** row where a script (`Source = 'Script'`) changed `ContentJson` or any derived column — the API then re-renders the derived columns from `ContentJson`, so forged HTML/plain text is never served. The decision depends only on columns and on the caller's role, never on session context.
 
 ### 2b. Version stamp
-The triggers on `DocumentVersion`, `VersionSignature`, `DocumentNode` and `NodeContent` upsert `app.VersionStamp` for each affected version: `LastChangeLogId` = the new log id (so the version header — status, signatures — and the tree/content all revalidate). `TamperedAt` = `SYSUTCDATETIME()` if still null, the version is Signed, and a **non-derived** column of a node/content row changed (column-based, independent of session context).
+The triggers on `DocumentVersion`, `VersionSignature`, `DocumentNode` and `NodeContent` upsert `app.VersionStamp` for **every version a change touches — the old and the new version when a row moves between versions**: `LastChangeLogId` = the new log id (so the version header — status, signatures — and the tree/content all revalidate). `TamperedAt` (`datetime2(7)`) is set once, when (a) an audited node/content change touches a Signed version, or (b) the signing data of a Signed version changes (status, version number, `SignedAt`, `SignedContentHash`, document — i.e. unsigning or re-signing by script; `IsCurrent` flips are legitimate). `app.VersionStamp` can't be written directly by anyone (`DENY INSERT, UPDATE, DELETE … TO public`; triggers write through ownership chaining).
 
 ### 2c. Derived-content rebuild
-**Column-based audit rule:** an `UPDATE` of `NodeContent` in which only derived columns changed (`ContentHtml`, `PlainText`, `ContentHash`, `DerivedStale`) is not written to `audit.ChangeLog` and does not set `TamperedAt` — whatever the session context. Any change to `ContentJson` (or any other non-derived column) is **always** audited. `OperationContext` (e.g. `RebuildDerived` from the refresher, `CopyVersion`) is recorded as a label only and never changes what is audited or flagged.
+**Audit rule for derived columns:** an `UPDATE` of `NodeContent` in which only derived columns changed (`ContentHtml`, `PlainText`, `ContentHash`, `DerivedStale`) is **not audited when the API does it** (`Source = 'App'`, i.e. the refresher running as `app_api`), and **is audited — and marks tampering on a Signed version — when a script does it**. Any change to `ContentJson` (or any other non-derived column) is **always** audited. `OperationContext` (e.g. `RebuildDerived`, `CopyVersion`) is recorded as a label only and never changes what is audited or flagged. `app.ContentStyleUsage` (derived from `ContentJson` by the API) can't be written by `support_writer`.
 
 ### 3. Session context contract
 | Key | Set by | Meaning |
@@ -98,6 +98,9 @@ API for reading the log (T11). Retention/archiving of the log.
 - [ ] The support template `database/support/_TEMPLATE.sql` executes successfully **as a `support_writer` user** and produces audit rows with `Ticket`/`Reason`; the same template as `readonly` fails on the DML.
 - [ ] An API write executed as an `app_api` user succeeds and is audited.
 - [ ] A script update of `ContentJson` (with or without `usp_SetSupportContext @ActingUserId`, and even with `OperationContext` spoofed to `RebuildDerived`/`ApiContentSave`) is audited, sets `DerivedStale = 1` (unless derived columns were rewritten in the same statement) and sets `TamperedAt` on a Signed version.
-- [ ] An update that changes only derived columns produces no `ChangeLog` row and does not set `TamperedAt`.
+- [ ] An update by the API that changes only derived columns produces no `ChangeLog` row and does not set `TamperedAt`; the same update by a script is audited, sets `DerivedStale = 1` and marks a Signed version as tampered.
+- [ ] `support_writer` (and `app_api`) cannot insert, update or delete `app.VersionStamp`; `support_writer` cannot change `app.ContentStyleUsage`.
+- [ ] Moving a node/content row out of a Signed version marks that version as tampered and advances its stamp.
+- [ ] Unsigning or re-signing a version by script marks it as tampered; `audit.vSignedVersionTampering` lists the changes.
 - [ ] Signing (status change, new `VersionSignature`) advances `VersionStamp.LastChangeLogId`.
 - [ ] Any node/content change advances `VersionStamp.LastChangeLogId` of its version; a script change to a Signed version sets `TamperedAt` once.

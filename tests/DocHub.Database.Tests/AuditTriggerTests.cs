@@ -297,27 +297,122 @@ public sealed class AuditTriggerTests(DocHubDatabaseFixture database) : IClassFi
     }
 
     [Fact]
-    public async Task Update_of_derived_columns_only_is_not_audited_and_does_not_mark_tampering()
+    public async Task Api_rebuild_of_derived_columns_only_is_not_audited_and_does_not_mark_tampering()
     {
         await using var db = await database.OpenRolledBackTransactionAsync(Ct);
         var (versionId, nodeId) = await ContentNodeAsync(db, VersionState.Signed);
         var stampBefore = await StampAsync(db, versionId);
 
+        await AsApiAsync(db, userId: 0);
         await db.ExecuteAsync(
             "UPDATE app.NodeContent SET ContentHtml = N'<p>x</p>', PlainText = N'x', ContentHash = CAST(REPLICATE(0x01, 32) AS varbinary(32)), DerivedStale = 0 WHERE NodeId = @n;",
             ("@n", nodeId));
+        await db.ExecuteAsync("REVERT;");
 
         Assert.Empty(await ChangesAsync(db, "app.NodeContent", nodeId, "U"));
         Assert.Equal(stampBefore, await StampAsync(db, versionId));
-        Assert.Equal(0, await db.ScalarAsync<int>("SELECT COUNT(*) FROM app.VersionStamp WHERE DocumentVersionId = @v AND TamperedAt IS NOT NULL", ("@v", versionId)));
+        Assert.False(await IsTamperedAsync(db, versionId));
+        Assert.False(await db.ScalarAsync<bool>("SELECT DerivedStale FROM app.NodeContent WHERE NodeId = @n", ("@n", nodeId)));
     }
 
     [Fact]
-    public async Task Api_style_save_rewriting_derived_columns_is_audited_but_not_flagged_stale()
+    public async Task Script_forging_derived_content_of_a_signed_version_is_audited_marks_tampering_and_is_re_rendered()
+    {
+        await using var db = await database.OpenRolledBackTransactionAsync(Ct);
+        var (versionId, nodeId) = await ContentNodeAsync(db, VersionState.Signed);
+        var support = await db.Data.DatabaseUserInRoleAsync("support_writer");
+
+        await AsUserAsync(db, support);
+        await db.ExecuteAsync("UPDATE app.NodeContent SET ContentHtml = N'<p>FORGED</p>', PlainText = N'FORGED', DerivedStale = 0 WHERE NodeId = @n;", ("@n", nodeId));
+        await db.ExecuteAsync("REVERT;");
+
+        var row = Assert.Single(await ChangesAsync(db, "app.NodeContent", nodeId, "U"));
+        Assert.Equal("Script", row["Source"]);
+        Assert.Equal("ContentHtml,PlainText", row["ChangedColumns"]);
+        Assert.True(await db.ScalarAsync<bool>("SELECT DerivedStale FROM app.NodeContent WHERE NodeId = @n", ("@n", nodeId)));
+        Assert.True(await IsTamperedAsync(db, versionId));
+    }
+
+    [Theory]
+    [InlineData("support_writer", "UPDATE app.VersionStamp SET TamperedAt = NULL, LastChangeLogId = 1;")]
+    [InlineData("support_writer", "DELETE FROM app.VersionStamp;")]
+    [InlineData("support_writer", "INSERT INTO app.VersionStamp (DocumentVersionId, LastChangeLogId) SELECT TOP (1) Id, 1 FROM app.DocumentVersion;")]
+    [InlineData("app_api", "UPDATE app.VersionStamp SET TamperedAt = NULL;")]
+    [InlineData("support_writer", "DELETE FROM app.ContentStyleUsage;")]
+    [InlineData("support_writer", "INSERT INTO app.ContentStyleUsage (StyleId, NodeId) SELECT TOP (1) 'Quote', NodeId FROM app.NodeContent;")]
+    public async Task Version_stamp_and_style_usage_cannot_be_changed_directly(string role, string sql)
+    {
+        await using var db = await database.OpenRolledBackTransactionAsync(Ct);
+        var (versionId, _) = await ContentNodeAsync(db, VersionState.Signed);
+        await db.ExecuteAsync("UPDATE app.DocumentNode SET Title = N'Tampered' WHERE DocumentVersionId = @v;", ("@v", versionId));
+        var user = await db.Data.DatabaseUserInRoleAsync(role);
+        await AsUserAsync(db, user);
+
+        var exception = await Assert.ThrowsAsync<SqlException>(() => db.ExecuteAsync(sql));
+
+        Assert.Equal(PermissionDenied, exception.Number);
+    }
+
+    [Fact]
+    public async Task Moving_a_node_out_of_a_signed_version_marks_the_signed_version_as_tampered()
+    {
+        await using var db = await database.OpenRolledBackTransactionAsync(Ct);
+        var documentId = await db.Data.DocumentAsync();
+        var signedId = await db.Data.VersionAsync(documentId);
+        var nodeId = await db.Data.NodeAsync(signedId);
+        await db.ExecuteAsync(
+            "WAITFOR DELAY '00:00:00.010'; UPDATE app.DocumentVersion SET Status = 2, VersionNumber = 1, SignedAt = SYSUTCDATETIME() WHERE Id = @v; WAITFOR DELAY '00:00:00.010';",
+            ("@v", signedId));
+        var draftId = await db.Data.VersionAsync(documentId);
+        var signedStampBefore = await StampAsync(db, signedId);
+
+        await db.ExecuteAsync("UPDATE app.DocumentNode SET DocumentVersionId = @d WHERE Id = @n;", ("@d", draftId), ("@n", nodeId));
+
+        Assert.True(await StampAsync(db, signedId) > signedStampBefore);
+        Assert.True(await IsTamperedAsync(db, signedId));
+        Assert.False(await IsTamperedAsync(db, draftId));
+        Assert.Equal(1, await db.ScalarAsync<int>(
+            "SELECT COUNT(*) FROM audit.vSignedVersionTampering WHERE DocumentVersionId = @v AND TableName = N'app.DocumentNode' AND Operation = 'U'", ("@v", signedId)));
+    }
+
+    [Fact]
+    public async Task Unsigning_and_re_signing_by_script_marks_the_version_as_tampered()
+    {
+        await using var db = await database.OpenRolledBackTransactionAsync(Ct);
+        var (versionId, nodeId) = await ContentNodeAsync(db, VersionState.Signed);
+        var support = await db.Data.DatabaseUserInRoleAsync("support_writer");
+
+        await AsUserAsync(db, support);
+        await db.ExecuteAsync("UPDATE app.DocumentVersion SET Status = 1, VersionNumber = NULL, SignedAt = NULL WHERE Id = @v;", ("@v", versionId));
+        await db.ExecuteAsync("UPDATE app.NodeContent SET ContentJson = @j WHERE NodeId = @n;", ("@j", NewJson), ("@n", nodeId));
+        await db.ExecuteAsync(
+            "UPDATE app.DocumentVersion SET Status = 2, VersionNumber = 1, SignedAt = SYSUTCDATETIME(), SignedContentHash = CAST(REPLICATE(0x05, 32) AS varbinary(32)) WHERE Id = @v;",
+            ("@v", versionId));
+        await db.ExecuteAsync("REVERT;");
+
+        Assert.True(await IsTamperedAsync(db, versionId));
+        Assert.Equal(3, await db.ScalarAsync<int>("SELECT COUNT(*) FROM audit.vSignedVersionTampering WHERE DocumentVersionId = @v", ("@v", versionId)));
+    }
+
+    [Fact]
+    public async Task Making_a_new_draft_current_does_not_mark_the_signed_version_as_tampered()
+    {
+        await using var db = await database.OpenRolledBackTransactionAsync(Ct);
+        var (versionId, _) = await ContentNodeAsync(db, VersionState.Signed);
+        await db.ExecuteAsync("UPDATE app.DocumentVersion SET IsCurrent = 1 WHERE Id = @v;", ("@v", versionId));
+
+        await db.ExecuteAsync("UPDATE app.DocumentVersion SET IsCurrent = 0 WHERE Id = @v;", ("@v", versionId));
+
+        Assert.False(await IsTamperedAsync(db, versionId));
+    }
+
+    [Fact]
+    public async Task Api_save_rewriting_derived_columns_is_audited_but_not_flagged_stale()
     {
         await using var db = await database.OpenRolledBackTransactionAsync(Ct);
         var (_, nodeId) = await ContentNodeAsync(db);
 
+        await AsApiAsync(db, userId: AliceUserId);
         await db.ExecuteAsync(
             """
             UPDATE app.NodeContent
@@ -325,8 +420,11 @@ public sealed class AuditTriggerTests(DocHubDatabaseFixture database) : IClassFi
             WHERE NodeId = @n;
             """, ("@j", NewJson), ("@n", nodeId));
 
+        await db.ExecuteAsync("REVERT;");
+
         var row = Assert.Single(await ChangesAsync(db, "app.NodeContent", nodeId, "U"));
-        Assert.Equal("ContentJson,ContentHash", row["ChangedColumns"]);
+        Assert.Equal("App", row["Source"]);
+        Assert.Equal("ContentJson,ContentHtml,PlainText,ContentHash", row["ChangedColumns"]);
         Assert.False(await db.ScalarAsync<bool>("SELECT DerivedStale FROM app.NodeContent WHERE NodeId = @n", ("@n", nodeId)));
     }
 
@@ -403,6 +501,15 @@ public sealed class AuditTriggerTests(DocHubDatabaseFixture database) : IClassFi
 
         return (versionId, nodeId);
     }
+
+    private static async Task AsApiAsync(RolledBackScope db, int userId)
+    {
+        var api = await db.Data.DatabaseUserInRoleAsync("app_api");
+        await AsUserAsync(db, api, $"EXEC sp_set_session_context N'UserId', {userId.ToString(System.Globalization.CultureInfo.InvariantCulture)};");
+    }
+
+    private static async Task<bool> IsTamperedAsync(RolledBackScope db, int versionId) =>
+        await db.ScalarAsync<int>("SELECT COUNT(*) FROM app.VersionStamp WHERE DocumentVersionId = @v AND TamperedAt IS NOT NULL", ("@v", versionId)) == 1;
 
     private static async Task AsUserAsync(RolledBackScope db, string user, string? thenSql = null) =>
         await db.ExecuteAsync($"EXECUTE AS USER = N'{user}'; {thenSql}");

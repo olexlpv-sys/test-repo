@@ -38,5 +38,6 @@ BEGIN
            OR CAST([i].[Name] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[Name] AS VARBINARY (MAX))
            OR CAST([i].[Description] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[Description] AS VARBINARY (MAX))
            OR [i].[SortOrder] IS DISTINCT FROM [d].[SortOrder]
-           OR [i].[IsActive] IS DISTINCT FROM [d].[IsActive];
+           OR [i].[IsActive] IS DISTINCT FROM [d].[IsActive]
+    ;
 END;
