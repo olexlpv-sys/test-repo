@@ -330,7 +330,8 @@ static string GenerateReconciliation(AuditedTable[] tables, List<(string Schema,
         EXECUTE AS OWNER: the procedure reads objects by object id through dynamic SQL (renamed/transferred/dropped baseline and
         finding tables), which ownership chaining doesn't cover. Ledger transactions still record the caller's login.
         Must not run inside a transaction (ledger verification refuses user transactions). @Digest: a digest from
-        sys.sp_generate_database_ledger_digest, used when no automatic digest storage is configured (local, tests).
+        sys.sp_generate_database_ledger_digest, used when no automatic digest storage is configured (local, tests). @To NULL =
+        every transaction committed from @From on.
         */
         CREATE PROCEDURE [audit].[usp_ReconcileLedger]
             @From        DATETIME2 (7),
@@ -348,8 +349,6 @@ static string GenerateReconciliation(AuditedTable[] tables, List<(string Schema,
 
             IF @From IS NULL
                 THROW 50102, N'@From is required.', 1;
-
-            SET @To = COALESCE(@To, SYSUTCDATETIME());
 
             CREATE TABLE [#Finding]
             (
@@ -458,7 +457,9 @@ static string GenerateReconciliation(AuditedTable[] tables, List<(string Schema,
                                             OR (SUSER_SID([t].[principal_name]) IS NULL AND [p].[name] = [t].[principal_name])))
                         THEN 1 ELSE 0 END
             FROM sys.database_ledger_transactions AS [t]
-            WHERE [t].[commit_time] >= @From AND [t].[commit_time] <= @To
+            -- No upper bound unless @To is given: commit_time can run ahead of SYSUTCDATETIME() by milliseconds, so "until now"
+            -- must not exclude just-committed transactions.
+            WHERE [t].[commit_time] >= @From AND (@To IS NULL OR [t].[commit_time] <= @To)
               AND [t].[transaction_id] >= COALESCE(@Baseline, 0);
 
             -- Every ledger change of an audited table in the window: the INSERT (after) and DELETE (before) images of one key in

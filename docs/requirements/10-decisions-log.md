@@ -41,3 +41,4 @@ Every answer from the product owner is recorded here; the affected requirement f
 | Q18 | Tamper evidence against privileged users (DBA, deployment pipeline) | Triggers + **ledger tables** (append-only change log, updatable ledger for document data) + digests and Azure SQL Auditing outside the pipeline's reach + nightly reconciliation — T21 |
 | Q16 | Export | **PDF export** (async, cached for signed versions) — [13-export](13-export.md) |
 | Q14 | Load profile | 50 k readers, 500 editors/owners, 10 k documents, 100 folders, **≤ 3 s at 20 req/s** ([12-load-and-performance](12-load-and-performance.md)) |
+| Q19 | Load on the current (weak) environment | **2 concurrent actors, ≤ 10 s response**; tests run with at most 2 parallel workers. Production targets (Q14) unchanged — [12-load-and-performance](12-load-and-performance.md) NFR-L4a |

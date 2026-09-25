@@ -39,13 +39,12 @@ internal sealed class LedgerReconciliation(DocHubDbContext db, IAuditModuleHashe
                     new SqlParameter("@Detail", SqlDbType.NVarChar, 1000) { Value = detail }).ConfigureAwait(false);
             }
 
-            var to = time.GetUtcNow().UtcDateTime;
+            // The procedure reads every transaction committed from @From on (no upper bound: commit times can run ahead of clocks).
             var newFindings = new SqlParameter("@NewFindings", SqlDbType.Int) { Direction = ParameterDirection.Output };
             await ExecuteAsync("audit.usp_ReconcileLedger", cancellationToken,
                 new SqlParameter("@From", SqlDbType.DateTime2) { Value = fromUtc },
-                new SqlParameter("@To", SqlDbType.DateTime2) { Value = to },
                 newFindings).ConfigureAwait(false);
-            return new ReconciliationRun(fromUtc, to, (int)newFindings.Value, problems.Count);
+            return new ReconciliationRun(fromUtc, time.GetUtcNow().UtcDateTime, (int)newFindings.Value, problems.Count);
         }
         finally
         {
