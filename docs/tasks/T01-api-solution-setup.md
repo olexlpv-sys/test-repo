@@ -32,15 +32,15 @@ Create an empty but runnable .NET 10 API solution with project structure, shared
    - `appsettings.json` with `ConnectionStrings:DocHub` placeholder; local overrides via user-secrets.
    - Structured logging (built-in console JSON formatter is enough).
 6. `docker-compose.yml` at repo root: SQL Server 2022 (`mcr.microsoft.com/mssql/server:2022-latest`) on port 1433 with a dev SA password from `.env` (commit `.env.example` only).
-7. CI: `.github/workflows/ci.yml` — on PR and push to `main`: `dotnet restore`, `build`, `test` for `DocHub.slnx` (DB and web jobs are added by T02/T14).
+7. CI: `.github/workflows/ci.yml` — on every PR and every push: `dotnet restore`, `build`, `test` for `DocHub.slnx` (DB and web jobs are added by T02/T14).
 8. Update `README.md` → "Getting started" (prerequisites, `docker compose up -d`, `dotnet run`).
 
 ## Out of scope
 Database schema (T02), EF Core wiring (T04), any business endpoints.
 
 ## Acceptance criteria
-- [ ] `dotnet build DocHub.slnx` and `dotnet test DocHub.slnx` succeed with zero warnings.
+- [ ] `dotnet build DocHub.slnx` and `dotnet test --solution DocHub.slnx` succeed with zero warnings (.NET 10 + Microsoft.Testing.Platform requires `--solution`).
 - [ ] `dotnet run --project src/DocHub.Api` starts; `GET /health` → `200 Healthy`; `/openapi/v1.json` and `/scalar` are reachable in Development.
 - [ ] One placeholder test in each test project passes (API test uses `WebApplicationFactory` to call `/health`).
-- [ ] CI workflow runs green on the PR.
+- [ ] CI workflow runs green on every push and PR.
 - [ ] No package versions in individual `.csproj` files.
