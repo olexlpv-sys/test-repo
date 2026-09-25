@@ -1899,6 +1899,159 @@
           }
         }
       }
+    },
+    "/api/documents/{id}/permissions": {
+      "get": {
+        "tags": [
+          "Permissions"
+        ],
+        "summary": "The owner and all grants; node grants carry the node title from the draft (else the current version).",
+        "operationId": "GetDocumentPermissions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentPermissions"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Permissions"
+        ],
+        "summary": "Owner: grants Editor (optionally of one node and its descendants) or Approver to a user.",
+        "operationId": "GrantDocumentRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGrant"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Grant"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{id}/my-permissions": {
+      "get": {
+        "tags": [
+          "Permissions"
+        ],
+        "summary": "My effective rights (for the UI): editableLogicalNodeIds are node grants expanded to descendants in the draft or current version.",
+        "operationId": "GetMyPermissions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyRoles"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{id}/permissions/{grantId}": {
+      "delete": {
+        "tags": [
+          "Permissions"
+        ],
+        "summary": "Owner: revokes a grant; revoking an approver re-checks whether the draft is now fully signed.",
+        "operationId": "RevokeDocumentRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "grantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2087,6 +2240,41 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "CreateGrant": {
+        "required": [
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "role": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DocumentRole"
+              }
+            ]
+          },
+          "logicalNodeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -2341,6 +2529,30 @@
           }
         }
       },
+      "DocumentPermissions": {
+        "required": [
+          "owner",
+          "grants"
+        ],
+        "type": "object",
+        "properties": {
+          "owner": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Grant"
+            }
+          }
+        }
+      },
+      "DocumentRole": {
+        "enum": [
+          "Editor",
+          "Approver"
+        ]
+      },
       "FindingResponse": {
         "required": [
           "id",
@@ -2555,6 +2767,61 @@
           }
         }
       },
+      "Grant": {
+        "required": [
+          "id",
+          "user",
+          "role",
+          "logicalNodeId",
+          "nodeTitle",
+          "nodeInCurrentVersion",
+          "grantedAt",
+          "grantedBy"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "role": {
+            "$ref": "#/components/schemas/DocumentRole"
+          },
+          "logicalNodeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "nodeTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nodeInCurrentVersion": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "grantedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "grantedBy": {
+            "$ref": "#/components/schemas/UserRef"
+          }
+        }
+      },
       "HttpValidationProblemDetails": {
         "type": "object",
         "properties": {
@@ -2739,7 +3006,16 @@
           "isAdmin",
           "isEditor",
           "isApprover",
-          "editorNodeScopes"
+          "editorNodeScopes",
+          "canEditStructure",
+          "canEditAllContent",
+          "editableLogicalNodeIds",
+          "canComment",
+          "canResolve",
+          "canSign",
+          "canManage",
+          "canMove",
+          "canRestore"
         ],
         "type": "object",
         "properties": {
@@ -2761,6 +3037,37 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "canEditStructure": {
+            "type": "boolean"
+          },
+          "canEditAllContent": {
+            "type": "boolean"
+          },
+          "editableLogicalNodeIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "canComment": {
+            "type": "boolean"
+          },
+          "canResolve": {
+            "type": "boolean"
+          },
+          "canSign": {
+            "type": "boolean"
+          },
+          "canManage": {
+            "type": "boolean"
+          },
+          "canMove": {
+            "type": "boolean"
+          },
+          "canRestore": {
+            "type": "boolean"
           }
         }
       },
@@ -3787,6 +4094,9 @@
     },
     {
       "name": "Versions"
+    },
+    {
+      "name": "Permissions"
     }
   ]
 }

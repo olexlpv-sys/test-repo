@@ -1,5 +1,6 @@
 using DocHub.Domain.Entities;
 using DocHub.Infrastructure.Persistence;
+using DocHub.Infrastructure.Procedures;
 using Microsoft.EntityFrameworkCore;
 
 namespace DocHub.Api.Documents;
@@ -19,7 +20,13 @@ public sealed record VersionHeader(
     bool IsCurrent,
     bool ModifiedAfterSigning);
 
-public sealed record MyRoles(bool IsOwner, bool IsAdmin, bool IsEditor, bool IsApprover, IReadOnlyList<Guid> EditorNodeScopes);
+/// <summary>
+/// The caller's roles and effective rights on a document (T10, <c>usp_GetEffectivePermissions</c>): <c>EditorNodeScopes</c> are
+/// the node grants as given, <c>EditableLogicalNodeIds</c> the nodes they cover (with descendants) in the draft or current version.
+/// </summary>
+public sealed record MyRoles(
+    bool IsOwner, bool IsAdmin, bool IsEditor, bool IsApprover, IReadOnlyList<Guid> EditorNodeScopes, bool CanEditStructure, bool CanEditAllContent,
+    IReadOnlyList<Guid> EditableLogicalNodeIds, bool CanComment, bool CanResolve, bool CanSign, bool CanManage, bool CanMove, bool CanRestore);
 
 public sealed record DocumentDetails(
     int Id,
@@ -34,7 +41,7 @@ public sealed record DocumentDetails(
     MyRoles MyRoles);
 
 /// <summary>Read models of documents and versions (labels, signers, the FR-H5 flag).</summary>
-public sealed class DocumentViews(DocHubDbContext db)
+public sealed class DocumentViews(DocHubDbContext db, IDocumentAuthorization authorization)
 {
     public async Task<IReadOnlyList<VersionHeader>> VersionsAsync(int documentId, int? versionId, CancellationToken cancellationToken)
     {
@@ -69,20 +76,24 @@ public sealed class DocumentViews(DocHubDbContext db)
             .ToList();
     }
 
-    public async Task<DocumentDetails> DetailsAsync(int documentId, int userId, bool isAdmin, CancellationToken cancellationToken)
+    public async Task<DocumentDetails> DetailsAsync(int documentId, int userId, CancellationToken cancellationToken)
     {
         var document = await db.Documents.AsNoTracking().SingleAsync(d => d.Id == documentId, cancellationToken);
         var owner = await db.Users.AsNoTracking().Where(u => u.Id == document.OwnerUserId).Select(u => new UserRef(u.Id, u.DisplayName)).SingleAsync(cancellationToken);
         var versions = await VersionsAsync(documentId, null, cancellationToken);
-        var grants = await db.DocumentPermissions.AsNoTracking().Where(p => p.DocumentId == documentId && p.UserId == userId).ToListAsync(cancellationToken);
-        var roles = new MyRoles(
-            document.OwnerUserId == userId,
-            isAdmin,
-            grants.Any(g => g.Role == DocumentRole.Editor),
-            grants.Any(g => g.Role == DocumentRole.Approver),
-            grants.Where(g => g.Role == DocumentRole.Editor && g.LogicalNodeId != null).Select(g => g.LogicalNodeId!.Value).ToList());
+        var scopes = await db.DocumentPermissions.AsNoTracking()
+            .Where(p => p.DocumentId == documentId && p.UserId == userId && p.Role == DocumentRole.Editor && p.LogicalNodeId != null)
+            .Select(p => p.LogicalNodeId!.Value).ToListAsync(cancellationToken);
         return new DocumentDetails(document.Id, document.RowVersion, document.FolderId, document.Title, Status(document, versions), owner,
-            document.CreatedAt, document.DeletedAt, versions, roles);
+            document.CreatedAt, document.DeletedAt, versions, Roles(await authorization.EffectiveAsync(documentId, null, cancellationToken), scopes));
+    }
+
+    public static MyRoles Roles(EffectivePermissions effective, IReadOnlyList<Guid> editorNodeScopes)
+    {
+        ArgumentNullException.ThrowIfNull(effective);
+        return new MyRoles(effective.IsOwner, effective.IsAdmin, effective.IsEditor, effective.IsApprover, editorNodeScopes, effective.CanEditStructure,
+            effective.CanEditAllContent, effective.EditableLogicalNodeIds, effective.CanComment, effective.CanResolve, effective.CanSign, effective.CanManage,
+            effective.CanMove, effective.CanRestore);
     }
 
     /// <summary>Derived document status: Deleted if deleted, else Draft if a draft exists, else Signed.</summary>

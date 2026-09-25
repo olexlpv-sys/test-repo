@@ -10,6 +10,7 @@ public static class ErrorCodes
     public const string ConcurrencyConflict = "concurrency-conflict";
     public const string DuplicateName = "duplicate-name";
     public const string DuplicateGrant = "duplicate-grant";
+    public const string OwnerCannotHaveRole = "owner-cannot-have-role";
     public const string Conflict = "conflict";
     public const string InternalError = "internal-error";
     public const string MethodNotAllowed = "method-not-allowed";

@@ -34,6 +34,28 @@ internal sealed class DbProcedures(DocHubDbContext db) : IDbProcedures
         return reader.GetBoolean(0);
     }
 
+    public async Task<EffectivePermissions> GetEffectivePermissionsAsync(int documentId, int userId, int? documentVersionId, CancellationToken cancellationToken)
+    {
+        await using var command = await CreateCommandAsync("app.usp_GetEffectivePermissions", cancellationToken,
+            ("@DocumentId", documentId), ("@UserId", userId), ("@DocumentVersionId", documentVersionId)).ConfigureAwait(false);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        await ReadSingleRowAsync(reader, "app.usp_GetEffectivePermissions", cancellationToken).ConfigureAwait(false);
+        bool Flag(string name) => reader.GetBoolean(reader.GetOrdinal(name));
+        var (isOwner, isAdmin, isEditor, isApprover) = (Flag("IsOwner"), Flag("IsAdmin"), Flag("IsEditor"), Flag("IsApprover"));
+        var (canView, canEditStructure, canEditAllContent, canComment, canResolve) = (Flag("CanView"), Flag("CanEditStructure"), Flag("CanEditAllContent"), Flag("CanComment"), Flag("CanResolve"));
+        var (canSign, canManage, canMove, canRestore) = (Flag("CanSign"), Flag("CanManage"), Flag("CanMove"), Flag("CanRestore"));
+        var versionId = NullableInt(reader, reader.GetOrdinal("DocumentVersionId"));
+        await NextResultAsync(reader, "app.usp_GetEffectivePermissions", cancellationToken).ConfigureAwait(false);
+        var nodes = new List<Guid>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            nodes.Add(reader.GetGuid(0));
+        }
+
+        return new EffectivePermissions(isOwner, isAdmin, isEditor, isApprover, canView, canEditStructure, canEditAllContent, canComment, canResolve,
+            canSign, canManage, canMove, canRestore, versionId, nodes);
+    }
+
     public async Task<DocumentListPage> ListDocumentsAsync(DocumentListQuery query, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);

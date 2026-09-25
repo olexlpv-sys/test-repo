@@ -113,6 +113,8 @@ internal sealed class ContentEndpoints : IEndpointModule
                 // Under the document's lifecycle lock, re-checking the draft: a save never lands in a version just signed.
                 await rules.MutateAsync(node.VersionId, async () =>
                 {
+                    // A grant revoked meanwhile (revokes take the same lock) counts.
+                    await authorization.RecheckAsync(node.DocumentId, PermissionAction.EditContent, ct, node.VersionId, node.LogicalNodeId);
                     var content = await db.NodeContents.SingleOrDefaultAsync(c => c.NodeId == nodeId, ct) ?? throw DomainException.NotFound("Content of node", nodeId);
                     if (!content.RowVersion.AsSpan().SequenceEqual(request.RowVersion))
                     {

@@ -104,9 +104,16 @@ public sealed class SigningService(DocHubDbContext db, ICurrentUser user, TimePr
                 throw DomainException.Validation("An empty document can't be signed; add content first.");
             }
 
-            if ((await ApproversAsync(version.DocumentId, cancellationToken)).Count == 0)
+            var approvers = await ApproversAsync(version.DocumentId, cancellationToken);
+            if (approvers.Count == 0)
             {
                 throw DomainException.Conflict(ErrorCodes.NoApprovers, "The document has no approvers, so it can't be signed.");
+            }
+
+            // Re-checked under the lock: the approver grant may have been revoked since the endpoint's check.
+            if (!approvers.Any(a => a.Id == user.UserId))
+            {
+                throw DomainException.Forbidden("You are not allowed to sign this document.");
             }
 
             var hash = await ComputeHashAsync(versionId, cancellationToken);

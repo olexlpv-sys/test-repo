@@ -103,7 +103,7 @@ internal sealed class DocumentEndpoints : IEndpointModule
         group.MapGet("/{id:int}", async Task<Ok<DocumentDetails>> (int id, IDocumentAuthorization authorization, DocumentViews views, ICurrentUser user, CancellationToken ct) =>
             {
                 await authorization.EnsureCanViewAsync(id, ct);
-                return TypedResults.Ok(await views.DetailsAsync(id, user.UserId, user.IsAdmin, ct));
+                return TypedResults.Ok(await views.DetailsAsync(id, user.UserId, ct));
             })
             .WithName("GetDocument")
             .WithSummary("Document details with its versions and my roles (deleted: owner/admin only, else 404).");
@@ -123,7 +123,7 @@ internal sealed class DocumentEndpoints : IEndpointModule
                 db.Entry(document).Property(d => d.RowVersion).OriginalValue = request.RowVersion!;
                 document.Title = request.Title!.Trim();
                 await db.SaveChangesAsync(ct);
-                return TypedResults.Ok(await views.DetailsAsync(id, user.UserId, user.IsAdmin, ct));
+                return TypedResults.Ok(await views.DetailsAsync(id, user.UserId, ct));
             })
             .WithValidation<RenameDocument>()
             .WithName("RenameDocument")
@@ -147,7 +147,7 @@ internal sealed class DocumentEndpoints : IEndpointModule
                 db.Entry(document).Property(d => d.RowVersion).OriginalValue = request.RowVersion!;
                 document.FolderId = request.FolderId;
                 await db.SaveChangesAsync(ct);
-                return TypedResults.Ok(await views.DetailsAsync(id, user.UserId, user.IsAdmin, ct));
+                return TypedResults.Ok(await views.DetailsAsync(id, user.UserId, ct));
             })
             .WithValidation<MoveDocument>()
             .WithName("MoveDocument")
@@ -200,7 +200,7 @@ internal sealed class DocumentEndpoints : IEndpointModule
                 document.DeletedAt = null;
                 document.DeletedByUserId = null;
                 await db.SaveChangesAsync(ct);
-                return TypedResults.Ok(await views.DetailsAsync(id, user.UserId, user.IsAdmin, ct));
+                return TypedResults.Ok(await views.DetailsAsync(id, user.UserId, ct));
             })
             .WithName("RestoreDocument")
             .WithSummary("Owner or admin: restores a deleted document, optionally into another folder.");

@@ -28,7 +28,7 @@ Q22 is placed right after Q04 (it hardens the Q03 schema before feature work bui
 | Q06 | [T06](tasks/T06-virtual-folders-api.md) Folders | CODE + TEST | Q04 | B | done | **GREEN** (2 rounds) |
 | Q07 | [T07](tasks/T07-documents-and-versions-api.md) Documents, signing, restore | CODE + TEST | Q04, Q06 | A | done | **GREEN** (3 rounds) |
 | Q08 | [T14](tasks/T14-web-shell-folders-documents.md) Web shell & lists | CODE + TEST | Q05, Q06, Q07 | C | todo | – |
-| Q09 | [T10](tasks/T10-permissions.md) Permissions | CODE + TEST | Q07 | B | todo | – |
+| Q09 | [T10](tasks/T10-permissions.md) Permissions | CODE + TEST | Q07 | B | in-review | – |
 | Q10 | [T08](tasks/T08-document-tree-api.md) Tree | CODE + TEST | Q05, Q07 | A | done | **GREEN** (3 rounds) |
 | Q11 | [T09](tasks/T09-node-content-api.md) Styled content | CODE + TEST | Q05, Q10 | A | in-review | – |
 | Q12 | [T17](tasks/T17-web-admin-tab.md) Web admin | CODE + TEST | Q05, Q08, Q14, Q22 | C | todo | – |

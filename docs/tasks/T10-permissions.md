@@ -53,6 +53,12 @@ Principle: **the Owner defines the structure, Editors edit text, Approvers revie
 - `GET /api/documents/{id}` (T07) returns `myRoles` using the same service.
 - Replace the owner-only implementation from T07; keep a unit-test suite for the matrix (table-driven tests).
 
+## Implementation notes (Q09)
+- `usp_GetEffectivePermissions` returns the flags of `usp_CheckPermission` plus `CanMove`/`CanRestore` and the version its node set is for (default: the draft, else the current version). A DB test checks, for every user, that it agrees with every single check.
+- `GET /my-permissions` and `myRoles` of `GET /api/documents/{id}` return the same record.
+- Grant and revoke take the document lock. Revoking an approver re-runs finalization. Sign and content saves re-check the grant under the lock (`RecheckAsync`, bypassing the per-request cache), so a revoked right never lands.
+- Transfer of ownership (optional) is not implemented.
+
 ## Acceptance criteria
 - [ ] Table-driven tests cover every row of the matrix for every role.
 - [ ] Node-scoped editor on "Chapter 2" can edit the text of "Chapter 2 / Section 1 / Subsection 2", cannot edit the text of "Chapter 1", and gets `403` on any structural operation (including inside "Chapter 2").

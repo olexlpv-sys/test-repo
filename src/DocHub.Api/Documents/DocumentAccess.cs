@@ -8,8 +8,8 @@ using Microsoft.EntityFrameworkCore;
 namespace DocHub.Api.Documents;
 
 /// <summary>
-/// The authorization seam of document features (T07 rule 5): every check goes through <c>app.usp_CheckPermission</c>, so
-/// T10 changes the role logic in one place.
+/// The authorization seam of document features (T07 rule 5, T10): single checks through <c>app.usp_CheckPermission</c>,
+/// all rights at once through <c>app.usp_GetEffectivePermissions</c>; results are cached for the request.
 /// </summary>
 public interface IDocumentAuthorization
 {
@@ -20,10 +20,22 @@ public interface IDocumentAuthorization
 
     /// <summary><c>403 forbidden</c> unless the current user may perform <paramref name="action"/>.</summary>
     Task DemandAsync(int documentId, PermissionAction action, CancellationToken cancellationToken, int? versionId = null, Guid? logicalNodeId = null);
+
+    /// <summary>
+    /// <see cref="DemandAsync"/> without the request cache — for the re-check inside the document lock, where a grant may
+    /// have been revoked since the first check.
+    /// </summary>
+    Task RecheckAsync(int documentId, PermissionAction action, CancellationToken cancellationToken, int? versionId = null, Guid? logicalNodeId = null);
+
+    /// <summary>The current user's effective rights (node grants resolved in <paramref name="versionId"/>, default the draft or current version).</summary>
+    Task<EffectivePermissions> EffectiveAsync(int documentId, int? versionId, CancellationToken cancellationToken);
 }
 
 internal sealed class DocumentAuthorization(IDbProcedures procedures, ICurrentUser user, DocHubDbContext db) : IDocumentAuthorization
 {
+    private readonly Dictionary<(int, PermissionAction, int?, Guid?), bool> _checks = [];
+    private readonly Dictionary<(int, int?), EffectivePermissions> _effective = [];
+
     public async Task EnsureCanViewAsync(int documentId, CancellationToken cancellationToken)
     {
         if (!await CanAsync(documentId, PermissionAction.View, cancellationToken))
@@ -32,8 +44,16 @@ internal sealed class DocumentAuthorization(IDbProcedures procedures, ICurrentUs
         }
     }
 
-    public Task<bool> CanAsync(int documentId, PermissionAction action, CancellationToken cancellationToken, int? versionId = null, Guid? logicalNodeId = null) =>
-        procedures.CheckPermissionAsync(documentId, user.UserId, action, versionId, logicalNodeId, cancellationToken);
+    public async Task<bool> CanAsync(int documentId, PermissionAction action, CancellationToken cancellationToken, int? versionId = null, Guid? logicalNodeId = null)
+    {
+        var key = (documentId, action, versionId, logicalNodeId);
+        if (!_checks.TryGetValue(key, out var allowed))
+        {
+            _checks[key] = allowed = await procedures.CheckPermissionAsync(documentId, user.UserId, action, versionId, logicalNodeId, cancellationToken);
+        }
+
+        return allowed;
+    }
 
     public async Task DemandAsync(int documentId, PermissionAction action, CancellationToken cancellationToken, int? versionId = null, Guid? logicalNodeId = null)
     {
@@ -41,7 +61,11 @@ internal sealed class DocumentAuthorization(IDbProcedures procedures, ICurrentUs
         {
             // The document may have been deleted since the caller's earlier checks (a concurrent delete): answer as the
             // earlier checks would now — not visible → 404, deleted → 409 — rather than a misleading 403.
-            await EnsureCanViewAsync(documentId, cancellationToken);
+            if (!await procedures.CheckPermissionAsync(documentId, user.UserId, PermissionAction.View, null, null, cancellationToken))
+            {
+                throw DomainException.NotFound("Document", documentId);
+            }
+
             if (action is not (PermissionAction.Move or PermissionAction.Restore)
                 && await db.Documents.AsNoTracking().AnyAsync(d => d.Id == documentId && d.DeletedAt != null, cancellationToken))
             {
@@ -50,6 +74,23 @@ internal sealed class DocumentAuthorization(IDbProcedures procedures, ICurrentUs
 
             throw DomainException.Forbidden($"You are not allowed to {Describe(action)} this document.");
         }
+    }
+
+    public Task RecheckAsync(int documentId, PermissionAction action, CancellationToken cancellationToken, int? versionId = null, Guid? logicalNodeId = null)
+    {
+        _checks.Clear();
+        _effective.Clear();
+        return DemandAsync(documentId, action, cancellationToken, versionId, logicalNodeId);
+    }
+
+    public async Task<EffectivePermissions> EffectiveAsync(int documentId, int? versionId, CancellationToken cancellationToken)
+    {
+        if (!_effective.TryGetValue((documentId, versionId), out var effective))
+        {
+            _effective[(documentId, versionId)] = effective = await procedures.GetEffectivePermissionsAsync(documentId, user.UserId, versionId, cancellationToken);
+        }
+
+        return effective;
     }
 
     private static string Describe(PermissionAction action) => action switch

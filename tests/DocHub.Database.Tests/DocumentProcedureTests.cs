@@ -5,7 +5,7 @@ using Microsoft.Data.SqlClient;
 
 namespace DocHub.Database.Tests;
 
-/// <summary>T07 procedures: usp_CheckPermission, usp_CopyVersionToDraft, usp_ListDocuments (FR-D2, FR-D3, FR-D5).</summary>
+/// <summary>T07/T10 procedures: usp_CheckPermission, usp_GetEffectivePermissions, usp_CopyVersionToDraft, usp_ListDocuments (FR-D2, FR-D3, FR-D5).</summary>
 public sealed class DocumentProcedureTests(DocHubDatabaseFixture database) : IClassFixture<DocHubDatabaseFixture>
 {
     private const int Admin = TestData.AdminUserId;
@@ -60,6 +60,77 @@ public sealed class DocumentProcedureTests(DocHubDatabaseFixture database) : ICl
         Assert.True(await CheckAsync(db, documentId, NodeEditor, "EditContent", versionId, child));
         Assert.False(await CheckAsync(db, documentId, NodeEditor, "EditContent", versionId, sibling));
         Assert.False(await CheckAsync(db, documentId, NodeEditor, "EditContent"));
+    }
+
+    public static TheoryData<int> MatrixUsers() => new(Owner, Other, Approver, NodeEditor, DocEditor, Admin, 0, 999999);
+
+    [Theory]
+    [MemberData(nameof(MatrixUsers))]
+    public async Task Effective_permissions_agree_with_every_single_check(int user)
+    {
+        await using var db = await database.OpenRolledBackTransactionAsync(Ct);
+        var (documentId, versionId) = await DocumentWithGrantsAsync(db);
+        foreach (var deleted in new[] { false, true })
+        {
+            if (deleted)
+            {
+                await db.ExecuteAsync("UPDATE app.Document SET DeletedAt = SYSUTCDATETIME(), DeletedByUserId = @u WHERE Id = @d;", ("@u", Owner), ("@d", documentId));
+            }
+
+            var (flags, nodes) = await EffectiveAsync(db, documentId, user, versionId);
+            foreach (var (flag, action) in new[]
+            {
+                ("CanView", "View"), ("CanEditStructure", "EditStructure"), ("CanEditAllContent", "EditContent"), ("CanComment", "Comment"),
+                ("CanResolve", "Resolve"), ("CanSign", "Sign"), ("CanManage", "Manage"), ("CanMove", "Move"), ("CanRestore", "Restore"),
+            })
+            {
+                Assert.True(await CheckAsync(db, documentId, user, action) == (bool)flags[flag]!, $"{flag} of user {user}, deleted = {deleted}");
+            }
+
+            // Every node the set lists is editable by the single check, and no other node of the version is (unless all are).
+            var all = await db.QueryAsync("SELECT LogicalNodeId FROM app.DocumentNode WHERE DocumentVersionId = @v;", ("@v", versionId));
+            foreach (var node in all.Select(n => (Guid)n["LogicalNodeId"]!))
+            {
+                var single = await CheckAsync(db, documentId, user, "EditContent", versionId, node);
+                Assert.Equal(single, (bool)flags["CanEditAllContent"]! || nodes.Contains(node));
+            }
+
+            Assert.Equal(versionId, flags["DocumentVersionId"]);
+        }
+    }
+
+    [Fact]
+    public async Task Effective_permissions_expand_node_grants_in_the_given_version_and_default_to_the_draft()
+    {
+        await using var db = await database.OpenRolledBackTransactionAsync(Ct);
+        var (documentId, versionId) = await DocumentWithGrantsAsync(db);
+        var nodes = await db.QueryAsync("SELECT Id, LogicalNodeId, ParentNodeId FROM app.DocumentNode WHERE DocumentVersionId = @v;", ("@v", versionId));
+        var root = nodes.Single(n => n["ParentNodeId"] is null && nodes.Any(c => (int?)c["ParentNodeId"] == (int)n["Id"]!));
+        var child = nodes.Single(n => n["ParentNodeId"] is not null);
+        var other = nodes.Single(n => n["ParentNodeId"] is null && n != root);
+
+        var (flags, editable) = await EffectiveAsync(db, documentId, NodeEditor, null);
+        Assert.False((bool)flags["CanEditAllContent"]!);
+        Assert.True((bool)flags["CanComment"]!);
+        Assert.Equal(new[] { (Guid)root["LogicalNodeId"]!, (Guid)child["LogicalNodeId"]! }.Order(), editable.Order());
+
+        // A draft where the child moved under "Other": the grant no longer covers it there, the old version is unaffected.
+        await db.ExecuteAsync("UPDATE app.DocumentVersion SET Status = 2, VersionNumber = 1, SignedAt = SYSUTCDATETIME(), SignedContentHash = HASHBYTES('SHA2_256', N'x') WHERE Id = @v;", ("@v", versionId));
+        var draft = await db.Data.VersionAsync(documentId, isCurrent: false);
+        var draftRoot = await db.Data.NodeAsync(draft, title: "Root", sortOrder: 1024, logicalNodeId: (Guid)root["LogicalNodeId"]!);
+        var draftOther = await db.Data.NodeAsync(draft, title: "Other", sortOrder: 2048, logicalNodeId: (Guid)other["LogicalNodeId"]!);
+        await db.Data.NodeAsync(draft, draftOther, "Child", 1024, logicalNodeId: (Guid)child["LogicalNodeId"]!);
+        Assert.Equal([(Guid)root["LogicalNodeId"]!], (await EffectiveAsync(db, documentId, NodeEditor, null)).Nodes);
+        Assert.Equal(draft, (await EffectiveAsync(db, documentId, NodeEditor, null)).Flags["DocumentVersionId"]);
+        Assert.Equal(2, (await EffectiveAsync(db, documentId, NodeEditor, versionId)).Nodes.Count);
+        Assert.False(await CheckAsync(db, documentId, NodeEditor, "EditContent", draft, (Guid)child["LogicalNodeId"]!));
+        Assert.True(await CheckAsync(db, documentId, NodeEditor, "EditContent", versionId, (Guid)child["LogicalNodeId"]!));
+        _ = draftRoot;
+
+        // A version of another document is ignored (no nodes), and editors of all content get no node list.
+        var (_, otherVersion) = await DocumentWithGrantsAsync(db);
+        Assert.Empty((await EffectiveAsync(db, documentId, NodeEditor, otherVersion)).Nodes);
+        Assert.Empty((await EffectiveAsync(db, documentId, DocEditor, null)).Nodes);
     }
 
     [Fact]
@@ -147,6 +218,25 @@ public sealed class DocumentProcedureTests(DocHubDatabaseFixture database) : ICl
             "SELECT COUNT(*) FROM app.Document d WHERE EXISTS (SELECT 1 FROM app.DocumentVersion v WHERE v.DocumentId = d.Id AND v.Status <> 3) AND (SELECT COUNT(*) FROM app.DocumentVersion v WHERE v.DocumentId = d.Id AND v.IsCurrent = 1) <> 1;"));
     }
 
+    private static async Task<(IReadOnlyDictionary<string, object?> Flags, List<Guid> Nodes)> EffectiveAsync(RolledBackScope db, int documentId, int userId, int? versionId)
+    {
+        await using var command = new SqlCommand("app.usp_GetEffectivePermissions", db.Connection, db.Transaction) { CommandType = System.Data.CommandType.StoredProcedure };
+        command.Parameters.AddWithValue("@DocumentId", documentId);
+        command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.AddWithValue("@DocumentVersionId", (object?)versionId ?? DBNull.Value);
+        await using var reader = await command.ExecuteReaderAsync(Ct);
+        Assert.True(await reader.ReadAsync(Ct));
+        var flags = Enumerable.Range(0, reader.FieldCount).ToDictionary(reader.GetName, i => reader.IsDBNull(i) ? null : reader.GetValue(i));
+        Assert.True(await reader.NextResultAsync(Ct));
+        var nodes = new List<Guid>();
+        while (await reader.ReadAsync(Ct))
+        {
+            nodes.Add(reader.GetGuid(0));
+        }
+
+        return (flags, nodes);
+    }
+
     private static async Task<bool> CheckAsync(RolledBackScope db, int documentId, int userId, string action, int? versionId = null, Guid? logicalNodeId = null) =>
         await db.ScalarAsync<bool>("EXEC app.usp_CheckPermission @DocumentId = @d, @UserId = @u, @Action = @a, @DocumentVersionId = @v, @LogicalNodeId = @l;",
             ("@d", documentId), ("@u", userId), ("@a", action), ("@v", versionId), ("@l", logicalNodeId));
@@ -218,5 +308,86 @@ public sealed class DeepCopyPerformanceTests(DocHubDatabaseFixture database) : I
 
         Assert.Equal(2000, await db.ScalarAsync<int>("SELECT COUNT(*) FROM app.NodeContent WHERE DocumentVersionId = @v;", ("@v", copy)));
         Assert.True(watch.Elapsed < PerformanceBudget.For(TimeSpan.FromSeconds(2)), $"copy took {watch.Elapsed.TotalMilliseconds:F0} ms");
+    }
+}
+
+/// <summary>T10 / FR-D5: permission check &lt; 10 ms and effective permissions &lt; 50 ms on the NFR-6 tree (tagged, run alone).</summary>
+[Trait("Category", "Performance")]
+[Collection(PerformanceTestGroup.Name)]
+public sealed class PermissionPerformanceTests(DocHubDatabaseFixture database) : IClassFixture<DocHubDatabaseFixture>
+{
+    [Fact]
+    public async Task Checks_on_a_2000_node_depth_15_tree_meet_their_targets()
+    {
+        await using var db = await SqlSession.OpenAsync(database.ConnectionString);
+        var documentId = await db.Data.DocumentAsync();
+        var version = await db.Data.VersionAsync(documentId, isCurrent: true);
+        await db.ExecuteAsync(
+            """
+            DECLARE @parent INT = NULL, @i INT = 1;
+            DECLARE @chain TABLE (Level INT NOT NULL PRIMARY KEY, Id INT NOT NULL);
+            WHILE @i <= 14
+            BEGIN
+                INSERT INTO app.DocumentNode (DocumentVersionId, LogicalNodeId, ParentNodeId, NodeTypeId, Title, SortOrder, CreatedByUserId, ModifiedByUserId)
+                VALUES (@v, NEWID(), @parent, 1, CONCAT(N'Level ', @i), 1024, 2, 2);
+                SET @parent = SCOPE_IDENTITY();
+                INSERT INTO @chain (Level, Id) VALUES (@i, @parent);
+                SET @i += 1;
+            END;
+            WITH n AS (SELECT TOP (1986) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i FROM sys.all_objects a CROSS JOIN sys.all_objects b)
+            INSERT INTO app.DocumentNode (DocumentVersionId, LogicalNodeId, ParentNodeId, NodeTypeId, Title, SortOrder, CreatedByUserId, ModifiedByUserId)
+            SELECT @v, NEWID(), c.Id, 1, CONCAT(N'Node ', n.i), n.i * 1024, 2, 2 FROM n JOIN @chain c ON c.Level = 1 + n.i % 14;
+            -- Node editor dave: the root (covers all 2 000 nodes) and a deep chain node; approver carol.
+            INSERT INTO app.DocumentPermission (DocumentId, UserId, Role, LogicalNodeId, GrantedByUserId)
+            SELECT @d, 5, 1, LogicalNodeId, 2 FROM app.DocumentNode WHERE DocumentVersionId = @v AND Title IN (N'Level 1', N'Level 10');
+            INSERT INTO app.DocumentPermission (DocumentId, UserId, Role, GrantedByUserId) VALUES (@d, 4, 2, 2);
+            """,
+            ("@v", version), ("@d", documentId));
+        var deepest = await db.ScalarAsync<Guid>(
+            "SELECT TOP (1) n.LogicalNodeId FROM app.DocumentNode n JOIN app.DocumentNode p ON p.Id = n.ParentNodeId WHERE n.DocumentVersionId = @v AND p.Title = N'Level 14';", ("@v", version));
+
+        var check = await MedianAsync(() => db.ScalarAsync<bool>(
+            "EXEC app.usp_CheckPermission @DocumentId = @d, @UserId = 6, @Action = 'EditContent', @DocumentVersionId = @v, @LogicalNodeId = @l;",
+            ("@d", documentId), ("@v", version), ("@l", deepest)));
+        var effective = await MedianAsync(async () =>
+        {
+            await using var command = new SqlCommand("app.usp_GetEffectivePermissions", db.Connection) { CommandType = System.Data.CommandType.StoredProcedure };
+            command.Parameters.AddWithValue("@DocumentId", documentId);
+            command.Parameters.AddWithValue("@UserId", 5);
+            command.Parameters.AddWithValue("@DocumentVersionId", version);
+            await using var reader = await command.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+            await reader.NextResultAsync(TestContext.Current.CancellationToken);
+            var nodes = 0;
+            while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+            {
+                nodes++;
+            }
+
+            Assert.Equal(2000, nodes);
+            return nodes;
+        });
+
+        // A user without a grant walks the whole ancestor chain (the slowest single check).
+        Assert.True(check < PerformanceBudget.For(TimeSpan.FromMilliseconds(10)), $"check {check.TotalMilliseconds:F1} ms");
+        Assert.True(effective < PerformanceBudget.For(TimeSpan.FromMilliseconds(50)), $"effective {effective.TotalMilliseconds:F1} ms");
+    }
+
+    /// <summary>Median of 5 runs after 3 warm-ups.</summary>
+    private static async Task<TimeSpan> MedianAsync<T>(Func<Task<T>> run)
+    {
+        for (var i = 0; i < 3; i++)
+        {
+            await run();
+        }
+
+        var times = new List<TimeSpan>();
+        for (var i = 0; i < 5; i++)
+        {
+            var watch = Stopwatch.StartNew();
+            await run();
+            times.Add(watch.Elapsed);
+        }
+
+        return times.Order().ElementAt(2);
     }
 }

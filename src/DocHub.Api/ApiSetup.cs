@@ -71,6 +71,7 @@ internal static class ApiSetup
         services.AddSingleton<IEndpointModule, VersionEndpoints>();
         services.AddSingleton<IEndpointModule, NodeEndpoints>();
         services.AddSingleton<IEndpointModule, ContentEndpoints>();
+        services.AddSingleton<IEndpointModule, PermissionEndpoints>();
 
         // Documents and versions (T07): the authorization seam, guards, signing and read models.
         services.AddScoped<IDocumentAuthorization, DocumentAuthorization>();

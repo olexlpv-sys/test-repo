@@ -12,6 +12,9 @@ public interface IDbProcedures
     /// <summary><c>app.usp_CheckPermission</c> — one action on a document for a user (FR-D2).</summary>
     Task<bool> CheckPermissionAsync(int documentId, int userId, PermissionAction action, int? documentVersionId, Guid? logicalNodeId, CancellationToken cancellationToken);
 
+    /// <summary><c>app.usp_GetEffectivePermissions</c> — all rights of a user on a document plus the node ids they may edit (FR-D2).</summary>
+    Task<EffectivePermissions> GetEffectivePermissionsAsync(int documentId, int userId, int? documentVersionId, CancellationToken cancellationToken);
+
     /// <summary><c>app.usp_ListDocuments</c> — one page of a folder's documents plus the total count.</summary>
     Task<DocumentListPage> ListDocumentsAsync(DocumentListQuery query, CancellationToken cancellationToken);
 
@@ -43,6 +46,11 @@ public sealed record DocumentListRow(
     int Id, byte[] RowVersion, int FolderId, string Title, string Status, int? LatestSignedVersion, int? DraftVersionId, bool? DraftHashValid,
     int? SignaturesSigned, int? SignaturesRequired, int OwnerUserId, string OwnerDisplayName, bool IsOwner, bool IsEditor, bool IsApprover,
     DateTime CreatedAt, DateTime ModifiedAt);
+
+/// <summary>Result of <c>app.usp_GetEffectivePermissions</c>; <see cref="EditableLogicalNodeIds"/> refer to the tree of <see cref="DocumentVersionId"/>.</summary>
+public sealed record EffectivePermissions(
+    bool IsOwner, bool IsAdmin, bool IsEditor, bool IsApprover, bool CanView, bool CanEditStructure, bool CanEditAllContent, bool CanComment, bool CanResolve,
+    bool CanSign, bool CanManage, bool CanMove, bool CanRestore, int? DocumentVersionId, IReadOnlyList<Guid> EditableLogicalNodeIds);
 
 public sealed record DocumentListPage(IReadOnlyList<DocumentListRow> Items, int TotalCount);
 
