@@ -17,5 +17,6 @@ public static class ErrorCodes
     public const string UnsupportedMediaType = "unsupported-media-type";
     public const string RequestFailed = "request-failed";
     public const string InUse = "in-use";
+    public const string InvalidMove = "invalid-move";
     public const string BuiltInStyle = "built-in-style";
 }

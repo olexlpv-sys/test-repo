@@ -25,7 +25,7 @@ Q22 is placed right after Q04 (it hardens the Q03 schema before feature work bui
 | Q04 | [T04](tasks/T04-api-foundation.md) API foundation | CODE + TEST | Q01, Q03 | A | done | **GREEN** (3 rounds) |
 | Q22 | [T21](tasks/T21-tamper-evident-audit.md) Tamper-evident audit: ledger, deploy-script guard, reconciliation | DB + CODE + TEST | Q04 | A | done | spec GREEN (6 rounds); code review deferred by the product owner |
 | Q05 | [T05](tasks/T05-users-and-node-types-api.md) Users, node types, content styles | CODE + TEST | Q04 | B | in-review | – |
-| Q06 | [T06](tasks/T06-virtual-folders-api.md) Folders | CODE + TEST | Q04 | B | todo | – |
+| Q06 | [T06](tasks/T06-virtual-folders-api.md) Folders | CODE + TEST | Q04 | B | in-review | – |
 | Q07 | [T07](tasks/T07-documents-and-versions-api.md) Documents, signing, restore | CODE + TEST | Q04, Q06 | A | todo | – |
 | Q08 | [T14](tasks/T14-web-shell-folders-documents.md) Web shell & lists | CODE + TEST | Q05, Q06, Q07 | C | todo | – |
 | Q09 | [T10](tasks/T10-permissions.md) Permissions | CODE + TEST | Q07 | B | todo | – |

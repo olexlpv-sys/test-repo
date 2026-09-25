@@ -59,6 +59,7 @@ internal static class ApiSetup
         services.AddSingleton<IEndpointModule, UserEndpoints>();
         services.AddSingleton<IEndpointModule, NodeTypeEndpoints>();
         services.AddSingleton<IEndpointModule, ContentStyleEndpoints>();
+        services.AddSingleton<IEndpointModule, FolderEndpoints>();
 
         // Style catalog schema (docs/content-format.md §2); the font list is configurable.
         services.AddSingleton(new StyleProperties(configuration.GetSection("Content:FontFamilies").Get<string[]>() is { Length: > 0 } fonts ? fonts : StyleProperties.DefaultFontFamilies));

@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using DocHub.Api.Auth;
+using DocHub.Api.Common;
 using DocHub.Api.Errors;
 using DocHub.Domain.Entities;
 using DocHub.Domain.Errors;
@@ -116,7 +117,7 @@ internal sealed class ContentStyleEndpoints : IEndpointModule
 
         group.MapDelete("/{id:int}", async Task<NoContent> (int id, string? rowVersion, DocHubDbContext db, CancellationToken ct) =>
             {
-                var version = ParseRowVersion(rowVersion);
+                var version = RowVersions.Parse(rowVersion);
                 var style = await db.ContentStyles.SingleOrDefaultAsync(s => s.Id == id, ct) ?? throw DomainException.NotFound("Content style", id);
                 if (style.IsBuiltIn)
                 {
@@ -181,18 +182,6 @@ internal sealed class ContentStyleEndpoints : IEndpointModule
                 errors["basedOnStyleId"] = ["The style can't be based on itself or on a style based on it."];
                 return;
             }
-        }
-    }
-
-    private static byte[] ParseRowVersion(string? rowVersion)
-    {
-        try
-        {
-            return string.IsNullOrEmpty(rowVersion) ? throw new FormatException() : Convert.FromBase64String(rowVersion);
-        }
-        catch (FormatException)
-        {
-            throw DomainException.Validation("The rowVersion query parameter (base64) is required.");
         }
     }
 
