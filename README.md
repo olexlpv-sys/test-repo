@@ -33,6 +33,23 @@ support **version comparison**, **per-document / per-node permissions** and **co
 /docs                         Requirements, architecture, development tasks
 ```
 
+## Getting started
+
+Prerequisites: .NET SDK 10.0.100+ (see `global.json`), Docker (for SQL Server and the integration tests).
+
+```bash
+cp .env.example .env               # then set a strong MSSQL_SA_PASSWORD
+docker compose up -d               # SQL Server 2022 on localhost:1433
+dotnet build DocHub.slnx
+dotnet test --solution DocHub.slnx
+dotnet run --project src/DocHub.Api   # http://localhost:5080  (/health, /openapi/v1.json, /scalar)
+```
+
+Local connection string override (never commit secrets):
+```bash
+dotnet user-secrets --project src/DocHub.Api set "ConnectionStrings:DocHub" "Server=localhost,1433;Database=DocHub;User Id=sa;Password=<your password>;TrustServerCertificate=True"
+```
+
 ## Documentation
 
 - [Requirements](docs/requirements/README.md) — one file per area, plus the decisions log

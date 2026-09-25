@@ -9,4 +9,9 @@
 - Show only failing output from builds/tests.
 
 ## Commands
-_To be filled in by Q01/T01 (build, test, run, DB publish)._
+- Build: `dotnet build DocHub.slnx` (warnings are errors)
+- Test: `dotnet test --solution DocHub.slnx` (Microsoft.Testing.Platform + xUnit v3; filter e.g. `-- --filter-trait "Category=Performance"`)
+- Run API: `dotnet run --project src/DocHub.Api` → http://localhost:5080 (`/health`, `/openapi/v1.json`, `/scalar`)
+- Local SQL Server: `cp .env.example .env && docker compose up -d`
+- Package versions live only in `Directory.Packages.props`.
+- DB publish: added by Q02/T02.

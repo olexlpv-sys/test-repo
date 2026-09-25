@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DocHub.Api/DocHub.Api.csproj" />
+    <Project Path="src/DocHub.Domain/DocHub.Domain.csproj" />
+    <Project Path="src/DocHub.Infrastructure/DocHub.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DocHub.Api.Tests/DocHub.Api.Tests.csproj" />
+    <Project Path="tests/DocHub.Database.Tests/DocHub.Database.Tests.csproj" />
+    <Project Path="tests/DocHub.Domain.Tests/DocHub.Domain.Tests.csproj" />
+    <Project Path="tests/DocHub.Testing/DocHub.Testing.csproj" />
+  </Folder>
+</Solution>
