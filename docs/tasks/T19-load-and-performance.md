@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Depends on** | T07, T08, T09 (harness); T10–T15, T18 (full scenario mix, UI probe) |
+| **Depends on** | T07, T08, T09 (harness); T10–T15, T18, T20 (full scenario mix, UI probe) |
 | **Size** | L (4 days: 2.5 harness + 1.5 tuning) |
 | **Requirements** | NFR-L1 … NFR-L12, NFR-6 |
 | **Read first** (nothing else) | [12-load-and-performance](../requirements/12-load-and-performance.md) · [11-data-access](../requirements/11-data-access.md) · [testing strategy](../testing-strategy.md) · [process](../process.md) |

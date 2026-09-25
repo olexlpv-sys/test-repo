@@ -34,7 +34,7 @@ Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary 
 - Each mutation updates `ModifiedAt/ModifiedByUserId` of the node.
 
 ## Performance
-- Tree items carry `nodeTypeId` only; the UI resolves names from the separately cached `/api/node-types`, so a dictionary rename never makes a cached tree stale.
+- Tree items carry `nodeTypeId` only; the UI resolves names from the separately cached `/api/node-types?includeInactive=true` (inactive types still need names; they are only excluded from create/change pickers), so a dictionary rename never makes a cached tree stale.
 - **Caching** (NFR-L9): tree responses carry `ETag` = `VersionStamp.LastChangeLogId`, `Cache-Control: private, no-cache`, `Vary: X-User-Id`, honor `If-None-Match` → `304`; Signed-version trees are kept in `HybridCache` keyed by `versionId + LastChangeLogId` (any change incl. script edits → new stamp → miss). `EnsureCanView` always runs first.
 - [AC] After a script edit of a Signed version, the next tree/content read returns the new data (no stale `304`); after the document is deleted, another user's revalidation gets `404`.
 - Tree load = one query for nodes of the version (+ `hasContent` via `EXISTS`/`LEN(PlainText) > 0` projection, **not** loading `ContentHtml`), assembled in memory.
