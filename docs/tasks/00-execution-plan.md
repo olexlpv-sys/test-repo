@@ -114,7 +114,7 @@ Parallelization seams already designed into the tasks:
 
 ## 5. Definition of Done (applies to every task)
 
-- Code merged to `main` via PR with review; CI green (build, tests, lint; DACPAC build for DB changes).
+- Code committed with review GREEN; local verification green on a clean copy (Release build incl. DACPAC, all tests). CI is deferred until physically needed (decisions log Q17); PR/merge to `main` only on the product owner's request.
 - Acceptance criteria covered by automated tests per [testing-strategy.md](../testing-strategy.md) (DB tests, unit, API integration incl. authz matrix, component, E2E).
 - Review **GREEN** per [process.md](../process.md) — every artifact, only user-reachable defects count.
 - New/changed endpoints appear in OpenAPI with request/response examples and ProblemDetails responses.

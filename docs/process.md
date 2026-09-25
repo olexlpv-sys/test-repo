@@ -17,11 +17,11 @@ Everything stored in the repository is **English**: code, identifiers, comments,
 | TEST | test code, fixtures | each acceptance criterion has at least one test that would fail without the feature; no flaky/sleep-based tests |
 
 ## 3. Review loop — "until green"
-1. Author opens a PR: code + tests + updated docs; CI green.
+1. Author commits code + tests + updated docs; local verification green on a clean copy (Release build + all tests). CI is deferred until physically needed (decisions log Q17).
 2. Reviewer produces findings (template §5). Each finding is classified **valid** or **not valid** (§4).
 3. Author fixes **all valid findings**, each with a regression test that fails before the fix; not-valid findings are closed with a one-line reason.
 4. Reviewer re-reviews **only the delta** and the previously open findings.
-5. Repeat until **green**: zero open valid findings **and** CI green. There is no round limit.
+5. Repeat until **green**: zero open valid findings **and** local verification green. There is no round limit.
 
 ## 4. Defect validity rule
 A finding is a **valid defect only if it is reachable by a user** through a supported entry point:

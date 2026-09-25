@@ -147,7 +147,7 @@ static string GenerateTrigger(AuditedTable t)
     var needsLogTable = t.AdvancesVersionStamp;
     if (needsLogTable)
     {
-        sb.AppendLine("    DECLARE @Logged TABLE ([Id] BIGINT NOT NULL, [EntityId] INT NOT NULL);");
+        sb.AppendLine("    DECLARE @Logged TABLE ([Id] BIGINT NOT NULL, [EntityId] INT NOT NULL, [ChangedAt] DATETIME2 (7) NOT NULL);");
         sb.AppendLine();
     }
 
@@ -156,7 +156,7 @@ static string GenerateTrigger(AuditedTable t)
     sb.AppendLine("         [ChangedColumns], [UserId], [Source], [DbLogin], [AppName], [CorrelationId], [OperationContext], [Ticket], [Reason])");
     if (needsLogTable)
     {
-        sb.AppendLine("    OUTPUT INSERTED.[Id], INSERTED.[EntityId] INTO @Logged ([Id], [EntityId])");
+        sb.AppendLine("    OUTPUT INSERTED.[Id], INSERTED.[EntityId], INSERTED.[ChangedAt] INTO @Logged ([Id], [EntityId], [ChangedAt])");
     }
 
     sb.AppendLine("    SELECT");
@@ -187,11 +187,11 @@ static string GenerateTrigger(AuditedTable t)
 
     if (t.AdvancesVersionStamp)
     {
-        var tamper = t.TamperCondition is null ? "CAST(NULL AS DATETIME2 (7))" : $"MAX(CASE WHEN {t.TamperCondition} THEN SYSUTCDATETIME() END)";
+        var tamper = t.TamperCondition is null ? "CAST(NULL AS DATETIME2 (7))" : $"MIN(CASE WHEN {t.TamperCondition} THEN [l].[ChangedAt] END)";
         var versionOf = (string alias) => t.DocumentVersionId!.Replace("{r}", alias, StringComparison.Ordinal);
         sb.AppendLine();
         sb.AppendLine("    -- T03 §2b: advance the per-version stamp (cache key/ETag) of every version the change touches — old and new version");
-        sb.AppendLine("    -- for rows that move between versions — and record the first tampering with a Signed version.");
+        sb.AppendLine("    -- for rows that move between versions — and record the first tampering with a Signed version (TamperedAt = ChangedAt of that log row).");
         sb.AppendLine("    MERGE [app].[VersionStamp] WITH (HOLDLOCK) AS [target]");
         sb.AppendLine("    USING (");
         sb.AppendLine(CultureInfo.InvariantCulture, $"        SELECT [x].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], {tamper} AS [TamperedAt]");

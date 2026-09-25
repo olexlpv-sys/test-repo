@@ -9,12 +9,12 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM inserted) AND NOT EXISTS (SELECT 1 FROM deleted)
         RETURN;
 
-    DECLARE @Logged TABLE ([Id] BIGINT NOT NULL, [EntityId] INT NOT NULL);
+    DECLARE @Logged TABLE ([Id] BIGINT NOT NULL, [EntityId] INT NOT NULL, [ChangedAt] DATETIME2 (7) NOT NULL);
 
     INSERT INTO [audit].[ChangeLog]
         ([TableName], [Operation], [EntityId], [DocumentId], [DocumentVersionId], [LogicalNodeId], [OldValues], [NewValues],
          [ChangedColumns], [UserId], [Source], [DbLogin], [AppName], [CorrelationId], [OperationContext], [Ticket], [Reason])
-    OUTPUT INSERTED.[Id], INSERTED.[EntityId] INTO @Logged ([Id], [EntityId])
+    OUTPUT INSERTED.[Id], INSERTED.[EntityId], INSERTED.[ChangedAt] INTO @Logged ([Id], [EntityId], [ChangedAt])
     SELECT
         N'app.DocumentVersion',
         CASE WHEN [d].[Id] IS NULL THEN 'I' WHEN [i].[Id] IS NULL THEN 'D' ELSE 'U' END,
@@ -53,10 +53,10 @@ BEGIN
     ;
 
     -- T03 §2b: advance the per-version stamp (cache key/ETag) of every version the change touches — old and new version
-    -- for rows that move between versions — and record the first tampering with a Signed version.
+    -- for rows that move between versions — and record the first tampering with a Signed version (TamperedAt = ChangedAt of that log row).
     MERGE [app].[VersionStamp] WITH (HOLDLOCK) AS [target]
     USING (
-        SELECT [x].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], MAX(CASE WHEN [d].[Status] = 2 AND ([i].[Id] IS NULL OR [i].[Status] IS DISTINCT FROM [d].[Status] OR [i].[VersionNumber] IS DISTINCT FROM [d].[VersionNumber] OR [i].[SignedAt] IS DISTINCT FROM [d].[SignedAt] OR [i].[SignedContentHash] IS DISTINCT FROM [d].[SignedContentHash] OR [i].[DocumentId] IS DISTINCT FROM [d].[DocumentId]) THEN SYSUTCDATETIME() END) AS [TamperedAt]
+        SELECT [x].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], MIN(CASE WHEN [d].[Status] = 2 AND ([i].[Id] IS NULL OR [i].[Status] IS DISTINCT FROM [d].[Status] OR [i].[VersionNumber] IS DISTINCT FROM [d].[VersionNumber] OR [i].[SignedAt] IS DISTINCT FROM [d].[SignedAt] OR [i].[SignedContentHash] IS DISTINCT FROM [d].[SignedContentHash] OR [i].[DocumentId] IS DISTINCT FROM [d].[DocumentId]) THEN [l].[ChangedAt] END) AS [TamperedAt]
         FROM @Logged AS [l]
         LEFT JOIN inserted AS [i] ON [i].[Id] = [l].[EntityId]
         LEFT JOIN deleted AS [d] ON [d].[Id] = [l].[EntityId]

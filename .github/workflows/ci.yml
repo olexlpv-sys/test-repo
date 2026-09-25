@@ -1,9 +1,9 @@
 name: CI
 
+# CI is deferred until it is physically needed (product owner decision, decisions log Q17): manual runs only.
+# Re-enable automatic runs (pull_request / push to main) when PRs and merges to main start.
 on:
-  pull_request:
-  push:
-    branches: ['**']
+  workflow_dispatch:
 
 permissions:
   contents: read

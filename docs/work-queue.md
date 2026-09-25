@@ -5,10 +5,10 @@ The single source of "what's next". Process rules: [process.md](process.md). Dep
 ## Protocol (per item)
 1. Take the **first `todo` item whose dependencies are `done`** (items with **different** lane letters can run in parallel in separate agent sessions; items within one lane run in lane order).
 2. Set `in-progress`, load **only** the task file + its *Read first* list.
-3. Implement with tests ([testing strategy](testing-strategy.md)); CI green; open PR.
+3. Implement with tests ([testing strategy](testing-strategy.md)); **local verification green**: `dotnet build DocHub.slnx -c Release` + `dotnet test --solution DocHub.slnx -c Release` on a clean copy of the tree (CI is deferred — decisions log Q17).
 4. Set `in-review`; request review with the template in [process §5](process.md#5-review-request-template-keep-it-this-small) in a fresh context.
 5. Fix valid findings → re-review delta → repeat until **GREEN**.
-6. Merge, set `done`, write a handoff note (≤ 5 lines) in the table below, including actuals: wall-clock, review rounds (process §9).
+6. Set `done`, write a handoff note (≤ 5 lines) in the table below, including actuals: wall-clock, review rounds (process §9).
 
 Status: `todo` · `in-progress` · `in-review` · `done` · `blocked`
 
