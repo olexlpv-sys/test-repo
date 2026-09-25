@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Depends on** | T07, T08, T09 (harness); T10–T13, T18 (full scenario mix) |
+| **Depends on** | T07, T08, T09 (harness); T10–T15, T18 (full scenario mix, UI probe) |
 | **Size** | L (4 days: 2.5 harness + 1.5 tuning) |
 | **Requirements** | NFR-L1 … NFR-L12, NFR-6 |
 | **Read first** (nothing else) | [12-load-and-performance](../requirements/12-load-and-performance.md) · [11-data-access](../requirements/11-data-access.md) · [testing strategy](../testing-strategy.md) · [process](../process.md) |
@@ -30,3 +30,4 @@ Prove NFR-L4 (p99 ≤ 3 s at 20 req/s on production-scale data) and keep proving
 - [ ] Full-scale run: p99 ≤ 3 s for every endpoint at 20 req/s, and the burst at 40 req/s has 0 % 5xx.
 - [ ] Soak: p95 drifts by no more than +10 % between the first and the last 10 minutes; no memory growth trend in the API.
 - [ ] Every NFR-L5 budget is met, or a defect is filed and linked in the work queue.
+- [ ] **NFR-L6**: while the 20 req/s load runs, a Playwright probe measures main window ready and document form first-section visible — both ≤ 3 s (p95 of 20 probes).

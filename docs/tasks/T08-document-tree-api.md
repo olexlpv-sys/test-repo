@@ -34,7 +34,8 @@ Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary 
 - Each mutation updates `ModifiedAt/ModifiedByUserId` of the node.
 
 ## Performance
-- **Signed versions are immutable → cached** (NFR-L9): tree responses of Signed versions carry `ETag` (from `SignedContentHash`) + `Cache-Control: private, max-age=3600`, honor `If-None-Match` → `304`, and are kept in `HybridCache` keyed by `versionId + SignedContentHash` (a script edit changes the hash → cache miss).
+- **Caching** (NFR-L9): tree responses carry `ETag` = `VersionStamp.LastChangeLogId`, `Cache-Control: private, no-cache`, `Vary: X-User-Id`, honor `If-None-Match` → `304`; Signed-version trees are kept in `HybridCache` keyed by `versionId + LastChangeLogId` (any change incl. script edits → new stamp → miss). `EnsureCanView` always runs first.
+- [AC] After a script edit of a Signed version, the next tree/content read returns the new data (no stale `304`); after the document is deleted, another user's revalidation gets `404`.
 - Tree load = one query for nodes of the version (+ `hasContent` via `EXISTS`/`LEN(PlainText) > 0` projection, **not** loading `ContentHtml`), assembled in memory.
 - NFR-6: tree of 2 000 nodes / depth 15 loads in < 500 ms — add a test with generated data.
 

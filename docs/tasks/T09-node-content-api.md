@@ -29,10 +29,11 @@ The canonical format is **TipTap/ProseMirror JSON validated against DocHub Conte
    - `PlainText` — newline between blocks, tab between table cells.
    - `ContentHash` — SHA-256 of canonical JSON.
 5. If the new canonical JSON equals the **stored canonical `ContentJson`** (compared by value, not via the stored `ContentHash` column) → no DB update (no audit noise). Otherwise every save recomputes **all** derived columns and the hash.
-6. **Caching** (NFR-L9): content of Signed versions — same `ETag`/`HybridCache` scheme as T08.
+6. **Caching** (NFR-L9): same `ETag` (`VersionStamp.LastChangeLogId`) / `no-cache` / `HybridCache` scheme as T08; `EnsureCanView` first.
+6a. The content `PUT` sets `SESSION_CONTEXT('OperationContext') = 'ApiContentSave'` and maintains `app.ContentStyleUsage` for the node.
 7. The UI autosaves (debounced) — `PUT` is a single `UPDATE … WHERE NodeId = @id AND RowVersion = @rv`.
 7a. `GET /api/content-styles/stylesheet.css` (T05) is what the renderer's CSS classes refer to (it includes inactive styles).
-8. **Script edits**: support scripts edit `ContentJson` only. The T03 trigger sets `NodeContent.DerivedStale = 1` whenever `ContentJson` changes without an API session context. A hosted service `DerivedContentRefresher` (every 30 s, batches of 500, filtered index on `DerivedStale = 1`) re-renders `ContentHtml`, `PlainText`, `ContentHash` and clears the flag with `OperationContext = 'RebuildDerived'`. This is the **only allowed write to Signed versions** and touches derived columns only — never `ContentJson`, so tamper detection (T07 rule 4) is unaffected. Until refreshed, reads render from `ContentJson` on the fly; search sees the new text within ≤ 1 min.
+8. **Script edits**: support scripts edit `ContentJson` only. The T03 trigger sets `NodeContent.DerivedStale = 1` whenever `ContentJson` changes outside the API content path (`OperationContext <> 'ApiContentSave'`). A hosted service `DerivedContentRefresher` (every 30 s, batches of 500, filtered index on `DerivedStale = 1`), running as the seeded `system` user with `OperationContext = 'RebuildDerived'`, re-renders `ContentHtml`, `PlainText`, `ContentHash`, rebuilds `ContentStyleUsage` and clears the flag — not audited, no history entry (T03 §2c). This is the **only allowed write to Signed versions** and touches derived columns only — never `ContentJson`, so tamper detection (T07 rule 4) is unaffected. Until refreshed, reads render from `ContentJson` on the fly; search sees the new text within ≤ 1 min.
 
 ## DB changes (in T02)
 `app.NodeContent`: `ContentJson nvarchar(max)` (`ISJSON` check) + `SchemaVersion tinyint` are the source of truth; `ContentHtml`, `PlainText`, `ContentHash` are derived.

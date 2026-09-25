@@ -135,6 +135,21 @@ Constraints / indexes:
 
 Unique filtered index `(DocumentVersionId, UserId) WHERE WithdrawnAt IS NULL`.
 
+**`app.VersionStamp`** — per-version change stamp (maintained by T03 triggers, **not** audited itself)
+| Column | Type | Notes |
+|---|---|---|
+| DocumentVersionId | int PK, FK | |
+| LastChangeLogId | bigint | `audit.ChangeLog.Id` of the latest change to the version's nodes/content; cache key + ETag (NFR-L9) |
+| TamperedAt | datetime2(3) null | first change to nodes/content of a **Signed** version after `SignedAt` (FR-H5), excluding `OperationContext = 'RebuildDerived'` |
+
+**`app.ContentStyleUsage`** — which node contents use which style (for fast `in-use` checks)
+| Column | Type | Notes |
+|---|---|---|
+| StyleId | varchar(50) | PK part |
+| NodeId | int FK → NodeContent `ON DELETE CASCADE` | PK part; maintained by the API on every content save and by the derived-content refresher (T09) |
+
+Index `(StyleId)`.
+
 **`app.ContentStyle`** — Word-compatible style catalog (admin-editable, [content-format.md](../content-format.md) §2)
 | Column | Type | Notes |
 |---|---|---|
@@ -177,10 +192,10 @@ Owner is **not** stored here — it is `Document.OwnerUserId`.
 
 Index `(DocumentVersionId, LogicalNodeId)`.
 
-**Indexes for the load profile** ([NFR-L10](../requirements/12-load-and-performance.md)): `DocumentPermission (UserId, DocumentId) INCLUDE (Role, LogicalNodeId)` and `(DocumentId, Role)`; `app.[User] (IsActive) INCLUDE (DisplayName)`. `audit.ChangeLog` page compression + monthly partitioning is added in T03.
+**Indexes for the load profile** ([NFR-L10](../requirements/12-load-and-performance.md)): `DocumentNode (NodeTypeId)` (node-type usage); `DocumentPermission (UserId, DocumentId) INCLUDE (Role, LogicalNodeId)` and `(DocumentId, Role)`; `app.[User] (IsActive) INCLUDE (DisplayName)`. `audit.ChangeLog` page compression + monthly partitioning is added in T03.
 
 ### 3. Seed data (`Scripts/PostDeployment/Script.PostDeployment.sql`, idempotent `MERGE`, fixed ids with `IDENTITY_INSERT`)
-- Users: `1 admin (IsAdmin)`, `2 alice` (typical owner), `3 bob` (editor), `4 carol` (approver), `5 dave` (approver), `6 erin` (no roles) — enough to test multi-approver signing in test mode.
+- Users: `0 system` (inactive for login; the acting identity of background jobs such as the derived-content refresher), `1 admin (IsAdmin)`, `2 alice` (typical owner), `3 bob` (editor), `4 carol` (approver), `5 dave` (approver), `6 erin` (no roles) — enough to test multi-approver signing in test mode.
 - Content styles: `Normal`, `Heading1`–`Heading6`, `Title`, `Subtitle`, `Quote`, `ListParagraph`, `Caption`, `TableGrid`, `Strong`, `Emphasis` with Word-default-like properties (Calibri/Aptos 11pt, heading sizes/colors).
 - Node types: `CHAPTER` Chapter, `SECTION` Section, `SUBSECTION` Subsection, `PARAGRAPH` Paragraph, `APPENDIX` Appendix.
 - Root folders: `General`, `Templates`.

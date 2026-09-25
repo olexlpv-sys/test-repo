@@ -58,6 +58,7 @@ Principle: **the Owner defines the structure, Editors edit text, Approvers revie
 - [ ] Node-scoped editor on "Chapter 2" can edit the text of "Chapter 2 / Section 1 / Subsection 2", cannot edit the text of "Chapter 1", and gets `403` on any structural operation (including inside "Chapter 2").
 - [ ] Only an approver can sign; owner, editors → `403`. Granting a role to the owner → `400`.
 - [ ] Grants survive creating a new draft (same `LogicalNodeId`).
+- [ ] `GET /permissions` and `/my-permissions` of a deleted document → `404` for non-owner/non-admin (FR-P5).
 - [ ] Node editor on "Chapter 2": after the owner moves "Section X" from Chapter 2 to Chapter 1 **in the draft**, the editor can no longer edit Section X in the draft (while v1 is unaffected); moving a node into Chapter 2 grants edit rights on it — `usp_CheckPermission` walks the tree of the given `@DocumentVersionId`.
 - [ ] `usp_CheckPermission` with an unknown `@Action` raises an error; `EditContent` without `@DocumentVersionId` raises an error.
 - [ ] Admin move of an active and of a deleted document → `200`; owner move of a deleted document → `409 document-deleted`.

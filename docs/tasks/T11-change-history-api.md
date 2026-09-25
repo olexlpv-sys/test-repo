@@ -21,7 +21,7 @@ Read `audit.ChangeLog` (written by triggers — T03) and present a human-readabl
 | GET | `/api/versions/{versionId}/change-summary?since=latestSigned|{versionId}|{isoDate}` | per `logicalNodeId` of the version: `{ changeCount, lastChangedAt, lastChangedBy, hasScriptChange, hasChangeAfterSigning, structural: [Added, Moved, Renamed, TypeChanged] }` + removed nodes since the baseline — **one call for all section badges** |
 | GET | `/api/documents/{id}/nodes/{logicalNodeId}/changes?since=…&until=current|{entryId}` | **attributed diff** for track changes: same block/ops format as `/diff`, each `insert`/`delete`/`format` op carrying `{ entryId, userId, displayName, source, ticket, changedAt }` |
 | GET | `/api/documents/{id}/history?versionId?&from?&to?&userId?&source?&page&pageSize` | document-wide activity feed (nodes, content, versions, permissions, comments) |
-| GET | `/api/admin/audit?table&operation&source&userId&dbLogin&ticket&from&to&page&pageSize` | **admin only**: raw `audit.ChangeLog` rows (all tables incl. folders, node types, styles, users) for the Admin tab (FR-UI3) |
+| GET | `/api/admin/audit?from&to&table&operation&source&userId&dbLogin&ticket&page&pageSize` | **admin only**; `from`/`to` required, range ≤ 31 days (partition elimination; `400` otherwise); indexed filters (T03); raw `audit.ChangeLog` rows (all tables incl. folders, node types, styles, users) for the Admin tab (FR-UI3) |
 
 ### History entry shape
 ```json
@@ -77,6 +77,7 @@ Unit tests with fixtures in `tests/DocHub.Domain.Tests/DiffFixtures/`. Whoever s
 - [ ] A direct SQL update (no session context) appears with `source = Script` and `dbLogin`; with `usp_SetSupportContext` it shows `ticket` and `reason`.
 - [ ] Script edit of a Signed version appears with `afterSigning = true`.
 - [ ] Diff of a table where one cell changed marks only that cell.
-- [ ] `GET /api/admin/audit` filters by `source=Script` and `ticket`; non-admin → `403`.
+- [ ] `GET /api/admin/audit` filters by `source=Script` and `ticket`; non-admin → `403`; a 31-day filtered query on 24 M rows returns the first page in < 1 s (tagged perf test).
+- [ ] Rows written with `OperationContext = 'RebuildDerived'` never appear (not logged, T03 §2c).
 - [ ] Making a word bold (no text change) is reported as a formatting change, not as delete+insert.
 - [ ] A deleted document's node history, document history and diff → `404` for non-owner/non-admin users, `200` for owner and admin (FR-P5, via `EnsureCanView`).

@@ -36,7 +36,7 @@ Every data change — made by the API **or by a support script** — is recorded
 | Ticket | nvarchar(50) null | from session context, set by support scripts |
 | Reason | nvarchar(500) null | from session context, set by support scripts |
 
-Indexes: `(LogicalNodeId, ChangedAt)`, `(DocumentId, ChangedAt)`, `(TableName, EntityId, ChangedAt)`. `DATA_COMPRESSION = PAGE`; partitioned by month on `ChangedAt` (partition function/scheme in the DB project; a post-deployment step creates partitions 24 months ahead) — NFR-L10.
+Indexes: `(LogicalNodeId, ChangedAt)`, `(DocumentId, ChangedAt)`, `(TableName, EntityId, ChangedAt)`, `(TableName, ChangedAt)`, `(UserId, ChangedAt)`, `(DbLogin, ChangedAt)`, `(Ticket, ChangedAt) WHERE Ticket IS NOT NULL` (admin audit filters). `DATA_COMPRESSION = PAGE`; partitioned by month on `ChangedAt` (partition function/scheme in the DB project; a post-deployment step creates partitions 24 months ahead) — NFR-L10.
 The table is **append-only**: `DENY UPDATE, DELETE ON audit.ChangeLog TO public`. Roles (defined in the DB project `Security/`):
 - `app_api` (the API's DB user): `SELECT, INSERT, UPDATE, DELETE` on schema `app`, `EXECUTE` on schema `app` (stored procedures), `SELECT` on schema `audit`; no DML on `audit` (triggers write through ownership chaining, both schemas owned by `dbo`).
 - `support_writer`: `SELECT, INSERT, UPDATE, DELETE` on `app`, `SELECT` on `audit`, `EXECUTE` on `audit.usp_SetSupportContext`.
@@ -56,7 +56,13 @@ Requirements for triggers:
 - To avoid hand-writing 9 near-identical triggers, a generator script (`database/tools/Generate-AuditTriggers.sql` or a small PowerShell/C# script) is acceptable; the generated `.sql` files are committed.
 
 ### 2a. Derived-content flag
-The `app.NodeContent` trigger also sets `DerivedStale = 1` for rows whose `ContentJson` changed while `SESSION_CONTEXT('UserId')` is empty (script edits), so the API can re-render derived columns (T09 rule 8).
+The `app.NodeContent` trigger also sets `DerivedStale = 1` for rows whose `ContentJson` changed **unless `SESSION_CONTEXT('OperationContext')` is `'ApiContentSave'`** (set by the API content endpoint, T09) — so every edit outside the API content path is caught, including scripts run with `usp_SetSupportContext @ActingUserId`.
+
+### 2b. Version stamp
+The node and content triggers upsert `app.VersionStamp` for each affected version: `LastChangeLogId` = the new log id; `TamperedAt` = `SYSUTCDATETIME()` if still null and the version is Signed and `OperationContext <> 'RebuildDerived'`. `app.VersionStamp` has no audit trigger.
+
+### 2c. Derived-content rebuild
+Writes with `OperationContext = 'RebuildDerived'` (refresher, T09 rule 8; runs as the seeded `system` user) change only derived columns (`ContentHtml`, `PlainText`, `ContentHash`, `DerivedStale`) and are **not written to `audit.ChangeLog`** (they carry no user-visible change).
 
 ### 3. Session context contract
 | Key | Set by | Meaning |
@@ -90,3 +96,6 @@ API for reading the log (T11). Retention/archiving of the log.
 - [ ] `UPDATE`/`DELETE` on `audit.ChangeLog` by a non-dbo user fails.
 - [ ] The support template `database/support/_TEMPLATE.sql` executes successfully **as a `support_writer` user** and produces audit rows with `Ticket`/`Reason`; the same template as `readonly` fails on the DML.
 - [ ] An API write executed as an `app_api` user succeeds and is audited.
+- [ ] A script update of `ContentJson` with `usp_SetSupportContext @ActingUserId = 3` sets `DerivedStale = 1`; an update with `OperationContext = 'ApiContentSave'` does not.
+- [ ] A write with `OperationContext = 'RebuildDerived'` produces no `ChangeLog` row and does not set `TamperedAt`.
+- [ ] Any node/content change advances `VersionStamp.LastChangeLogId` of its version; a script change to a Signed version sets `TamperedAt` once.

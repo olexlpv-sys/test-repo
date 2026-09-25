@@ -48,7 +48,7 @@ Compare two versions of the same document — any pair of signed versions, or a 
 5. `contentStats` computed with the diff engine only for `ContentChanged` nodes (lazy: the full diff is fetched per node via the second endpoint).
 
 ## Caching
-Compare results of two **Signed** versions are cached (`HybridCache`, key = both version ids + both `SignedContentHash` values) — NFR-L9.
+Compare results of two **Signed** versions are cached (`HybridCache`, key = both version ids + both `VersionStamp.LastChangeLogId` values; `EnsureCanView` first) — NFR-L9.
 
 ## Acceptance criteria
 - [ ] v1 vs v2 with: 1 added node, 1 removed subtree, 1 moved node, 1 renamed node, 2 content edits → summary and per-node statuses exactly match.

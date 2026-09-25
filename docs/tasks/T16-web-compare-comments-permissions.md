@@ -26,7 +26,7 @@ Complete the document form with comparison, comments and role management.
 ### 3. Permissions dialog
 - Opened from the version bar (**Share / Permissions**), visible to everyone, editable by owner only.
 - List: owner (read-only), grants with role, scope ("Whole document" or node number + title, "node not in current draft" warning), granted by/at, remove button.
-- Add grant: user picker (`/api/users`), role, scope: whole document / pick node from a tree picker (Editor only).
+- Add grant: **type-ahead** user picker (`/api/users?search=`), role, scope: whole document / pick node from a tree picker (Editor only).
 - After changes refresh `my-permissions` so the editor reflects new rights immediately.
 
 ## Acceptance criteria

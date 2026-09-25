@@ -23,7 +23,7 @@ Scaffold the SPA and deliver the main window: folder tree on the left, documents
 
 ### 2. App shell
 - Header: product name, tabs **Documents** | **Admin** (Admin visible only for `isAdmin`).
-- **Test mode "Acting as" dropdown** (FR-UI4): shown only when `GET /api/system/info` returns `authMode = "Test"`, together with a visible **TEST MODE** banner. Lists `GET /api/users` with display name + login + role hint for the open document (Owner / Editor / Approver). Selection persisted in `localStorage` (default = first user); switching invalidates all TanStack Query caches so every screen re-renders with the new user's rights. Optional hotkey `Ctrl+Shift+U` to cycle users — handy for the owner → approver 1 → approver 2 signing scenario.
+- **Test mode "Acting as" dropdown** (FR-UI4): shown only when `GET /api/system/info` returns `authMode = "Test"`, together with a visible **TEST MODE** banner. **Type-ahead** over `GET /api/users?search=` (plus the last 10 used users and the open document's owner/editors/approvers for one-click switching) showing display name + login + role hint for the open document (Owner / Editor / Approver). Selection persisted in `localStorage` (default = first user); switching invalidates all TanStack Query caches so every screen re-renders with the new user's rights. Optional hotkey `Ctrl+Shift+U` to cycle users — handy for the owner → approver 1 → approver 2 signing scenario.
 - Global error toast for ProblemDetails (`title` + `detail`); `409 concurrency-conflict` shows "Changed by someone else — reload".
 
 ### 3. Main window (`/`)
