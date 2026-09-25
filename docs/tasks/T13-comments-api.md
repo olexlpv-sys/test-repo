@@ -23,7 +23,7 @@ Comments on the document as a whole or on a specific node, with one level of rep
 
 ## Rules
 - Who may comment: `IDocumentAuthorization.CanComment` (owner, editors, approvers — T10 matrix).
-- Allowed on Draft and Signed versions; on a Deleted version or deleted document → `409 version-not-editable`.
+- Allowed on Draft and Signed versions; on a discarded (Deleted) version → `409 version-not-editable`; on a deleted document → `409 document-deleted`.
 - `logicalNodeId` must exist in that version (`400`).
 - Replies: `parentCommentId` must be a top-level comment of the same version and same node (no nested replies) → `400`.
 - `body`: 1–4000 chars, plain text (render as text in the UI; no HTML).
@@ -37,3 +37,4 @@ Comments on the document as a whole or on a specific node, with one level of rep
 - [ ] Counts endpoint matches the list.
 - [ ] On a v2 draft, `includePreviousVersions=true` also returns v1 comments of the same node, flagged `versionLabel = "v1"`; default excludes them.
 - [ ] Comment on a deleted document → `409 document-deleted`.
+- [ ] A deleted document's comment list and counts → `404` for non-owner/non-admin users, `200` for owner and admin (FR-P5, via `EnsureCanView`).

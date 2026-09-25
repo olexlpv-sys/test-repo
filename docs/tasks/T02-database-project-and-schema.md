@@ -5,7 +5,7 @@
 | **Depends on** | T01 (test projects) |
 | **Blocks** | T03, T04 |
 | **Size** | M (2–3 days) |
-| **Requirements** | FR-D4, FR-F*, FR-T*, FR-N*, FR-V*, FR-P*, FR-CM*, FR-H2, NFR-1, NFR-4 |
+| **Requirements** | FR-D4, NFR-L8, NFR-L10, FR-F*, FR-T*, FR-N*, FR-V*, FR-P*, FR-CM*, FR-H2, NFR-1, NFR-4 |
 | **Read first** (nothing else) | [01-folders](../requirements/01-folders.md) · [02-document-tree](../requirements/02-document-tree.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) · [06-permissions](../requirements/06-permissions.md) · [07-comments](../requirements/07-comments.md) · [04-change-tracking](../requirements/04-change-tracking.md) · [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [11-data-access](../requirements/11-data-access.md) · [process](../process.md) |
 
 ## Goal
@@ -81,6 +81,7 @@ Index `(FolderId) INCLUDE (Title, OwnerUserId) WHERE DeletedAt IS NULL`.
 | CreatedAt / CreatedByUserId | | |
 | SignedAt | null | moment the last required signature completed the version |
 | SignedContentHash | varbinary(32) null | SHA-256 of canonical content at signing (T07) |
+| IsCurrent | bit | 1 for the draft if one exists, else for the latest signed version (NFR-L8); maintained by the T07 lifecycle operations; filtered unique index `(DocumentId) WHERE IsCurrent = 1` |
 | RowVersion | rowversion | |
 
 Constraints:
@@ -117,6 +118,7 @@ Constraints / indexes:
 | ContentHtml | nvarchar(max) | derived, server-rendered |
 | PlainText | nvarchar(max) | derived |
 | ContentHash | varbinary(32) | SHA-256 of canonical `ContentJson` |
+| DerivedStale | bit | default 0; set by the T03 trigger on script edits of `ContentJson`, cleared by the API refresher (T09 rule 8); filtered index `WHERE DerivedStale = 1` |
 | ModifiedAt / ModifiedByUserId | | |
 | RowVersion | rowversion | |
 
@@ -174,6 +176,8 @@ Owner is **not** stored here — it is `Document.OwnerUserId`.
 | RowVersion | rowversion | |
 
 Index `(DocumentVersionId, LogicalNodeId)`.
+
+**Indexes for the load profile** ([NFR-L10](../requirements/12-load-and-performance.md)): `DocumentPermission (UserId, DocumentId) INCLUDE (Role, LogicalNodeId)` and `(DocumentId, Role)`; `app.[User] (IsActive) INCLUDE (DisplayName)`. `audit.ChangeLog` page compression + monthly partitioning is added in T03.
 
 ### 3. Seed data (`Scripts/PostDeployment/Script.PostDeployment.sql`, idempotent `MERGE`, fixed ids with `IDENTITY_INSERT`)
 - Users: `1 admin (IsAdmin)`, `2 alice` (typical owner), `3 bob` (editor), `4 carol` (approver), `5 dave` (approver), `6 erin` (no roles) — enough to test multi-approver signing in test mode.

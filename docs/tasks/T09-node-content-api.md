@@ -6,7 +6,7 @@
 | **Blocks** | T11, T12, T15 |
 | **Size** | L (3–4 days) |
 | **Requirements** | FR-T4, FR-V4, NFR-5 |
-| **Read first** (nothing else) | [02-document-tree](../requirements/02-document-tree.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) · [09-non-functional](../requirements/09-non-functional.md) · [content-format](../content-format.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
+| **Read first** (nothing else) | [02-document-tree](../requirements/02-document-tree.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) · [09-non-functional](../requirements/09-non-functional.md) · [content-format](../content-format.md) · [architecture](../architecture.md) (only sections linked in the text) · [06-permissions](../requirements/06-permissions.md) (FR-P5) · [12-load-and-performance](../requirements/12-load-and-performance.md) (NFR-L9) · [process](../process.md) |
 
 ## Goal
 Read and edit the styled rich-text content (paragraph styles, fonts, spacing, lists, tables with merged cells and borders) of a node.
@@ -28,10 +28,11 @@ The canonical format is **TipTap/ProseMirror JSON validated against DocHub Conte
    - `ContentHtml` — rendered by `ContentHtmlRenderer` (JSON → HTML; text always HTML-encoded; styles as CSS classes `ds-style-{styleId}`, direct formatting as inline style from whitelisted values only).
    - `PlainText` — newline between blocks, tab between table cells.
    - `ContentHash` — SHA-256 of canonical JSON.
-5. Same `ContentHash` as stored → no DB update (no audit noise), return `200` with current state.
-6. The UI autosaves (debounced) — `PUT` is a single `UPDATE … WHERE NodeId = @id AND RowVersion = @rv`.
-7. `GET /api/content-styles/stylesheet.css` (T05) is what the renderer's CSS classes refer to (it includes inactive styles).
-8. **Script edits**: support scripts edit `ContentJson` only. On read, if `ContentHash` ≠ SHA-256(canonical `ContentJson`), the API renders `ContentHtml`/`PlainText` on the fly (never serves stale derived data) and marks the node `derivedStale` so the admin endpoint `POST /api/admin/content/rebuild-derived` (admin only) can persist them.
+5. If the new canonical JSON equals the **stored canonical `ContentJson`** (compared by value, not via the stored `ContentHash` column) → no DB update (no audit noise). Otherwise every save recomputes **all** derived columns and the hash.
+6. **Caching** (NFR-L9): content of Signed versions — same `ETag`/`HybridCache` scheme as T08.
+7. The UI autosaves (debounced) — `PUT` is a single `UPDATE … WHERE NodeId = @id AND RowVersion = @rv`.
+7a. `GET /api/content-styles/stylesheet.css` (T05) is what the renderer's CSS classes refer to (it includes inactive styles).
+8. **Script edits**: support scripts edit `ContentJson` only. The T03 trigger sets `NodeContent.DerivedStale = 1` whenever `ContentJson` changes without an API session context. A hosted service `DerivedContentRefresher` (every 30 s, batches of 500, filtered index on `DerivedStale = 1`) re-renders `ContentHtml`, `PlainText`, `ContentHash` and clears the flag with `OperationContext = 'RebuildDerived'`. This is the **only allowed write to Signed versions** and touches derived columns only — never `ContentJson`, so tamper detection (T07 rule 4) is unaffected. Until refreshed, reads render from `ContentJson` on the fly; search sees the new text within ≤ 1 min.
 
 ## DB changes (in T02)
 `app.NodeContent`: `ContentJson nvarchar(max)` (`ISJSON` check) + `SchemaVersion tinyint` are the source of truth; `ContentHtml`, `PlainText`, `ContentHash` are derived.
@@ -44,4 +45,6 @@ The canonical format is **TipTap/ProseMirror JSON validated against DocHub Conte
 - [ ] Signed version → `409 version-not-editable`; no content permission → `403`; stale `rowVersion` → `409 concurrency-conflict`.
 - [ ] `PlainText` of a 2×2 table is `a\tb\nc\td`.
 - [ ] Content using a deactivated style can still be saved.
-- [ ] After a direct SQL update of `ContentJson`, `GET …/content?format=html` returns HTML of the new JSON; `rebuild-derived` persists it.
+- [ ] After a direct SQL update of `ContentJson` (also in a Signed version), `GET …/content?format=html` immediately returns HTML of the new JSON; within 1 min the refresher persists `ContentHtml`/`PlainText`/`ContentHash`, clears `DerivedStale`, and search finds the new text; the version is still flagged `modifiedAfterSigning`.
+- [ ] After such a script edit, an API save of the pre-script content is **not** skipped.
+- [ ] A deleted document's content reads (single and batch) → `404` for non-owner/non-admin users, `200` for owner and admin (FR-P5, via `EnsureCanView`).

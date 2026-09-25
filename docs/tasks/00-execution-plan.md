@@ -24,9 +24,10 @@ Source requirements: [requirements/](../requirements/README.md) · Decisions: [a
 | [T16](T16-web-compare-comments-permissions.md) | Web: compare, comments, permissions | T10, T12, T13, T15 | M–L · 3–4 d | M3 Web UI |
 | [T17](T17-web-admin-tab.md) | Web: Admin tab (folders, node types, styles, users, audit) | T05, T11, T14 | M · 2–2.5 d | M3 Web UI |
 
-| [T18](T18-search.md) | Search: stored procedures, API, UI | T07, T09, T14, T15 | M · 2–2.5 d | M3 Web UI |
+| [T18](T18-search.md) | Search: full-text stored procedures, API, UI | T07, T09, T14, T15 | M · 2–2.5 d | M3 Web UI |
+| [T19](T19-load-and-performance.md) | Load & performance harness + tuning | T07–T09 (harness), T10–T13, T18 (full mix) | L · 4 d | M4 Performance |
 
-**Total effort ≈ 45–51 developer-days.**
+**Total effort ≈ 49–55 developer-days.** Load profile: [12-load-and-performance](../requirements/12-load-and-performance.md).
 
 ## 2. Dependency graph
 
@@ -68,6 +69,8 @@ flowchart TD
   T10 --> T15
   T09 --> T18[T18 Search]
   T15 --> T18
+  T09 --> T19[T19 Load & perf]
+  T18 --> T19
   T14 --> T17
 
   classDef crit fill:#fde2e1,stroke:#c0392b,color:#000;
@@ -104,6 +107,7 @@ Parallelization seams already designed into the tasks:
 | **M0 Foundation** | T01–T04 | `dotnet test` green in CI with a real SQL container; DACPAC deploys; an API write shows up in `audit.ChangeLog` with the user; a manual SQL script change shows up as `Script`. |
 | **M1 Core API** | T05–T09 | Via Scalar: create folder → document → build the example tree → edit content with a table → grant two approvers (DB rows until T10) → both sign → v1 → new draft → edit with styles/tables → both sign → v2 → delete → restore. |
 | **M2 Advanced API** | T10–T13 | Node history across v1/v2/draft incl. a support-script change; compare v1 vs draft; approver comments; node-scoped editor restrictions. |
+| **M4 Performance** | T19 | Scale-0.1 nightly green; full-scale run meets p99 ≤ 3 s at 20 req/s. |
 | **M3 Web UI** | T14–T17 | Full scenario of M1 + M2 from the browser using the test-mode "Acting as" dropdown (owner → approvers), Playwright suite green. |
 
 ## 5. Definition of Done (applies to every task)
@@ -120,6 +124,7 @@ Parallelization seams already designed into the tasks:
 
 | Risk | Mitigation |
 |---|---|
+| 3 s SLO at 20 req/s on 15 M node rows | Full-text search, `IsCurrent` filter, caching of immutable signed versions, SP hot paths, nightly load runs from Q19 on; tuning budget in T19. |
 | Audit triggers slow down bulk operations (draft copy of large trees) | Set-based triggers; perf test in T07 (2 000 nodes < 2 s); `Operation` context key lets history collapse copy rows. |
 | `audit.ChangeLog` grows fast (full HTML in JSON on each autosave) | Debounced autosave; skip no-op updates (T09 rule 5); plan retention/partitioning later; consider `COMPRESS()` for `OldValues/NewValues`. |
 | Rich-text/table editing edge cases (merged cells) break diffs | Diff fixtures with merged cells in T11; normalized block model shared by T11/T12. |

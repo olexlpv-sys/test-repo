@@ -7,7 +7,7 @@
 | **Can run in parallel with** | T12 (shares the diff engine — agree on who builds it first, see §3) |
 | **Size** | M (2–3 days) |
 | **Requirements** | FR-H1, FR-H3, FR-H4, FR-H5 |
-| **Read first** (nothing else) | [04-change-tracking](../requirements/04-change-tracking.md) · [content-format](../content-format.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
+| **Read first** (nothing else) | [04-change-tracking](../requirements/04-change-tracking.md) · [content-format](../content-format.md) · [architecture](../architecture.md) (only sections linked in the text) · [06-permissions](../requirements/06-permissions.md) (FR-P5) · [process](../process.md) |
 
 ## Goal
 Read `audit.ChangeLog` (written by triggers — T03) and present a human-readable history for nodes and documents, including changes made by support scripts.
@@ -70,3 +70,4 @@ Unit tests with fixtures in `tests/DocHub.Domain.Tests/DiffFixtures/`. Whoever s
 - [ ] Diff of a table where one cell changed marks only that cell.
 - [ ] `GET /api/admin/audit` filters by `source=Script` and `ticket`; non-admin → `403`.
 - [ ] Making a word bold (no text change) is reported as a formatting change, not as delete+insert.
+- [ ] A deleted document's node history, document history and diff → `404` for non-owner/non-admin users, `200` for owner and admin (FR-P5, via `EnsureCanView`).

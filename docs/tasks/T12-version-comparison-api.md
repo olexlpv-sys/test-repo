@@ -6,7 +6,7 @@
 | **Blocks** | T16 (compare view) |
 | **Size** | M (2 days) |
 | **Requirements** | FR-C1, FR-C2 |
-| **Read first** (nothing else) | [05-version-comparison](../requirements/05-version-comparison.md) · [content-format](../content-format.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
+| **Read first** (nothing else) | [05-version-comparison](../requirements/05-version-comparison.md) · [content-format](../content-format.md) · [architecture](../architecture.md) (only sections linked in the text) · [06-permissions](../requirements/06-permissions.md) (FR-P5) · [12-load-and-performance](../requirements/12-load-and-performance.md) (NFR-L9) · [process](../process.md) |
 
 ## Goal
 Compare two versions of the same document — any pair of signed versions, or a signed version vs the current draft — at structure and content level.
@@ -47,9 +47,13 @@ Compare two versions of the same document — any pair of signed versions, or a 
 4. Build the **merged tree**: target structure, with removed nodes inserted at their base position (under their base parent if that still exists, else under the nearest existing ancestor) so the UI can render one tree.
 5. `contentStats` computed with the diff engine only for `ContentChanged` nodes (lazy: the full diff is fetched per node via the second endpoint).
 
+## Caching
+Compare results of two **Signed** versions are cached (`HybridCache`, key = both version ids + both `SignedContentHash` values) — NFR-L9.
+
 ## Acceptance criteria
 - [ ] v1 vs v2 with: 1 added node, 1 removed subtree, 1 moved node, 1 renamed node, 2 content edits → summary and per-node statuses exactly match.
 - [ ] Inserting one node at the top of 20 siblings does **not** mark the other 19 as `Reordered`.
 - [ ] `target=draft` works; when no draft exists → `404`.
 - [ ] Versions of another document → `400`.
 - [ ] Compare of two 2 000-node versions returns in < 1 s locally (without per-node diffs).
+- [ ] A deleted document's compare endpoints → `404` for non-owner/non-admin users, `200` for owner and admin (FR-P5, via `EnsureCanView`).

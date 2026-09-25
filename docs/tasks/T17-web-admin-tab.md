@@ -16,7 +16,7 @@ Sub-tabs:
 1. **Node types** — grid: Code, Name, Description, Sort order, Active, Usage count. Add / Edit (modal), Activate/Deactivate toggle, Delete (disabled with tooltip when `usageCount > 0`). Validation errors shown on fields.
 2. **Content styles** — grid by kind (Paragraph / Character / Table) with a live preview of each style; edit form for font family/size/color, bold/italic, alignment, spacing before/after, line spacing, indents, based-on style, table borders/shading. Built-in styles: editable, not deletable. Changes are immediately visible in the editor (stylesheet refetch).
 3. **Users** — read-only grid of seeded users (Login, Display name, Email, Admin, Active) with a note "Users are managed by seed data".
-4. **Folders** — the same folder tree component as the main window but with full management actions and folder details (path, document count). *(Reuses T14 component; no new API.)*
+4. **Folders** — the same folder tree component as the main window but with full management actions and folder details (path, document count incl. deleted), plus the folder's document list with **Move to…** for every document incl. deleted ones, so a folder can be emptied and deleted from here. *(Reuses T14 components; no new API.)*
 5. **Audit log** (mandatory, FR-UI3) — `GET /api/admin/audit` (T11): grid with filters (table, operation, source, user, DB login, ticket, date range), JSON old/new viewer, `Source = Script` rows highlighted.
 
 ## Acceptance criteria

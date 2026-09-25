@@ -36,8 +36,11 @@ Every data change — made by the API **or by a support script** — is recorded
 | Ticket | nvarchar(50) null | from session context, set by support scripts |
 | Reason | nvarchar(500) null | from session context, set by support scripts |
 
-Indexes: `(LogicalNodeId, ChangedAt)`, `(DocumentId, ChangedAt)`, `(TableName, EntityId, ChangedAt)`.
-The table is **append-only**: `DENY UPDATE, DELETE ON audit.ChangeLog TO public`; a role `support_writer` gets DML on `app` but only `SELECT` on `audit`.
+Indexes: `(LogicalNodeId, ChangedAt)`, `(DocumentId, ChangedAt)`, `(TableName, EntityId, ChangedAt)`. `DATA_COMPRESSION = PAGE`; partitioned by month on `ChangedAt` (partition function/scheme in the DB project; a post-deployment step creates partitions 24 months ahead) — NFR-L10.
+The table is **append-only**: `DENY UPDATE, DELETE ON audit.ChangeLog TO public`. Roles (defined in the DB project `Security/`):
+- `app_api` (the API's DB user): `SELECT, INSERT, UPDATE, DELETE` on schema `app`, `EXECUTE` on schema `app` (stored procedures), `SELECT` on schema `audit`; no DML on `audit` (triggers write through ownership chaining, both schemas owned by `dbo`).
+- `support_writer`: `SELECT, INSERT, UPDATE, DELETE` on `app`, `SELECT` on `audit`, `EXECUTE` on `audit.usp_SetSupportContext`.
+- `readonly`: `SELECT` on `app` and `audit`.
 
 ### 2. Triggers
 `AFTER INSERT, UPDATE, DELETE` trigger per tracked table:
@@ -51,6 +54,9 @@ Requirements for triggers:
 - For `U`, skip rows where no audited column actually changed (compare JSON or column-by-column), fill `ChangedColumns`.
 - Resolve `DocumentId` / `DocumentVersionId` / `LogicalNodeId` from the row itself where present (`DocumentNode`, `NodeContent` carries redundant `DocumentVersionId` + `LogicalNodeId` — see T02 — so cascade deletes stay resolvable) and join `DocumentVersion` for `DocumentId`.
 - To avoid hand-writing 9 near-identical triggers, a generator script (`database/tools/Generate-AuditTriggers.sql` or a small PowerShell/C# script) is acceptable; the generated `.sql` files are committed.
+
+### 2a. Derived-content flag
+The `app.NodeContent` trigger also sets `DerivedStale = 1` for rows whose `ContentJson` changed while `SESSION_CONTEXT('UserId')` is empty (script edits), so the API can re-render derived columns (T09 rule 8).
 
 ### 3. Session context contract
 | Key | Set by | Meaning |
@@ -82,3 +88,5 @@ API for reading the log (T11). Retention/archiving of the log.
 - [ ] A multi-row `UPDATE` of 500 nodes writes 500 log rows; an update that sets a column to the same value writes 0 rows.
 - [ ] Deleting a node (cascade to content) writes `D` rows for both, each with `DocumentVersionId` and `LogicalNodeId` populated.
 - [ ] `UPDATE`/`DELETE` on `audit.ChangeLog` by a non-dbo user fails.
+- [ ] The support template `database/support/_TEMPLATE.sql` executes successfully **as a `support_writer` user** and produces audit rows with `Ticket`/`Reason`; the same template as `readonly` fails on the DML.
+- [ ] An API write executed as an `app_api` user succeeds and is audited.

@@ -79,7 +79,6 @@ flowchart LR
 | `document-deleted` | 409 | Mutating a soft-deleted document |
 | `not-deleted` | 409 | Restoring a document that is not deleted |
 | `folder-missing` | 409 | Restoring without `folderId` when the original folder is gone |
-| `no-draft` | 409 | Renaming a document without an open draft |
 | `no-signed-version` | 409 | Creating a draft when nothing is signed yet |
 | `only-version` | 409 | Discarding the only version of a document |
 | `no-approvers` | 409 | Signing a document that has no approvers |

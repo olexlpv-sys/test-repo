@@ -42,7 +42,8 @@ Scaffold the SPA and deliver the main window: folder tree on the left, documents
 - **Add**: modal with Title → `POST /api/documents` → navigate to `/documents/{id}`.
 - **Delete**: enabled when one row is selected and current user is owner; confirm dialog → `DELETE /api/documents/{id}`.
 - **Row click** (or double-click, decide) → `/documents/{id}`.
-- **Restore**: with "show deleted" on, deleted rows show a **Restore** button (owner or admin) → `POST /api/documents/{id}/restore`.
+- **Restore**: with "show deleted" on, deleted rows show a **Restore** button (owner or admin) → `POST /api/documents/{id}/restore` (asks for a target folder when the original one is gone — `409 folder-missing`).
+- **Move to…**: row action opening a folder picker → `POST /api/documents/{id}/move`; available to the owner for active documents and to admins for any document, **including deleted ones** (needed to empty a folder before deleting it, FR-F4).
 - Empty states: no folders, empty folder.
 
 ## Acceptance criteria
@@ -52,4 +53,5 @@ Scaffold the SPA and deliver the main window: folder tree on the left, documents
 - [ ] Delete button disabled for non-owners; deleting hides the row.
 - [ ] Switching user in the "Acting as" dropdown changes the `X-User-Id` on subsequent requests and refreshes data; the dropdown is hidden when the API is not in test mode.
 - [ ] Delete a document, toggle "show deleted", restore it.
+- [ ] As admin, move a deleted document out of a folder, then delete the now-empty folder; as owner, move an active document; a non-owner non-admin sees no Move action.
 - [ ] Playwright smoke test: create folder → add document → see it in the list.

@@ -14,7 +14,8 @@ Goal: **maximum quality** — every acceptance criterion and every REQ ID is pro
 | Contract | Verify snapshot of `/openapi/v1.json` | unintended API changes fail; SPA TS client regenerated from the snapshot | every PR |
 | Frontend unit/component | Vitest + Testing Library + MSW | components, hooks, permission-dependent rendering, autosave/conflict logic, editor extensions (JSON in → JSON out) | every PR |
 | E2E | Playwright against the full stack (`docker compose`: SQL + API + SPA) | milestone scenarios from the execution plan, incl. test-mode user switching (owner → approver 1 → approver 2), support-script change visible in history | every PR (smoke) + nightly (full) |
-| Performance | tagged integration tests with generated data | NFR-6 tree load, draft copy, compare | nightly + before release |
+| Performance | tagged integration tests with generated data | NFR-6 tree load, draft copy, compare, SP single-request targets (FR-D5) | nightly + before release |
+| Load & soak | `tools/DocHub.DataGen` + NBomber (`tests/DocHub.LoadTests`) — [T19](tasks/T19-load-and-performance.md) | NFR-L3 traffic mix at 20 req/s (burst 40), p99 ≤ 3 s, 1 h soak; scale 0.1 nightly in CI, 1.0 on Azure SQL before release | nightly (0.1) + before release (1.0) |
 | Security | integration + unit | XSS/injection payload fixtures for content, links, names; authz matrix; test-mode auth disabled in Production | every PR |
 | Accessibility | `@axe-core/playwright` | main window, document form, admin tab: no serious/critical violations | nightly |
 
@@ -22,6 +23,7 @@ Goal: **maximum quality** — every acceptance criterion and every REQ ID is pro
 - All tests green; **no skipped tests** in `main`; a flaky test is a defect (fix or delete-with-replacement in the same PR, never retry-until-green).
 - Coverage (coverlet / Vitest): Domain ≥ 90 % lines, Infrastructure + Api ≥ 80 %, web ≥ 80 %; no decrease on changed files.
 - Mutation testing (Stryker.NET) on `DocHub.Domain`: score ≥ 70 % (nightly, trend tracked).
+- Load: nightly scale-0.1 run within thresholds; release blocked unless the full-scale run meets NFR-L4/L5.
 - Warnings as errors (.NET analyzers, ESLint, SQL project build).
 
 ## 3. Rules

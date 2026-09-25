@@ -7,4 +7,4 @@
 - FR-P3 **Approver** — leaves comments on nodes and on the document as a whole, resolves comments and **signs** the draft (FR-V6).
 - FR-P4 **[A]** The owner grants/revokes Editor/Approver roles. Permissions are defined per *document* (not per version), so they carry over to new drafts.
 - FR-P5 Any user can view any **non-deleted** document; roles restrict modifications and commenting only. Deleted documents are visible (read-only) only to their owner and admins.
-- FR-P6 **Admin** (`User.IsAdmin`) — manages folders, node types and content styles; can restore deleted documents. No other document rights by default.
+- FR-P6 **Admin** (`User.IsAdmin`) — manages folders, node types and content styles; can **move** any document (deleted ones included) and **restore** deleted documents; can view deleted documents. No other document rights by default.

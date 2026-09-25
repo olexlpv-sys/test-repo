@@ -6,7 +6,7 @@
 | **Blocks** | T09, T11, T12, T15 |
 | **Size** | M (2–3 days) |
 | **Requirements** | FR-T1 … FR-T3, FR-T5, FR-V4, NFR-6, FR-D3 |
-| **Read first** (nothing else) | [02-document-tree](../requirements/02-document-tree.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) · [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [11-data-access](../requirements/11-data-access.md) · [process](../process.md) |
+| **Read first** (nothing else) | [02-document-tree](../requirements/02-document-tree.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) · [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [11-data-access](../requirements/11-data-access.md) · [06-permissions](../requirements/06-permissions.md) (FR-P5) · [12-load-and-performance](../requirements/12-load-and-performance.md) (NFR-L9) · [process](../process.md) |
 
 ## Goal
 Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary titles, typed nodes, ordering and moving.
@@ -34,6 +34,7 @@ Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary 
 - Each mutation updates `ModifiedAt/ModifiedByUserId` of the node.
 
 ## Performance
+- **Signed versions are immutable → cached** (NFR-L9): tree responses of Signed versions carry `ETag` (from `SignedContentHash`) + `Cache-Control: private, max-age=3600`, honor `If-None-Match` → `304`, and are kept in `HybridCache` keyed by `versionId + SignedContentHash` (a script edit changes the hash → cache miss).
 - Tree load = one query for nodes of the version (+ `hasContent` via `EXISTS`/`LEN(PlainText) > 0` projection, **not** loading `ContentHtml`), assembled in memory.
 - NFR-6: tree of 2 000 nodes / depth 15 loads in < 500 ms — add a test with generated data.
 
@@ -46,3 +47,4 @@ Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary 
 - [ ] Inactive node type on create → `400`.
 - [ ] Stale `rowVersion` → `409 concurrency-conflict`.
 - [ ] Editor (document- or node-level) and Approver get `403` on every structural operation.
+- [ ] A deleted document's tree and node reads → `404` for non-owner/non-admin users, `200` for owner and admin (FR-P5, via `EnsureCanView`).

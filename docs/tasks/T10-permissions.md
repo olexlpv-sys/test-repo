@@ -19,13 +19,15 @@ Principle: **the Owner defines the structure, Editors edit text, Approvers revie
 | Action | Owner | Editor (document) | Editor (node N) | Approver | Other user |
 |---|:-:|:-:|:-:|:-:|:-:|
 | View document, versions, tree, content, history, compare | ✔ | ✔ | ✔ | ✔ | ✔ |
-| **Structure**: add/delete/move/rename nodes, change node type, rename document | ✔ | – | – | – | – |
+| **Structure**: add/delete/move/rename nodes, change node type | ✔ | – | – | – | – |
 | Edit **text** (content) of any node | ✔ | ✔ | – | – | – |
 | Edit **text** of N and of its descendants | ✔ | ✔ | ✔ | – | – |
 | Comment (document or node) | ✔ | ✔ | ✔ | ✔ | – |
 | Resolve / reopen comments | ✔ | – | – | ✔ | – |
 | **Sign** the draft — version is finalized when **all** approvers signed | – | – | – | ✔ | – |
-| New draft, discard draft, delete/move document | ✔ | – | – | – | – |
+| New draft, discard draft, rename, delete document | ✔ | – | – | – | – |
+| Move document to another folder | ✔ | – | – | – | admin (also deleted docs) |
+| View a **deleted** document | ✔ | – | – | – | admin |
 | Grant/revoke roles | ✔ | – | – | – | – |
 | Restore deleted document | ✔ | – | – | – | admin |
 
@@ -56,5 +58,8 @@ Principle: **the Owner defines the structure, Editors edit text, Approvers revie
 - [ ] Node-scoped editor on "Chapter 2" can edit the text of "Chapter 2 / Section 1 / Subsection 2", cannot edit the text of "Chapter 1", and gets `403` on any structural operation (including inside "Chapter 2").
 - [ ] Only an approver can sign; owner, editors → `403`. Granting a role to the owner → `400`.
 - [ ] Grants survive creating a new draft (same `LogicalNodeId`).
+- [ ] Node editor on "Chapter 2": after the owner moves "Section X" from Chapter 2 to Chapter 1 **in the draft**, the editor can no longer edit Section X in the draft (while v1 is unaffected); moving a node into Chapter 2 grants edit rights on it — `usp_CheckPermission` walks the tree of the given `@DocumentVersionId`.
+- [ ] `usp_CheckPermission` with an unknown `@Action` raises an error; `EditContent` without `@DocumentVersionId` raises an error.
+- [ ] Admin move of an active and of a deleted document → `200`; owner move of a deleted document → `409 document-deleted`.
 - [ ] Permission check < 10 ms and effective permissions < 50 ms on the NFR-6 data set (tagged perf test).
 - [ ] Non-owner grant/revoke → `403`. Every grant/revoke is visible in `audit.ChangeLog`.
