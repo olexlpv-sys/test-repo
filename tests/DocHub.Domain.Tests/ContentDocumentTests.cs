@@ -65,6 +65,9 @@ public sealed class ContentDocumentTests
     [InlineData("""{"type":"doc","content":[{"type":"paragraph","attrs":{"wordExt":"not an object"}}]}""", "content[0].attrs.wordExt")]
     [InlineData("""{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"link"}]}]}]}""", "content[0].content[0].marks[0].attrs.href")]
     [InlineData("""{"type":"paragraph"}""", "")]
+    [InlineData("""{"type":"doc","content":[{"type":"bogus","type":"paragraph"}]}""", "content[0].type")]
+    [InlineData("""{"type":"doc","content":[{"type":"paragraph","attrs":{"wordExt":{"a":1,"a":2}}}]}""", "content[0].attrs.wordExt.a")]
+    [InlineData("""{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"\ud800"}]}]}""", "content[0].content[0].text")]
     public void Invalid_content_is_reported_with_its_json_path(string json, string path)
     {
         using var document = JsonDocument.Parse(json);
@@ -158,6 +161,17 @@ public sealed class ContentDocumentTests
             """;
         var html = ContentHtmlRenderer.Render(forged).Html;
         Assert.Equal("""<p>&lt;script&gt;alert(1)&lt;/script&gt;</p><table style="border-collapse:collapse"><tbody><tr><td></td></tr></tbody></table>""", html);
+    }
+
+    [Fact]
+    public void Script_stored_lone_surrogates_render_as_replacement_characters_and_hash()
+    {
+        const string json = """{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"a\ud800b \ud83d\ude00 \\ud800"}]}]}""";
+        var rendered = ContentHtmlRenderer.Render(json);
+        Assert.Equal("<p>a\uFFFDb &#128512; \\ud800</p>", rendered.Html);
+        Assert.Equal("a\uFFFDb \U0001F600 \\ud800", rendered.PlainText);
+        Assert.Equal(CanonicalJson.Hash(json), rendered.ContentHash);
+        Assert.NotEqual(CanonicalJson.Hash(json.Replace("a", "c", StringComparison.Ordinal)), rendered.ContentHash);
     }
 
     [Fact]

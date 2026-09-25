@@ -465,7 +465,7 @@
         "tags": [
           "Content"
         ],
-        "summary": "A node's content: ?format=json (default), html or both; ETag = version stamp.",
+        "summary": "A node's content: ?format=json (default), html or both; ETag = version stamp + row version.",
         "operationId": "GetNodeContent",
         "parameters": [
           {
@@ -559,7 +559,7 @@
         "tags": [
           "Content"
         ],
-        "summary": "Contents of several nodes of a version (?nodeIds=1,2,3, at most 200) in the given order, e.g. to render a document; ETag = version stamp.",
+        "summary": "Contents of several nodes of a version (?nodeIds=1,2,3, at most 200) in the given order, e.g. to render a document; ETag = version stamp + row versions.",
         "operationId": "GetVersionContents",
         "parameters": [
           {

@@ -54,28 +54,15 @@ internal sealed partial class DerivedContentRefresher(
         var refreshed = 0;
         foreach (var row in stale)
         {
-            var rendered = ContentHtmlRenderer.Render(row.ContentJson);
-            var used = UsedStyles(schema, row.ContentJson);
-            var done = await db.InTransactionAsync(async () =>
+            try
             {
-                // Only if unchanged since it was read (a newer save or script edit is picked up next round).
-                var updated = await db.NodeContents
-                    .Where(c => c.NodeId == row.NodeId && c.RowVersion == row.RowVersion)
-                    .ExecuteUpdateAsync(set => set
-                        .SetProperty(c => c.ContentHtml, rendered.Html)
-                        .SetProperty(c => c.PlainText, rendered.PlainText)
-                        .SetProperty(c => c.ContentHash, rendered.ContentHash)
-                        .SetProperty(c => c.DerivedStale, false), cancellationToken).ConfigureAwait(false);
-                if (updated == 1)
-                {
-                    await db.ContentStyleUsages.Where(u => u.NodeId == row.NodeId).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-                    db.ContentStyleUsages.AddRange(used.Select(s => new ContentStyleUsage { StyleId = s, NodeId = row.NodeId }));
-                    await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                }
-
-                return updated == 1;
-            }, cancellationToken).ConfigureAwait(false);
-            refreshed += done ? 1 : 0;
+                refreshed += await RefreshAsync(db, schema, row.NodeId, row.ContentJson, row.RowVersion, cancellationToken).ConfigureAwait(false) ? 1 : 0;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // One bad row must not stop the others; it is retried next round.
+                LogRowFailed(exception, row.NodeId);
+            }
         }
 
         if (refreshed > 0)
@@ -84,6 +71,31 @@ internal sealed partial class DerivedContentRefresher(
         }
 
         return refreshed;
+    }
+
+    /// <summary>Re-renders one row in one statement, only if it is unchanged since it was read (newer edits are picked up next round).</summary>
+    private static Task<bool> RefreshAsync(DocHubDbContext db, ContentDocument schema, int nodeId, string contentJson, byte[] rowVersion, CancellationToken cancellationToken)
+    {
+        var rendered = ContentHtmlRenderer.Render(contentJson);
+        var used = UsedStyles(schema, contentJson);
+        return db.InTransactionAsync(async () =>
+        {
+            var updated = await db.NodeContents
+                .Where(c => c.NodeId == nodeId && c.RowVersion == rowVersion)
+                .ExecuteUpdateAsync(set => set
+                    .SetProperty(c => c.ContentHtml, rendered.Html)
+                    .SetProperty(c => c.PlainText, rendered.PlainText)
+                    .SetProperty(c => c.ContentHash, rendered.ContentHash)
+                    .SetProperty(c => c.DerivedStale, false), cancellationToken).ConfigureAwait(false);
+            if (updated == 1)
+            {
+                await db.ContentStyleUsages.Where(u => u.NodeId == nodeId).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+                db.ContentStyleUsages.AddRange(used.Select(s => new ContentStyleUsage { StyleId = s, NodeId = nodeId }));
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return updated == 1;
+        }, cancellationToken);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -115,7 +127,7 @@ internal sealed partial class DerivedContentRefresher(
     {
         try
         {
-            using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = CanonicalJson.MaxDepth });
+            using var document = JsonDocument.Parse(ContentSchema.RepairLoneSurrogates(json), new JsonDocumentOptions { MaxDepth = CanonicalJson.MaxDepth });
             return schema.UsedStyles(document.RootElement);
         }
         catch (JsonException)
@@ -126,6 +138,9 @@ internal sealed partial class DerivedContentRefresher(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Refreshed the derived content of {Count} script-edited nodes.")]
     private partial void LogRefreshed(int count);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Refreshing the derived content of node {NodeId} failed; it is retried at the next interval.")]
+    private partial void LogRowFailed(Exception exception, int nodeId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Refreshing derived content failed; it is retried at the next interval.")]
     private partial void LogFailed(Exception exception);

@@ -101,12 +101,15 @@ public sealed class NodeContents(DocHubDbContext db, StyleProperties styles)
             .ToList();
     }
 
-    /// <summary>Stored JSON as an element; content a script nested beyond the API's depth limit reads as an empty document.</summary>
+    /// <summary>
+    /// Stored JSON as an element. What a script may have stored is made returnable: lone surrogates become U+FFFD, and
+    /// content nested beyond the API's depth limit reads as an empty document.
+    /// </summary>
     private static JsonElement ParseStored(string json)
     {
         try
         {
-            using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = CanonicalJson.MaxDepth });
+            using var document = JsonDocument.Parse(ContentSchema.RepairLoneSurrogates(json), new JsonDocumentOptions { MaxDepth = CanonicalJson.MaxDepth });
             return document.RootElement.Clone();
         }
         catch (JsonException)

@@ -40,19 +40,25 @@ internal sealed class ContentEndpoints : IEndpointModule
                 await authorization.EnsureCanViewAsync(node.DocumentId, ct);
                 var parsed = Format(format);
                 var stamp = await VersionETag.StampAsync(db, node.VersionId, ct);
-                if (VersionETag.IsNotModified(http, stamp))
+                var rows = await RowVersionsAsync(db, [nodeId], ct);
+                if (rows.Count == 0)
+                {
+                    throw DomainException.NotFound("Content of node", nodeId);
+                }
+
+                if (VersionETag.IsNotModified(http, stamp, rows))
                 {
                     return Results.StatusCode(StatusCodes.Status304NotModified);
                 }
 
-                var views = await ReadAsync(contents, cache, node.VersionId, node.Status, stamp, [nodeId], parsed, ct);
+                var views = await ReadAsync(contents, cache, node.VersionId, node.Status, rows, [nodeId], parsed, ct);
                 return views.Count == 0 ? throw DomainException.NotFound("Content of node", nodeId) : Results.Ok(views[0]);
             })
             .Produces<NodeContentView>()
             .Produces(StatusCodes.Status304NotModified)
             .WithTags("Content")
             .WithName("GetNodeContent")
-            .WithSummary("A node's content: ?format=json (default), html or both; ETag = version stamp.");
+            .WithSummary("A node's content: ?format=json (default), html or both; ETag = version stamp + row version.");
 
         endpoints.MapGet("/api/versions/{versionId:int}/content", async (
                 int versionId, string? nodeIds, string? format, HttpContext http, DocHubDbContext db, IDocumentAuthorization authorization, NodeContents contents,
@@ -63,25 +69,26 @@ internal sealed class ContentEndpoints : IEndpointModule
                 await authorization.EnsureCanViewAsync(version.DocumentId, ct);
                 var parsed = Format(format);
                 var ids = NodeIds(nodeIds);
-                var stamp = await VersionETag.StampAsync(db, versionId, ct);
-                if (VersionETag.IsNotModified(http, stamp))
-                {
-                    return Results.StatusCode(StatusCodes.Status304NotModified);
-                }
-
                 var inVersion = await db.DocumentNodes.AsNoTracking().Where(n => n.DocumentVersionId == versionId && ids.Contains(n.Id)).Select(n => n.Id).ToListAsync(ct);
                 if (ids.Except(inVersion).FirstOrDefault() is var missing and not 0)
                 {
                     throw DomainException.NotFound("Node of this version", missing);
                 }
 
-                return Results.Ok(await ReadAsync(contents, cache, versionId, version.Status, stamp, ids, parsed, ct));
+                var stamp = await VersionETag.StampAsync(db, versionId, ct);
+                var rows = await RowVersionsAsync(db, ids, ct);
+                if (VersionETag.IsNotModified(http, stamp, rows))
+                {
+                    return Results.StatusCode(StatusCodes.Status304NotModified);
+                }
+
+                return Results.Ok(await ReadAsync(contents, cache, versionId, version.Status, rows, ids, parsed, ct));
             })
             .Produces<List<NodeContentView>>()
             .Produces(StatusCodes.Status304NotModified)
             .WithTags("Content")
             .WithName("GetVersionContents")
-            .WithSummary($"Contents of several nodes of a version (?nodeIds=1,2,3, at most 200) in the given order, e.g. to render a document; ETag = version stamp.");
+            .WithSummary($"Contents of several nodes of a version (?nodeIds=1,2,3, at most 200) in the given order, e.g. to render a document; ETag = version stamp + row versions.");
 
         endpoints.MapPut("/api/nodes/{nodeId:int}/content", async Task<Results<Ok<NodeContentView>, ValidationProblem>> (
                 int nodeId, SaveContent request, DocHubDbContext db, IDocumentAuthorization authorization, IVersionGuard guard, NodeRules rules,
@@ -133,20 +140,24 @@ internal sealed class ContentEndpoints : IEndpointModule
             .WithSummary("Owner or content editor, draft only: saves content (rowVersion required); returns the canonicalized JSON. Validation errors carry JSON paths.");
     }
 
-    /// <summary>Views of nodes of one version; a signed version's contents are cached by version stamp (only tampering changes them).</summary>
+    /// <summary>
+    /// Views of nodes of one version; a signed version's contents are cached by row version (only tampering and the
+    /// derived-content refresher change them).
+    /// </summary>
     private static async Task<List<NodeContentView>> ReadAsync(
-        NodeContents contents, HybridCache cache, int versionId, VersionStatus status, long stamp, List<int> nodeIds, ContentFormat format,
-        CancellationToken ct)
+        NodeContents contents, HybridCache cache, int versionId, VersionStatus status, List<(int NodeId, byte[] RowVersion)> rows, List<int> nodeIds,
+        ContentFormat format, CancellationToken ct)
     {
         if (status != VersionStatus.Signed)
         {
             return await contents.ViewsAsync(nodeIds, format, ct);
         }
 
+        var rowVersions = rows.ToDictionary(r => r.NodeId, r => r.RowVersion);
         var views = new List<NodeContentView>(nodeIds.Count);
-        foreach (var nodeId in nodeIds)
+        foreach (var nodeId in nodeIds.Where(rowVersions.ContainsKey))
         {
-            var key = string.Create(CultureInfo.InvariantCulture, $"content:{versionId}:{stamp}:{nodeId}:{format}");
+            var key = string.Create(CultureInfo.InvariantCulture, $"content:{versionId}:{nodeId}:{Convert.ToHexString(rowVersions[nodeId])}:{format}");
             var cached = await cache.GetOrCreateAsync(key, async token => (await contents.ViewsAsync([nodeId], format, token)).SingleOrDefault(), cancellationToken: ct);
             if (cached is not null)
             {
@@ -155,6 +166,13 @@ internal sealed class ContentEndpoints : IEndpointModule
         }
 
         return views;
+    }
+
+    /// <summary>The content row versions of the nodes, in the order of <paramref name="nodeIds"/> (nodes without content left out).</summary>
+    private static async Task<List<(int NodeId, byte[] RowVersion)>> RowVersionsAsync(DocHubDbContext db, List<int> nodeIds, CancellationToken ct)
+    {
+        var found = await db.NodeContents.AsNoTracking().Where(c => nodeIds.Contains(c.NodeId)).Select(c => new { c.NodeId, c.RowVersion }).ToDictionaryAsync(c => c.NodeId, c => c.RowVersion, ct);
+        return nodeIds.Where(found.ContainsKey).Select(id => (id, found[id])).ToList();
     }
 
     private static async Task<(int VersionId, int DocumentId, VersionStatus Status, Guid LogicalNodeId)> NodeAsync(DocHubDbContext db, int nodeId, CancellationToken ct)

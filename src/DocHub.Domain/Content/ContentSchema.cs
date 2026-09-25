@@ -144,9 +144,20 @@ public static partial class ContentSchema
 
     public static bool IsColor(string value) => ColorPattern().IsMatch(value);
 
+    /// <summary>
+    /// JSON with escaped lone surrogates (<c>"\ud800"</c> — valid for <c>ISJSON</c>, but not readable as .NET strings) replaced
+    /// by U+FFFD. Used on stored JSON a support script may have written, before rendering or returning it.
+    /// </summary>
+    public static string RepairLoneSurrogates(string json) => LoneSurrogate().Replace(json, @"\uFFFD");
+
     /// <summary>http, https and mailto only; no whitespace or control characters.</summary>
     public static bool IsSafeHref(string value) =>
         HrefPattern().IsMatch(value) && !value.Any(char.IsControl);
+
+    // An escaped high surrogate not followed by an escaped low one, or a low one not preceded by a high one; the
+    // lookbehind skips "\\ud800" (an escaped backslash followed by text).
+    [GeneratedRegex(@"(?<=(?<!\\)(?:\\\\)*)(?:\\u[dD][89aAbB][0-9a-fA-F]{2}(?!\\u[dD][c-fC-F][0-9a-fA-F]{2})|(?<!\\u[dD][89aAbB][0-9a-fA-F]{2})\\u[dD][c-fC-F][0-9a-fA-F]{2})")]
+    private static partial Regex LoneSurrogate();
 
     [GeneratedRegex(@"^#[0-9A-Fa-f]{6}\z")]
     private static partial Regex ColorPattern();

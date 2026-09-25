@@ -27,6 +27,13 @@ public sealed class ContentDocument(IEnumerable<string> styleIds, IReadOnlySet<s
             list.Add(message);
         }
 
+        // Duplicate keys and strings .NET can't read (lone surrogates) first: the schema checks below read one value per key.
+        WellFormed(root, "", Add);
+        if (errors.Count > 0)
+        {
+            return errors.ToDictionary(e => e.Key, e => e.Value.ToArray(), StringComparer.Ordinal);
+        }
+
         if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String || type.GetString() != "doc")
         {
             Add("", "The content must be a document: { \"type\": \"doc\", \"content\": [ … ] }.");
@@ -37,6 +44,62 @@ public sealed class ContentDocument(IEnumerable<string> styleIds, IReadOnlySet<s
         }
 
         return errors.ToDictionary(e => e.Key, e => e.Value.ToArray(), StringComparer.Ordinal);
+    }
+
+    private static void WellFormed(JsonElement element, string path, Action<string, string> add)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                var names = new HashSet<string>(StringComparer.Ordinal);
+                var index = 0;
+                foreach (var property in element.EnumerateObject())
+                {
+                    string name;
+                    try
+                    {
+                        name = property.Name;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        add(path, $"Property {index} has a name with invalid characters (a lone surrogate).");
+                        continue;
+                    }
+                    finally
+                    {
+                        index++;
+                    }
+
+                    if (!names.Add(name))
+                    {
+                        add(Join(path, name), "Duplicate property.");
+                        continue;
+                    }
+
+                    WellFormed(property.Value, Join(path, name), add);
+                }
+
+                break;
+            case JsonValueKind.Array:
+                var i = 0;
+                foreach (var item in element.EnumerateArray())
+                {
+                    WellFormed(item, $"{path}[{i++}]", add);
+                }
+
+                break;
+            case JsonValueKind.String:
+                try
+                {
+                    _ = element.GetString();
+                }
+                catch (InvalidOperationException)
+                {
+                    add(path, "The text contains invalid characters (a lone surrogate).");
+                }
+
+                break;
+        }
     }
 
     private void ValidateNode(JsonElement node, string path, int depth, Action<string, string> add)

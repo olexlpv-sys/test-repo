@@ -23,21 +23,18 @@ public static partial class ContentHtmlRenderer
     public static RenderedContent Render(string contentJson)
     {
         ArgumentNullException.ThrowIfNull(contentJson);
-        JsonDocument document;
+        var hash = CanonicalJson.Hash(contentJson);
         try
         {
-            document = JsonDocument.Parse(contentJson, new JsonDocumentOptions { MaxDepth = CanonicalJson.MaxDepth });
-        }
-        catch (JsonException)
-        {
-            return new RenderedContent("", "", CanonicalJson.Hash(contentJson));
-        }
-
-        using (document)
-        {
+            // Lone surrogates (only a script can store them) become U+FFFD so every string is readable.
+            using var document = JsonDocument.Parse(ContentSchema.RepairLoneSurrogates(contentJson), new JsonDocumentOptions { MaxDepth = CanonicalJson.MaxDepth });
             var html = new StringBuilder();
             RenderNode(html, document.RootElement, 0);
-            return new RenderedContent(html.ToString(), PlainText(document.RootElement), CanonicalJson.Hash(contentJson));
+            return new RenderedContent(html.ToString(), PlainText(document.RootElement), hash);
+        }
+        catch (Exception e) when (e is JsonException or InvalidOperationException)
+        {
+            return new RenderedContent("", "", hash);
         }
     }
 

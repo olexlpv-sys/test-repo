@@ -45,12 +45,21 @@ public sealed class ContentEndpointsTests(DocHubApiFactory factory) : IClassFixt
     [InlineData("""{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"textStyle","attrs":{"fontSize":1000}}]}]}]}""", "contentJson.content[0].content[0].marks[0].attrs.fontSize")]
     [InlineData("""{"type":"doc","content":[{"type":"paragraph","attrs":{"styleId":"NoSuchStyle"}}]}""", "contentJson.content[0].attrs.styleId")]
     [InlineData("""[1,2,3]""", "contentJson")]
+    [InlineData("""{"type":"doc","content":[{"type":"bogus","type":"paragraph"}]}""", "contentJson.content[0].type")]
+    [InlineData("""{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"\ud800"}]}]}""", "contentJson.content[0].content[0].text")]
     public async Task Invalid_content_is_rejected_with_the_json_path(string json, string path)
     {
         var (_, draft) = await _arrange.CreateAsync();
         var node = await AddNodeAsync(draft);
-        var problem = await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Put, $"/api/nodes/{node}/content",
-            new { contentJson = JsonNode.Parse(json), rowVersion = await ContentRowVersionAsync(node) }, HttpStatusCode.BadRequest);
+        // Sent as raw text: the test's own JSON tools would reject duplicate keys and lone surrogates.
+        var body = $$"""{"contentJson":{{json}},"rowVersion":"{{await ContentRowVersionAsync(node)}}"}""";
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-User-Id", TestUsers.Alice.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        using var response = await client.PutAsync(new Uri($"/api/nodes/{node}/content", UriKind.Relative),
+            new StringContent(body, System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var problem = document.RootElement;
         Assert.Equal("validation-failed", problem.GetProperty("type").GetString());
         Assert.True(problem.GetProperty("errors").TryGetProperty(path, out _), problem.GetRawText());
     }
@@ -239,7 +248,12 @@ public sealed class ContentEndpointsTests(DocHubApiFactory factory) : IClassFixt
             client.DefaultRequestHeaders.IfNoneMatch.Add(etag);
             using var notModified = await client.GetAsync(new Uri($"/api/nodes/{nodes[0]}/content", UriKind.Relative), TestContext.Current.CancellationToken);
             Assert.Equal(HttpStatusCode.NotModified, notModified.StatusCode);
-            using var batchNotModified = await client.GetAsync(new Uri($"/api/versions/{v1}/content?nodeIds={nodes[0]},{nodes[1]}", UriKind.Relative), TestContext.Current.CancellationToken);
+            var batchUri = new Uri($"/api/versions/{v1}/content?nodeIds={nodes[0]},{nodes[1]}", UriKind.Relative);
+            var (_, _, batchFirst) = await ApiClient.SendAsync(factory, TestUsers.Bob, HttpMethod.Get, batchUri.ToString(), null);
+            using var batchRequest = new HttpRequestMessage(HttpMethod.Get, batchUri);
+            batchRequest.Headers.IfNoneMatch.Add(batchFirst.Headers.ETag!);
+            batchFirst.Dispose();
+            using var batchNotModified = await client.SendAsync(batchRequest, TestContext.Current.CancellationToken);
             Assert.Equal(HttpStatusCode.NotModified, batchNotModified.StatusCode);
             await _arrange.EditContentBySqlAsync(nodes[1]);
             using var changed = await client.GetAsync(new Uri($"/api/nodes/{nodes[0]}/content", UriKind.Relative), TestContext.Current.CancellationToken);
@@ -256,6 +270,58 @@ public sealed class ContentEndpointsTests(DocHubApiFactory factory) : IClassFixt
             await ApiClient.ExpectAsync(factory, user, HttpMethod.Get, $"/api/nodes/{nodes[0]}/content", null, expected);
             await ApiClient.ExpectAsync(factory, user, HttpMethod.Get, $"/api/versions/{v1}/content?nodeIds={nodes[0]}", null, expected);
         }
+    }
+
+    [Fact]
+    public async Task A_refresh_changes_the_etag_so_editors_never_revalidate_to_a_stale_row_version()
+    {
+        var (_, draft) = await _arrange.CreateAsync();
+        var node = await AddNodeAsync(draft);
+        await SaveAsync(node, Paragraph);
+        await using (var dbo = await SqlSession.OpenAsync(factory.AdminConnectionString))
+        {
+            await dbo.ExecuteAsync("UPDATE app.NodeContent SET ContentJson = @j WHERE NodeId = @n;", ("@j", Paragraph.Replace("TEXT", "script", StringComparison.Ordinal)), ("@n", node));
+        }
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-User-Id", TestUsers.Alice.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        using var before = await client.GetAsync(new Uri($"/api/nodes/{node}/content", UriKind.Relative), TestContext.Current.CancellationToken);
+        var batchUri = new Uri($"/api/versions/{draft}/content?nodeIds={node}", UriKind.Relative);
+        using var batchBefore = await client.GetAsync(batchUri, TestContext.Current.CancellationToken);
+        await RefreshUntilCleanAsync(node);
+
+        // Same version stamp (the refresh isn't audited), but a new row version: the old ETags no longer match.
+        using var single = new HttpRequestMessage(HttpMethod.Get, new Uri($"/api/nodes/{node}/content", UriKind.Relative));
+        single.Headers.IfNoneMatch.Add(before.Headers.ETag!);
+        using var after = await client.SendAsync(single, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, after.StatusCode);
+        using var batch = new HttpRequestMessage(HttpMethod.Get, batchUri);
+        batch.Headers.IfNoneMatch.Add(batchBefore.Headers.ETag!);
+        using var batchAfter = await client.SendAsync(batch, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, batchAfter.StatusCode);
+
+        using var body = JsonDocument.Parse(await after.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        await SaveAsync(node, Paragraph, body.RootElement.GetProperty("rowVersion").GetString());
+    }
+
+    [Fact]
+    public async Task Script_stored_lone_surrogates_neither_break_reads_nor_stop_the_refresher()
+    {
+        var (_, draft) = await _arrange.CreateAsync();
+        var broken = await AddNodeAsync(draft);
+        var later = await AddNodeAsync(draft);
+        await using (var dbo = await SqlSession.OpenAsync(factory.AdminConnectionString))
+        {
+            await dbo.ExecuteAsync("UPDATE app.NodeContent SET ContentJson = @j WHERE NodeId = @n;", ("@j", Paragraph.Replace("TEXT", "a\\ud800b", StringComparison.Ordinal)), ("@n", broken));
+            await dbo.ExecuteAsync("UPDATE app.NodeContent SET ContentJson = @j WHERE NodeId = @n;", ("@j", Paragraph.Replace("TEXT", "fine", StringComparison.Ordinal)), ("@n", later));
+        }
+
+        Assert.Equal("<p>a\uFFFDb</p>", (await ReadAsync(broken, "both")).GetProperty("contentHtml").GetString());
+        var batch = await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, $"/api/versions/{draft}/content?nodeIds={broken},{later}&format=both", null, HttpStatusCode.OK);
+        Assert.Equal("a\uFFFDb", batch[0].GetProperty("contentJson").GetProperty("content")[0].GetProperty("content")[0].GetProperty("text").GetString());
+        await RefreshUntilCleanAsync(broken);
+        await RefreshUntilCleanAsync(later);
+        Assert.Equal("<p>fine</p>", (await ReadAsync(later, "html")).GetProperty("contentHtml").GetString());
     }
 
     [Fact]
