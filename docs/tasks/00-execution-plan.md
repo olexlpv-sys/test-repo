@@ -16,18 +16,18 @@ Source requirements: [requirements/](../requirements/README.md) · Decisions: [a
 | [T08](T08-document-tree-api.md) | Document tree API | T05, T07 | M · 2–3 d | M1 Core API |
 | [T09](T09-node-content-api.md) | Word-like styled content API (JSON schema) | T05, T08 | L · 3–4 d | M1 Core API |
 | [T10](T10-permissions.md) | Permissions (Owner/Editor/Approver) | T07 | M · 2 d | M2 Advanced API |
-| [T11](T11-change-history-api.md) | Change history API + diff engine | T03, T09 | M · 2–3 d | M2 Advanced API |
+| [T11](T11-change-history-api.md) | Change history API + diff engine + attributed diff | T03, T09 | L · 3.5–4 d | M2 Advanced API |
 | [T12](T12-version-comparison-api.md) | Version comparison API | T09 (+ diff engine) | M · 2 d | M2 Advanced API |
 | [T13](T13-comments-api.md) | Comments API | T07, T10 | S–M · 1.5 d | M2 Advanced API |
 | [T14](T14-web-shell-folders-documents.md) | Web: shell, folder tree, document list | T05, T06, T07 | M · 2–3 d | M3 Web UI |
-| [T15](T15-web-document-editor.md) | Web: document form (tree, Word-like editor, history, signing) | T08, T09, T10, T11, T14 | XL · 6–7 d | M3 Web UI |
+| [T15](T15-web-document-editor.md) | Web: section editor with inline per-section history & track changes, tree, signing | T08, T09, T10, T11, T14 | XL · 7–8 d | M3 Web UI |
 | [T16](T16-web-compare-comments-permissions.md) | Web: compare, comments, permissions | T10, T12, T13, T15 | M–L · 3–4 d | M3 Web UI |
 | [T17](T17-web-admin-tab.md) | Web: Admin tab (folders, node types, styles, users, audit) | T05, T11, T14 | M · 2–2.5 d | M3 Web UI |
 
 | [T18](T18-search.md) | Search: full-text stored procedures, API, UI | T07, T09, T14, T15 | M · 2–2.5 d | M3 Web UI |
 | [T19](T19-load-and-performance.md) | Load & performance harness + tuning | T07–T09 (harness), T10–T13, T18 (full mix) | L · 4 d | M4 Performance |
 
-**Total effort ≈ 49–55 developer-days.** Load profile: [12-load-and-performance](../requirements/12-load-and-performance.md).
+**Total effort ≈ 51–58 developer-days.** Load profile: [12-load-and-performance](../requirements/12-load-and-performance.md).
 
 ## 2. Dependency graph
 

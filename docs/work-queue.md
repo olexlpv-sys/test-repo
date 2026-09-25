@@ -32,7 +32,7 @@ Status: `todo` · `in-progress` · `in-review` · `done` · `blocked`
 | Q13 | [T13](tasks/T13-comments-api.md) Comments | CODE + TEST | Q07, Q09 | B | todo | – |
 | Q14 | [T11](tasks/T11-change-history-api.md) History + diff engine | CODE + TEST | Q03, Q11 | A | todo | – |
 | Q15 | [T12](tasks/T12-version-comparison-api.md) Compare | CODE + TEST | Q11, Q14 (diff engine) | B | todo | – |
-| Q16 | [T15](tasks/T15-web-document-editor.md) Web document form | CODE + TEST | Q08, Q09, Q10, Q11, Q14 | C | todo | – |
+| Q16 | [T15](tasks/T15-web-document-editor.md) Web section editor + inline history | CODE + TEST | Q08, Q09, Q10, Q11, Q14 | C | todo | – |
 | Q17 | [T16](tasks/T16-web-compare-comments-permissions.md) Web compare/comments/permissions | CODE + TEST | Q09, Q13, Q15, Q16 | C | todo | – |
 | Q18 | [T18](tasks/T18-search.md) Search (SPs, API, UI) | DB + CODE + TEST | Q11, Q16 | B | todo | – |
 | Q19 | [T19](tasks/T19-load-and-performance.md) Load & performance harness + tuning | TEST + CODE | Q11 (harness), Q13, Q18 (full mix) | B | todo | – |

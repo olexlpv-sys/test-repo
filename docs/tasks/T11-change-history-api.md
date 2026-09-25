@@ -5,7 +5,7 @@
 | **Depends on** | T03, T09 |
 | **Blocks** | T15 (history panel) |
 | **Can run in parallel with** | T12 (shares the diff engine — agree on who builds it first, see §3) |
-| **Size** | M (2–3 days) |
+| **Size** | L (3.5–4 days) |
 | **Requirements** | FR-H1, FR-H3, FR-H4, FR-H5 |
 | **Read first** (nothing else) | [04-change-tracking](../requirements/04-change-tracking.md) · [content-format](../content-format.md) · [architecture](../architecture.md) (only sections linked in the text) · [06-permissions](../requirements/06-permissions.md) (FR-P5) · [process](../process.md) |
 
@@ -17,6 +17,9 @@ Read `audit.ChangeLog` (written by triggers — T03) and present a human-readabl
 |---|---|---|
 | GET | `/api/documents/{id}/nodes/{logicalNodeId}/history?page&pageSize` | history of one node **across all versions**, newest first |
 | GET | `/api/history/entries/{entryId}/diff` | diff between `OldValues` and `NewValues` of a content entry |
+| GET | `/api/history/entries/{entryId}/content` | the node's content (`contentJson` + `contentHtml`) and header (title, type) **as of** that entry — for "View" and "Restore this text" in the editor (T15) |
+| GET | `/api/versions/{versionId}/change-summary?since=latestSigned|{versionId}|{isoDate}` | per `logicalNodeId` of the version: `{ changeCount, lastChangedAt, lastChangedBy, hasScriptChange, hasChangeAfterSigning, structural: [Added, Moved, Renamed, TypeChanged] }` + removed nodes since the baseline — **one call for all section badges** |
+| GET | `/api/documents/{id}/nodes/{logicalNodeId}/changes?since=…&until=current|{entryId}` | **attributed diff** for track changes: same block/ops format as `/diff`, each `insert`/`delete`/`format` op carrying `{ entryId, userId, displayName, source, ticket, changedAt }` |
 | GET | `/api/documents/{id}/history?versionId?&from?&to?&userId?&source?&page&pageSize` | document-wide activity feed (nodes, content, versions, permissions, comments) |
 | GET | `/api/admin/audit?table&operation&source&userId&dbLogin&ticket&from&to&page&pageSize` | **admin only**: raw `audit.ChangeLog` rows (all tables incl. folders, node types, styles, users) for the Admin tab (FR-UI3) |
 
@@ -55,6 +58,9 @@ For `source = "Script"`, `user` is `null` (or the acting user from `usp_SetSuppo
 6. Read access: anyone who can view the document (T10).
 7. Performance: history for one node uses the `(LogicalNodeId, ChangedAt)` index; filter by `DocumentId` too.
 
+## 2a. Attributed diff (track changes)
+Built by **folding consecutive content states** from `audit.ChangeLog` (baseline → each `ContentChanged` entry → target). Each step is diffed and attributed to that entry's user. Runs are carried forward: text inserted by Alice and later deleted by Bob is shown neither as an insert nor as a delete; text whose formatting Bob changed keeps Alice as the author of the text and records Bob for the format change. The baseline state comes from the baseline version's `ContentJson` (for a version) or from the last entry before the date. The result is cached per `(logicalNodeId, baselineKey, lastEntryId)` (NFR-L9). Budget: p95 ≤ 1.5 s for a node with 200 changes.
+
 ## 3. Diff engine (shared with T12)
 `IContentDiffService` in `DocHub.Infrastructure`:
 - `ContentBlockReader` (Content Schema v1 JSON → `IReadOnlyList<Block>`: paragraph/heading/list-item/table→rows→cells, each with text runs + marks + block attributes);
@@ -65,6 +71,9 @@ Unit tests with fixtures in `tests/DocHub.Domain.Tests/DiffFixtures/`. Whoever s
 ## Acceptance criteria
 - [ ] Edit content of a node 3 times in v1-draft, sign, create draft, edit once more → node history shows 4 `ContentChanged` + `VersionSigned` context + 1 `CopiedToNewDraft`, in the correct order, with correct users.
 - [ ] Rename + change type in one request → one grouped entry.
+- [ ] `change-summary` since v1 returns correct counts for changed, unchanged, added, moved and removed nodes in one call.
+- [ ] Attributed diff: Alice inserts a sentence, Bob changes one word in it, and a script fixes a typo. The result attributes each run correctly (Alice / Bob / Script + ticket), and text added and then removed within the range doesn't appear.
+- [ ] `entries/{id}/content` returns exactly the historical content and title.
 - [ ] A direct SQL update (no session context) appears with `source = Script` and `dbLogin`; with `usp_SetSupportContext` it shows `ticket` and `reason`.
 - [ ] Script edit of a Signed version appears with `afterSigning = true`.
 - [ ] Diff of a table where one cell changed marks only that cell.

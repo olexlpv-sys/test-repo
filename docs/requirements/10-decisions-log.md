@@ -16,6 +16,7 @@ Every answer from the product owner is recorded here; the affected requirement f
 | A-2 | A draft can be discarded only when a signed version exists; for a never-signed document discard is rejected (`409 only-version`) and the owner deletes the document instead. |
 | A-3 | Editing a draft makes earlier approver signatures outdated; approvers must sign again. |
 | A-4 | Admins may move deleted documents (to be able to empty and delete folders). |
+| A-5 | A section showing track changes is read-only; the user turns the view off to edit (no editing inside track changes / accept-reject in this release). |
 
 
 ## Resolved
@@ -35,4 +36,5 @@ Every answer from the product owner is recorded here; the affected requirement f
 | Q11 | Owner as Approver of own document? | **No**; a test-mode user dropdown lets one person act as different users |
 | Q12 | Node-level Editor grant includes descendants? | **Yes** |
 | Q13 | Search technique | **Full-text (word/prefix)** — forced by the load profile (NFR-L7) |
+| Q15 | Where is change history shown? | **Inside the editor, per section/node**: inline timeline + track changes with authors |
 | Q14 | Load profile | 50 k readers, 500 editors/owners, 10 k documents, 100 folders, **≤ 3 s at 20 req/s** ([12-load-and-performance](12-load-and-performance.md)) |
