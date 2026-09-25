@@ -1,8 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Shared test infrastructure: SQL Server container fixture, DACPAC deployment, builders (T02/T04). -->
+  <!-- Shared test infrastructure: SQL Server container fixture, DACPAC deployment, test data helpers. -->
   <ItemGroup>
     <PackageReference Include="xunit.v3.extensibility.core" />
+    <PackageReference Include="Testcontainers.MsSql" />
+    <PackageReference Include="Microsoft.SqlServer.DacFx" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Builds the SQL Database Project first so its DACPAC can be deployed by the tests. -->
+    <ProjectReference Include="..\..\database\DocHub.Database\DocHub.Database.sqlproj" ReferenceOutputAssembly="false" Private="false" />
+    <None Include="..\..\database\DocHub.Database\bin\$(Configuration)\DocHub.Database.dacpac" Link="DocHub.Database.dacpac" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
 </Project>

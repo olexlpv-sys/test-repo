@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "microsoft.sqlpackage": {
+      "version": "170.5.96",
+      "commands": [
+        "sqlpackage"
+      ],
+      "rollForward": false
+    }
+  }
+}

@@ -14,4 +14,4 @@
 - Run API: `dotnet run --project src/DocHub.Api` → http://localhost:5080 (`/health`, `/openapi/v1.json`, `/scalar`)
 - Local SQL Server: `cp .env.example .env && docker compose up -d`
 - Package versions live only in `Directory.Packages.props`.
-- DB publish: added by Q02/T02.
+- DB: build `dotnet build database/DocHub.Database.slnx`; publish with `dotnet tool restore && dotnet sqlpackage /Action:Publish …` (see `database/README.md`). DB tests need Docker (start the daemon with `dockerd &` in cloud sessions if `docker ps` fails).

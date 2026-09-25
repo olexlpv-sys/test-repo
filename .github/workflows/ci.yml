@@ -42,3 +42,60 @@ jobs:
           name: test-results
           path: TestResults
           if-no-files-found: ignore
+
+  database:
+    name: Database build, publish & drift check
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      SA_PASSWORD: CiOnly_Str0ng!Passw0rd
+    services:
+      sql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: CiOnly_Str0ng!Passw0rd
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'CiOnly_Str0ng!Passw0rd' -C -Q 'SELECT 1' || exit 1"
+          --health-interval 10s --health-timeout 5s --health-retries 12 --health-start-period 20s
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Build DACPAC
+        run: dotnet build database/DocHub.Database.slnx --configuration Release
+
+      - name: Upload DACPAC
+        uses: actions/upload-artifact@v4
+        with:
+          name: dacpac
+          path: database/DocHub.Database/bin/Release/DocHub.Database.dacpac
+          if-no-files-found: error
+
+      - name: Publish to SQL Server
+        run: >-
+          dotnet sqlpackage /Action:Publish
+          /SourceFile:database/DocHub.Database/bin/Release/DocHub.Database.dacpac
+          /TargetConnectionString:"Server=localhost,1433;Database=DocHub;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
+
+      - name: Drift check (deploy report must be empty)
+        run: |
+          dotnet sqlpackage /Action:DeployReport \
+            /SourceFile:database/DocHub.Database/bin/Release/DocHub.Database.dacpac \
+            /TargetConnectionString:"Server=localhost,1433;Database=DocHub;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True" \
+            /OutputPath:deploy-report.xml
+          cat deploy-report.xml
+          if grep -q "<Operation" deploy-report.xml; then
+            echo "::error::Database differs from the DACPAC after publishing (drift)."
+            exit 1
+          fi
+
