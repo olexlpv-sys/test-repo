@@ -16,7 +16,7 @@ Status: `todo` · `in-progress` · `in-review` · `done` · `blocked`
 
 | # | Item | Artifact | Depends on | Lane | Status | Review |
 |---|---|---|---|---|---|---|
-| Q00 | Review requirements & task specs (this doc set) | REQ + SPEC | — | – | in-review | round 1: NOT GREEN (19) → fixed |
+| Q00 | Review requirements & task specs (this doc set) | REQ + SPEC | — | – | done | **GREEN** after 7 rounds |
 | Q01 | [T01](tasks/T01-api-solution-setup.md) API solution | CODE | Q00 | A | todo | – |
 | Q02 | [T02](tasks/T02-database-project-and-schema.md) DB project & schema | DB + TEST | Q01 | A | todo | – |
 | Q03 | [T03](tasks/T03-database-change-tracking.md) Audit triggers | DB + TEST | Q02 | A | todo | – |
@@ -42,4 +42,4 @@ Status: `todo` · `in-progress` · `in-review` · `done` · `blocked`
 Lanes: **A** backend core / DB · **B** backend features · **C** frontend.
 
 ## Handoff notes
-- **Q00** — Initial doc set reviewed by a fresh-context reviewer against process §4 (REQ/SPEC rule); valid findings fixed in the same commit. Requirements split per area; process, testing strategy and this queue added.
+- **Q00** — Doc set reviewed in 7 fresh-context rounds (process §4, REQ/SPEC rule): 19 → 12 → 11 → 7 → 7 → 1 → 0 valid findings, all fixed. Product input added during review (data access via EF + SPs, load profile, in-editor history, PDF export) was reviewed in the same loop. Next: Q01.
