@@ -174,6 +174,36 @@ public sealed class ContentDocumentTests
         Assert.NotEqual(CanonicalJson.Hash(json.Replace("a", "c", StringComparison.Ordinal)), rendered.ContentHash);
     }
 
+    [Theory]
+    [InlineData("\"a\\ud800b\"", "\"a\\uFFFDb\"")]
+    [InlineData("\"a\\udc00b\"", "\"a\\uFFFDb\"")]
+    [InlineData("\"\\ud83d\\ude00\"", "\"\\ud83d\\ude00\"")]
+    [InlineData("\"x\\\\ud800\\udc00y\"", "\"x\\\\ud800\\uFFFDy\"")]
+    [InlineData("\"\\\\ud800\"", "\"\\\\ud800\"")]
+    [InlineData("\"\\ud800\\\\udc00\"", "\"\\uFFFD\\\\udc00\"")]
+    [InlineData("{\"k\\ud800\":\"v\"}", "{\"k\\uFFFD\":\"v\"}")]
+    public void Lone_surrogates_raw_or_escaped_are_repaired_and_everything_else_kept(string json, string expected)
+    {
+        Assert.Equal(expected, ContentSchema.RepairLoneSurrogates(json));
+        using var parsed = JsonDocument.Parse(ContentSchema.RepairLoneSurrogates(json));
+        Assert.NotNull(JsonSerializer.Serialize(parsed.RootElement));
+    }
+
+    [Fact]
+    public void Raw_lone_surrogates_render_and_hash_losslessly()
+    {
+        // Built at run time: lone surrogates don't survive in attribute arguments.
+        Assert.Equal("\"x\uFFFDy\"", ContentSchema.RepairLoneSurrogates("\"x" + (char)0xD800 + "y\""));
+        Assert.Equal("\"x\uFFFD\uFFFDy\"", ContentSchema.RepairLoneSurrogates("\"x" + (char)0xDC00 + (char)0xD800 + "y\""));
+        Assert.Equal("\"\uD83D\uDE00\"", ContentSchema.RepairLoneSurrogates("\"\uD83D\uDE00\""));
+
+        var json = "{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"x" + (char)0xD800 + "y\"}]}]}";
+        Assert.Equal("<p>x\uFFFDy</p>", ContentHtmlRenderer.Render(json).Html);
+        // The hash keeps the raw code unit: a script replacing it by U+FFFD changes the hash.
+        Assert.NotEqual(CanonicalJson.Hash(json.Replace((char)0xD800, '\uFFFD')), CanonicalJson.Hash(json));
+        Assert.Equal(CanonicalJson.Hash(json), CanonicalJson.Hash(json));
+    }
+
     [Fact]
     public void Unparseable_or_absurdly_deep_script_content_renders_empty()
     {

@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace DocHub.Domain.Content;
@@ -145,19 +147,75 @@ public static partial class ContentSchema
     public static bool IsColor(string value) => ColorPattern().IsMatch(value);
 
     /// <summary>
-    /// JSON with escaped lone surrogates (<c>"\ud800"</c> — valid for <c>ISJSON</c>, but not readable as .NET strings) replaced
-    /// by U+FFFD. Used on stored JSON a support script may have written, before rendering or returning it.
+    /// Stored JSON a support script may have written, made readable: lone surrogates — raw UTF-16 code units or escaped
+    /// (<c>"\ud800"</c>, which <c>ISJSON</c> accepts) — become U+FFFD; everything else is kept as is. Used before rendering
+    /// or returning stored content, never before hashing it.
     /// </summary>
-    public static string RepairLoneSurrogates(string json) => LoneSurrogate().Replace(json, @"\uFFFD");
+    public static string RepairLoneSurrogates(string json)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+        StringBuilder? repaired = null;
+        var inString = false;
+        for (var i = 0; i < json.Length; i++)
+        {
+            var c = json[i];
+            if (char.IsSurrogate(c))
+            {
+                if (char.IsHighSurrogate(c) && i + 1 < json.Length && char.IsLowSurrogate(json[i + 1]))
+                {
+                    repaired?.Append(c).Append(json[i + 1]);
+                    i++;
+                    continue;
+                }
+
+                repaired ??= new StringBuilder(json, 0, i, json.Length);
+                repaired.Append('\uFFFD');
+                continue;
+            }
+
+            if (c == '"')
+            {
+                inString = !inString;
+            }
+            else if (c == '\\' && inString && i + 1 < json.Length)
+            {
+                // An escape: \uXXXX (possibly one half of a surrogate pair) or a two-character escape.
+                if (json[i + 1] == 'u' && EscapedUnit(json, i) is { } unit && char.IsSurrogate(unit))
+                {
+                    if (char.IsHighSurrogate(unit) && EscapedUnit(json, i + 6) is { } low && char.IsLowSurrogate(low))
+                    {
+                        repaired?.Append(json, i, 12);
+                        i += 11;
+                        continue;
+                    }
+
+                    repaired ??= new StringBuilder(json, 0, i, json.Length);
+                    repaired.Append("\\uFFFD");
+                    i += 5;
+                    continue;
+                }
+
+                repaired?.Append(c).Append(json[i + 1]);
+                i++;
+                continue;
+            }
+
+            repaired?.Append(c);
+        }
+
+        return repaired?.ToString() ?? json;
+    }
+
+    /// <summary>The code unit of a <c>\uXXXX</c> escape at <paramref name="index"/>, if there is one.</summary>
+    private static char? EscapedUnit(string json, int index) =>
+        index + 5 < json.Length && json[index] == '\\' && json[index + 1] == 'u'
+            && ushort.TryParse(json.AsSpan(index + 2, 4), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var unit)
+            ? (char)unit
+            : null;
 
     /// <summary>http, https and mailto only; no whitespace or control characters.</summary>
     public static bool IsSafeHref(string value) =>
         HrefPattern().IsMatch(value) && !value.Any(char.IsControl);
-
-    // An escaped high surrogate not followed by an escaped low one, or a low one not preceded by a high one; the
-    // lookbehind skips "\\ud800" (an escaped backslash followed by text).
-    [GeneratedRegex(@"(?<=(?<!\\)(?:\\\\)*)(?:\\u[dD][89aAbB][0-9a-fA-F]{2}(?!\\u[dD][c-fC-F][0-9a-fA-F]{2})|(?<!\\u[dD][89aAbB][0-9a-fA-F]{2})\\u[dD][c-fC-F][0-9a-fA-F]{2})")]
-    private static partial Regex LoneSurrogate();
 
     [GeneratedRegex(@"^#[0-9A-Fa-f]{6}\z")]
     private static partial Regex ColorPattern();

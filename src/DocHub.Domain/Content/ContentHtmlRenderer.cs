@@ -32,7 +32,7 @@ public static partial class ContentHtmlRenderer
             RenderNode(html, document.RootElement, 0);
             return new RenderedContent(html.ToString(), PlainText(document.RootElement), hash);
         }
-        catch (Exception e) when (e is JsonException or InvalidOperationException)
+        catch (Exception e) when (e is JsonException or InvalidOperationException or ArgumentException)
         {
             return new RenderedContent("", "", hash);
         }

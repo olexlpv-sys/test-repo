@@ -199,8 +199,8 @@ internal sealed class ContentStyleEndpoints : IEndpointModule
     {
         public ContentStyleResponse ToResponse()
         {
-            // PropertiesJson is valid JSON (CHECK constraint), but a support script may store a non-object.
-            using var properties = JsonDocument.Parse(PropertiesJson);
+            // PropertiesJson is valid JSON (CHECK constraint), but a support script may store a non-object or lone surrogates.
+            using var properties = JsonDocument.Parse(Domain.Content.ContentSchema.RepairLoneSurrogates(PropertiesJson), new JsonDocumentOptions { MaxDepth = Domain.Content.CanonicalJson.MaxDepth });
             return new ContentStyleResponse(Id, StyleId, Name, Kind, BasedOnStyleId, properties.RootElement.Clone(), IsBuiltIn, IsActive, RowVersion, UsageCount);
         }
     }

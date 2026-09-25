@@ -205,7 +205,7 @@ public sealed partial class StyleProperties(IEnumerable<string> fontFamilies)
     {
         try
         {
-            var document = JsonDocument.Parse(json);
+            var document = JsonDocument.Parse(Domain.Content.ContentSchema.RepairLoneSurrogates(json), new JsonDocumentOptions { MaxDepth = Domain.Content.CanonicalJson.MaxDepth });
             if (document.RootElement.ValueKind == JsonValueKind.Object)
             {
                 return document;

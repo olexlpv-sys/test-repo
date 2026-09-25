@@ -28,7 +28,8 @@ public static class CanonicalJson
 
     /// <summary>
     /// SHA-256 of the canonical UTF-8 serialization. Content that isn't parseable within <see cref="MaxDepth"/> or holds
-    /// escaped lone surrogates (only a script can store either) is hashed as raw text instead — deterministic, and any change still changes the hash.
+    /// lone surrogates, raw or escaped (only a script can store either), is hashed as its raw UTF-16 code units instead —
+    /// deterministic and lossless, so any change still changes the hash.
     /// </summary>
     public static byte[] Hash(string json)
     {
@@ -37,9 +38,9 @@ public static class CanonicalJson
         {
             return SHA256.HashData(Encoding.UTF8.GetBytes(Serialize(json)));
         }
-        catch (Exception e) when (e is JsonException or InvalidOperationException) // too deep, or strings .NET can't read (lone surrogates)
+        catch (Exception e) when (e is JsonException or InvalidOperationException or ArgumentException)
         {
-            return SHA256.HashData(Encoding.UTF8.GetBytes("raw:" + json));
+            return SHA256.HashData(System.Runtime.InteropServices.MemoryMarshal.AsBytes(("raw:" + json).AsSpan()));
         }
     }
 

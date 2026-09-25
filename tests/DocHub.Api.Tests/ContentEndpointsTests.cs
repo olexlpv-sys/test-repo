@@ -324,6 +324,33 @@ public sealed class ContentEndpointsTests(DocHubApiFactory factory) : IClassFixt
         Assert.Equal("<p>fine</p>", (await ReadAsync(later, "html")).GetProperty("contentHtml").GetString());
     }
 
+    [Theory]
+    [InlineData("escaped-after-backslash")]
+    [InlineData("raw")]
+    public async Task Other_script_stored_surrogate_forms_are_readable_refreshable_and_signable(string form)
+    {
+        var (documentId, draft) = await _arrange.CreateAsync();
+        var node = await AddNodeAsync(draft);
+        await using (var dbo = await SqlSession.OpenAsync(factory.AdminConnectionString))
+        {
+            // x\\ud800<lone low>y as JSON text, or x<raw lone high surrogate>y (both accepted by ISJSON).
+            var text = form == "raw" ? "N'x' + NCHAR(55296) + N'y'" : "N'x\\\\ud800\\udc00y'";
+            await dbo.ExecuteAsync($$"""UPDATE app.NodeContent SET ContentJson = N'{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"' + {{text}} + N'"}]}]}' WHERE NodeId = @n;""", ("@n", node));
+        }
+
+        var expected = form == "raw" ? "x\uFFFDy" : "x\\ud800\uFFFDy";
+        var both = await ReadAsync(node, "both");
+        Assert.Equal($"<p>{System.Net.WebUtility.HtmlEncode(expected)}</p>", both.GetProperty("contentHtml").GetString());
+        Assert.Equal(expected, both.GetProperty("contentJson").GetProperty("content")[0].GetProperty("content")[0].GetProperty("text").GetString());
+        await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, $"/api/versions/{draft}/content?nodeIds={node}&format=both", null, HttpStatusCode.OK);
+        await RefreshUntilCleanAsync(node);
+
+        // The signing hash is computed from the stored JSON as it is.
+        await _arrange.GrantAsync(documentId, TestUsers.Carol);
+        await _arrange.SignAsync(draft, TestUsers.Carol);
+        Assert.Equal("Signed", (await _arrange.VersionAsync(draft)).GetProperty("status").GetString());
+    }
+
     [Fact]
     public async Task Batch_reads_validate_their_node_list()
     {
