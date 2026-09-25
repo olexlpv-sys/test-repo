@@ -64,6 +64,32 @@ public sealed class VersionTreeHashTests
         Assert.NotEqual(VersionTreeHash.Compute([new TreeHashNode(1, null, A, 1, "a|1|b", 1, null)]), VersionTreeHash.Compute([new TreeHashNode(1, null, A, 1, "a", 1, null)]));
     }
 
+    [Fact]
+    public void Nodes_outside_the_root_walk_count_too()
+    {
+        // A parent cycle (only a script can make one): both members are part of the hash.
+        List<TreeHashNode> Cycle(string title) => [new(1, null, A, 1, "Root", 1, null), new(2, 3, B, 1, title, 1, null), new(3, 2, C, 1, "C", 1, null)];
+
+        Assert.NotEqual(VersionTreeHash.Compute(Cycle("B")), VersionTreeHash.Compute(Cycle("B changed")));
+    }
+
+    [Fact]
+    public void Very_deep_trees_do_not_exhaust_the_stack()
+    {
+        var chain = Enumerable.Range(1, 30_000).Select(i => new TreeHashNode(i, i == 1 ? null : i - 1, Guid.NewGuid(), 1, "n", 1, null)).ToList();
+
+        Assert.Equal(32, VersionTreeHash.Compute(chain).Length);
+    }
+
+    [Fact]
+    public void Content_too_deep_to_parse_hashes_as_raw_text()
+    {
+        var deep = string.Concat(Enumerable.Repeat("{\"a\":", 300)) + "1" + new string('}', 300);
+
+        Assert.Equal(CanonicalJson.Hash(deep), CanonicalJson.Hash(deep));
+        Assert.NotEqual(CanonicalJson.Hash(deep), CanonicalJson.Hash(deep.Replace("1", "2", StringComparison.Ordinal)));
+    }
+
     private static List<TreeHashNode> Tree(int idBase) =>
     [
         new(idBase, null, A, 1, "Chapter", 1024, """{"type":"doc"}"""),

@@ -23,10 +23,23 @@ public static class VersionTreeHash
         var text = new StringBuilder();
         var visited = new HashSet<int>();
 
-        void Visit(int? parentId)
+        // Iterative depth-first walk (a deep tree must not exhaust the stack). Nodes a walk from the roots can't reach
+        // (only a parent cycle made by a script) are walked afterwards in id order, so every node counts.
+        var starts = children[null].OrderBy(n => n.SortOrder).ThenBy(n => n.Id)
+            .Concat(nodes.OrderBy(n => n.Id))
+            .ToList();
+        foreach (var start in starts)
         {
-            foreach (var node in children[parentId].OrderBy(n => n.SortOrder).ThenBy(n => n.Id))
+            if (visited.Contains(start.Id))
             {
+                continue;
+            }
+
+            var stack = new Stack<TreeHashNode>();
+            stack.Push(start);
+            while (stack.Count > 0)
+            {
+                var node = stack.Pop();
                 if (!visited.Add(node.Id))
                 {
                     continue;
@@ -37,11 +50,13 @@ public static class VersionTreeHash
                 // A JSON array per line: titles may contain any character, so fields are encoded, not just joined.
                 text.Append(System.Text.Json.JsonSerializer.Serialize(new object[] { node.LogicalNodeId.ToString("D"), parent, node.NodeTypeId, node.Title, content }))
                     .Append('\n');
-                Visit(node.Id);
+                foreach (var child in children[node.Id].OrderByDescending(n => n.SortOrder).ThenByDescending(n => n.Id))
+                {
+                    stack.Push(child);
+                }
             }
         }
 
-        Visit(null);
         return SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString()));
     }
 }

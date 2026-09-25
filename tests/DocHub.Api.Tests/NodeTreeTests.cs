@@ -237,6 +237,39 @@ public sealed class NodeTreeTests(DocHubApiFactory factory) : IClassFixture<DocH
         Assert.NotEqual(0, node);
     }
 
+    [Fact]
+    public async Task Structural_edits_racing_the_last_signature_never_change_the_signed_version()
+    {
+        for (var round = 0; round < 8; round++)
+        {
+            var (documentId, draft) = await _arrange.CreateAsync();
+            var nodes = await _arrange.AddNodesAsync(draft);
+            await _arrange.GrantAsync(documentId, TestUsers.Carol);
+            var rowVersion = await RowVersionAsync(nodes[1]);
+
+            var edits = Enumerable.Range(0, 6).Select(i => ApiClient.SendAsync(factory, TestUsers.Alice, HttpMethod.Post, $"/api/versions/{draft}/nodes", new { nodeTypeId = 1, title = $"Late {i}" }))
+                .Append(ApiClient.SendAsync(factory, TestUsers.Alice, HttpMethod.Patch, $"/api/nodes/{nodes[1]}", new { title = "Renamed late", rowVersion }))
+                .ToList();
+            var sign = ApiClient.SendAsync(factory, TestUsers.Carol, HttpMethod.Post, $"/api/versions/{draft}/signatures", new { });
+            var results = await Task.WhenAll(edits.Append(sign));
+
+            Assert.All(results.SkipLast(1), r => Assert.Contains(r.Status, new[] { HttpStatusCode.Created, HttpStatusCode.OK, HttpStatusCode.Conflict }));
+            // Whatever the order, the signed content is exactly what was signed: no node/content row after finalization.
+            var late = await Db.QueryAsync(factory,
+                """
+                SELECT COUNT(*) AS Late FROM audit.ChangeLog c
+                WHERE c.DocumentVersionId = @v AND c.TableName IN (N'app.DocumentNode', N'app.NodeContent')
+                  AND c.Id > (SELECT MAX(f.Id) FROM audit.ChangeLog f WHERE f.TableName = N'app.DocumentVersion' AND f.EntityId = @v AND f.ChangedColumns LIKE N'%Status%');
+                """, ("@v", draft));
+            Assert.Equal(0, late[0]["Late"]);
+            Assert.False((await _arrange.VersionAsync(draft)).GetProperty("modifiedAfterSigning").GetBoolean());
+            foreach (var r in results)
+            {
+                r.Response.Dispose();
+            }
+        }
+    }
+
     private static (HttpMethod, string, object?)[] StructuralOps(int versionId, int nodeId, string rowVersion) =>
     [
         (HttpMethod.Post, $"/api/versions/{versionId}/nodes", new { nodeTypeId = 1, title = "x" }),

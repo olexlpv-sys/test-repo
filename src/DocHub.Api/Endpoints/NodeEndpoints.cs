@@ -71,15 +71,14 @@ internal sealed class NodeEndpoints : IEndpointModule
         endpoints.MapPost("/api/versions/{versionId:int}/nodes", async Task<Results<Created<NodeResponse>, ValidationProblem>> (
                 int versionId, CreateNode request, DocHubDbContext db, NodeRules rules, ICurrentUser user, CancellationToken ct) =>
             {
-                var documentId = await rules.EnsureCanEditStructureAsync(versionId, ct);
+                await rules.EnsureCanEditStructureAsync(versionId, ct);
                 if (await rules.ValidateAsync(request.Title, request.NodeTypeId, ct) is { } errors)
                 {
                     return errors;
                 }
 
-                var node = await db.InTransactionAsync(async () =>
+                var node = await rules.MutateAsync(versionId, async () =>
                 {
-                    await db.LockAsync(VersionLock(versionId), ct);
                     if (request.ParentNodeId is { } parentId && !await db.DocumentNodes.AnyAsync(n => n.Id == parentId && n.DocumentVersionId == versionId, ct))
                     {
                         throw DomainException.Validation("The parent node is not part of this version.");
@@ -122,18 +121,23 @@ internal sealed class NodeEndpoints : IEndpointModule
             {
                 var (versionId, _) = await NodeVersionAsync(db, nodeId, ct);
                 await rules.EnsureCanEditStructureAsync(versionId, ct);
-                var node = await db.DocumentNodes.SingleAsync(n => n.Id == nodeId, ct);
-                if (await rules.ValidateAsync(request.Title ?? node.Title, request.NodeTypeId == node.NodeTypeId ? null : request.NodeTypeId, ct) is { } errors)
+                var current = await db.DocumentNodes.AsNoTracking().SingleAsync(n => n.Id == nodeId, ct);
+                if (await rules.ValidateAsync(request.Title ?? current.Title, request.NodeTypeId == current.NodeTypeId ? null : request.NodeTypeId, ct) is { } errors)
                 {
                     return errors;
                 }
 
-                db.Entry(node).Property(n => n.RowVersion).OriginalValue = request.RowVersion!;
-                node.Title = (request.Title ?? node.Title).Trim();
-                node.NodeTypeId = request.NodeTypeId ?? node.NodeTypeId;
-                node.ModifiedAt = time.GetUtcNow().UtcDateTime;
-                node.ModifiedByUserId = user.UserId;
-                await db.SaveChangesAsync(ct);
+                await rules.MutateAsync(versionId, async () =>
+                {
+                    var node = await db.DocumentNodes.SingleOrDefaultAsync(n => n.Id == nodeId, ct) ?? throw DomainException.NotFound("Node", nodeId);
+                    db.Entry(node).Property(n => n.RowVersion).OriginalValue = request.RowVersion!;
+                    node.Title = (request.Title ?? node.Title).Trim();
+                    node.NodeTypeId = request.NodeTypeId ?? node.NodeTypeId;
+                    node.ModifiedAt = time.GetUtcNow().UtcDateTime;
+                    node.ModifiedByUserId = user.UserId;
+                    await db.SaveChangesAsync(ct);
+                    return true;
+                }, ct);
                 return TypedResults.Ok(await DetailsAsync(db, nodeId, ct));
             })
             .WithValidation<UpdateNode>()
@@ -146,9 +150,8 @@ internal sealed class NodeEndpoints : IEndpointModule
             {
                 var (versionId, _) = await NodeVersionAsync(db, nodeId, ct);
                 await rules.EnsureCanEditStructureAsync(versionId, ct);
-                await db.InTransactionAsync(async () =>
+                await rules.MutateAsync(versionId, async () =>
                 {
-                    await db.LockAsync(VersionLock(versionId), ct);
                     var parents = await db.DocumentNodes.AsNoTracking().Where(n => n.DocumentVersionId == versionId).ToDictionaryAsync(n => n.Id, n => n.ParentNodeId, ct);
                     if (request.NewParentNodeId is { } parentId)
                     {
@@ -189,9 +192,8 @@ internal sealed class NodeEndpoints : IEndpointModule
                 var expected = RowVersions.Parse(rowVersion);
                 var (versionId, _) = await NodeVersionAsync(db, nodeId, ct);
                 await rules.EnsureCanEditStructureAsync(versionId, ct);
-                var deleted = await db.InTransactionAsync(async () =>
+                var deleted = await rules.MutateAsync(versionId, async () =>
                 {
-                    await db.LockAsync(VersionLock(versionId), ct);
                     var current = await db.DocumentNodes.AsNoTracking().Where(n => n.Id == nodeId).Select(n => n.RowVersion).SingleOrDefaultAsync(ct)
                         ?? throw DomainException.NotFound("Node", nodeId);
                     if (!current.AsSpan().SequenceEqual(expected))
@@ -207,9 +209,6 @@ internal sealed class NodeEndpoints : IEndpointModule
             .WithName("DeleteNode")
             .WithSummary("Owner, draft only: deletes a node with its whole subtree and contents (usp_DeleteSubtree; ?rowVersion=base64).");
     }
-
-    /// <summary>Tree changes of one version are serialized (moves check for cycles; positions are computed from siblings).</summary>
-    private static string VersionLock(int versionId) => $"version-tree:{versionId}";
 
     private static async Task<(int VersionId, int DocumentId)> NodeVersionAsync(DocHubDbContext db, int nodeId, CancellationToken ct)
     {
@@ -316,6 +315,23 @@ public sealed class NodeRules(DocHubDbContext db, IDocumentAuthorization authori
         await guard.EnsureEditableAsync(versionId, cancellationToken);
         await authorization.DemandAsync(documentId, PermissionAction.EditStructure, cancellationToken);
         return documentId;
+    }
+
+    /// <summary>
+    /// Runs a structural change in a transaction holding the document's lifecycle lock (the one signing, discarding and new
+    /// drafts take), after re-checking inside it that the version is still an editable draft — so a change can never land
+    /// in a version that was just signed or discarded. The lock also serializes tree changes (cycle checks, positions).
+    /// </summary>
+    public Task<T> MutateAsync<T>(int versionId, Func<Task<T>> change, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+        return db.InTransactionAsync(async () =>
+        {
+            var documentId = await db.DocumentVersions.AsNoTracking().Where(v => v.Id == versionId).Select(v => v.DocumentId).SingleAsync(cancellationToken);
+            await db.LockAsync(SigningService.LockResource(documentId), cancellationToken);
+            await guard.EnsureEditableAsync(versionId, cancellationToken);
+            return await change();
+        }, cancellationToken);
     }
 
     /// <summary>Title 1–500 characters (trimmed); a new or changed node type must exist and be active.</summary>

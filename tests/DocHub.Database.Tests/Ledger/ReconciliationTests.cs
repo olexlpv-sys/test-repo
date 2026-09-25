@@ -99,6 +99,9 @@ public sealed class ReconciliationTests(DocHubDatabaseFixture database) : IClass
         // Finding-based: clearing the stamp again doesn't hide it.
         await dbo.ExecuteAsync("UPDATE app.VersionStamp SET TamperedAt = NULL WHERE DocumentVersionId = @v;", ("@v", versionId));
         Assert.True(await LedgerHarness.ModifiedAfterSigningAsync(dbo, versionId));
+
+        // Leave no unreconciled tampering behind for the next test's window.
+        Assert.Equal(1, await _ledger.ReconcileAsync(from));
     }
 
     [Fact]

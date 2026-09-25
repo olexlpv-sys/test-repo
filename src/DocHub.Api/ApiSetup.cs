@@ -44,7 +44,12 @@ internal static class ApiSetup
         // Registered after the default writer: used when the client's Accept header excludes JSON.
         services.AddSingleton<Microsoft.AspNetCore.Http.IProblemDetailsWriter, JsonProblemDetailsWriter>();
         services.AddExceptionHandler<ExceptionToProblemHandler>();
-        services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+        services.ConfigureHttpJsonOptions(options =>
+        {
+            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+            // Trees nest two levels per node (object + children) and may be 100 levels deep (TR_DocumentNode_Tree).
+            options.SerializerOptions.MaxDepth = 256;
+        });
 
         services.AddCors(options => options.AddPolicy(SpaCorsPolicy, policy => policy
             .WithOrigins(configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])

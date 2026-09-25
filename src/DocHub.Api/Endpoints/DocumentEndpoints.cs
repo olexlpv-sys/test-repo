@@ -159,12 +159,19 @@ internal sealed class DocumentEndpoints : IEndpointModule
             {
                 var version = RowVersions.Parse(rowVersion);
                 await authorization.EnsureCanViewAsync(id, ct);
-                var document = await guard.EnsureDocumentActiveAsync(id, ct);
+                await guard.EnsureDocumentActiveAsync(id, ct);
                 await authorization.DemandAsync(id, PermissionAction.Manage, ct);
-                db.Entry(document).Property(d => d.RowVersion).OriginalValue = version;
-                document.DeletedAt = time.GetUtcNow().UtcDateTime;
-                document.DeletedByUserId = user.UserId;
-                await db.SaveChangesAsync(ct);
+                // Under the lifecycle lock: in-flight signing and tree/content edits finish first, later ones see the deletion.
+                await db.InTransactionAsync(async () =>
+                {
+                    await db.LockAsync(SigningService.LockResource(id), ct);
+                    var document = await guard.EnsureDocumentActiveAsync(id, ct);
+                    db.Entry(document).Property(d => d.RowVersion).OriginalValue = version;
+                    document.DeletedAt = time.GetUtcNow().UtcDateTime;
+                    document.DeletedByUserId = user.UserId;
+                    await db.SaveChangesAsync(ct);
+                    return true;
+                }, ct);
                 return TypedResults.NoContent();
             })
             .WithName("DeleteDocument")

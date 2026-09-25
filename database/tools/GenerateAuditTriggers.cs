@@ -727,11 +727,13 @@ static string GenerateReconciliation(AuditedTable[] tables, List<(string Schema,
                    GROUP BY [l].[VersionId]) AS [source]
             ON [target].[DocumentVersionId] = [source].[VersionId]
             WHEN MATCHED THEN
+                -- A finding may mean content changed outside the triggers: advance the content stamp too (content-hash cache).
                 UPDATE SET [LastChangeLogId] = CASE WHEN [source].[LastChangeLogId] > [target].[LastChangeLogId] THEN [source].[LastChangeLogId] ELSE [target].[LastChangeLogId] END,
+                           [ContentChangeLogId] = CASE WHEN [source].[LastChangeLogId] > COALESCE([target].[ContentChangeLogId], 0) THEN [source].[LastChangeLogId] ELSE [target].[ContentChangeLogId] END,
                            [TamperedAt] = COALESCE([target].[TamperedAt], [source].[TamperedAt])
             WHEN NOT MATCHED BY TARGET THEN
-                INSERT ([DocumentVersionId], [LastChangeLogId], [TamperedAt])
-                VALUES ([source].[VersionId], [source].[LastChangeLogId], [source].[TamperedAt]);
+                INSERT ([DocumentVersionId], [LastChangeLogId], [ContentChangeLogId], [TamperedAt])
+                VALUES ([source].[VersionId], [source].[LastChangeLogId], [source].[LastChangeLogId], [source].[TamperedAt]);
 
             -- Forged ContentHtml/PlainText of bypassed content is re-rendered by the API (T09).
             UPDATE [nc]

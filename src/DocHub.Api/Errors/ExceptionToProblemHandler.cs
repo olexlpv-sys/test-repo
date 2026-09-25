@@ -17,6 +17,8 @@ internal sealed partial class ExceptionToProblemHandler(IProblemDetailsService p
     private const int ConstraintViolation = 547;
     private const int FolderCycle = 50040; // TR_Folder_NoCycle
     private const int LockTimeoutFolders = 50041;
+    private const int NodeCycle = 50051;   // TR_DocumentNode_Tree
+    private const int TreeTooDeep = 50052; // TR_DocumentNode_Tree
     private const int LockTimeoutDocument = 50042;
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
@@ -49,6 +51,10 @@ internal sealed partial class ExceptionToProblemHandler(IProblemDetailsService p
             (StatusCodes.Status404NotFound, ErrorCodes.NotFound, "Not found", "The referenced folder no longer exists."),
         DbUpdateException { InnerException: SqlException { Number: ConstraintViolation } } =>
             (StatusCodes.Status409Conflict, ErrorCodes.Conflict, "Conflict", "The change conflicts with related data."),
+        SqlException { Number: NodeCycle } or DbUpdateException { InnerException: SqlException { Number: NodeCycle } } =>
+            (StatusCodes.Status409Conflict, ErrorCodes.InvalidMove, "Invalid move", "A node can't be moved into itself or into one of its descendants."),
+        SqlException { Number: TreeTooDeep } or DbUpdateException { InnerException: SqlException { Number: TreeTooDeep } } =>
+            (StatusCodes.Status400BadRequest, ErrorCodes.ValidationFailed, "Validation failed", "A document tree can have at most 100 levels."),
         DbUpdateException { InnerException: SqlException { Number: FolderCycle } } =>
             (StatusCodes.Status409Conflict, ErrorCodes.InvalidMove, "Invalid move", "A folder can't be moved into itself or into one of its sub-folders."),
         SqlException { Number: LockTimeoutFolders or LockTimeoutDocument } or DbUpdateException { InnerException: SqlException { Number: LockTimeoutFolders or LockTimeoutDocument } } =>

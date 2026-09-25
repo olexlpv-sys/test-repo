@@ -385,6 +385,107 @@ public sealed class DocumentLifecycleTests(DocHubApiFactory factory) : IClassFix
         Assert.NotEqual(0, v1);
     }
 
+    [Fact]
+    public async Task Content_nested_deeper_than_json_parsers_allow_still_hashes_lists_and_signs()
+    {
+        var (documentId, draftId) = await _arrange.CreateAsync();
+        var nodes = await _arrange.AddNodesAsync(draftId);
+        await _arrange.GrantAsync(documentId, TestUsers.Carol);
+        await _arrange.GrantAsync(documentId, TestUsers.Dave);
+        await _arrange.SignAsync(draftId, TestUsers.Carol);
+        var deep = string.Concat(Enumerable.Repeat("{\"a\":", 70)) + "1" + new string('}', 70);
+        await using (var support = await SqlSession.OpenAsync(factory.AdminConnectionString))
+        {
+            await support.ExecuteAsync("UPDATE app.NodeContent SET ContentJson = @j WHERE NodeId = @n;", ("@j", deep), ("@n", nodes[0]));
+        }
+
+        await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, "/api/folders/1/documents?pageSize=200", null, HttpStatusCode.OK);
+        var status = await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/versions/{draftId}/signatures", null, HttpStatusCode.OK);
+        Assert.False(status.GetProperty("signatures").EnumerateArray().Single().GetProperty("isValid").GetBoolean());
+        await _arrange.SignAsync(draftId, TestUsers.Carol);
+        Assert.Equal("Signed", (await _arrange.SignAsync(draftId, TestUsers.Dave)).GetProperty("version").GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task Scripts_cannot_create_node_cycles_or_trees_deeper_than_100_levels()
+    {
+        var (_, draftId) = await _arrange.CreateAsync();
+        var nodes = await _arrange.AddNodesAsync(draftId); // root1 → child, root2
+        await using var support = await SqlSession.OpenAsync(factory.AdminConnectionString);
+
+        var cycle = await Assert.ThrowsAsync<Microsoft.Data.SqlClient.SqlException>(() =>
+            support.ExecuteAsync("UPDATE app.DocumentNode SET ParentNodeId = @child WHERE Id = @root;", ("@child", nodes[2]), ("@root", nodes[0])));
+        Assert.Equal(50051, cycle.Number);
+
+        var tooDeep = await Assert.ThrowsAsync<Microsoft.Data.SqlClient.SqlException>(() => support.ExecuteAsync(
+            """
+            DECLARE @parent INT = @root, @i INT = 1;
+            WHILE @i <= 120
+            BEGIN
+                INSERT INTO app.DocumentNode (DocumentVersionId, LogicalNodeId, ParentNodeId, NodeTypeId, Title, SortOrder, CreatedByUserId, ModifiedByUserId)
+                VALUES (@v, NEWID(), @parent, 1, N'Deep', 1024, 2, 2);
+                SET @parent = SCOPE_IDENTITY();
+                SET @i += 1;
+            END;
+            """, ("@root", nodes[1]), ("@v", draftId)));
+        Assert.Equal(50052, tooDeep.Number);
+    }
+
+    [Fact]
+    public async Task List_progress_follows_reconciliation_after_a_trigger_bypass()
+    {
+        var (documentId, draftId) = await _arrange.CreateAsync();
+        var nodes = await _arrange.AddNodesAsync(draftId);
+        await _arrange.GrantAsync(documentId, TestUsers.Carol);
+        await _arrange.GrantAsync(documentId, TestUsers.Dave);
+        await _arrange.SignAsync(draftId, TestUsers.Carol);
+        Assert.Equal(1, await ListSignedAsync(documentId));
+
+        await using (var dba = await SqlSession.OpenAsync(factory.AdminConnectionString))
+        {
+            await dba.ExecuteAsync(
+                """
+                DISABLE TRIGGER app.TR_NodeContent_Audit ON app.NodeContent;
+                UPDATE app.NodeContent SET ContentJson = JSON_MODIFY(ContentJson, '$.bypass', 1) WHERE NodeId = @n;
+                ENABLE TRIGGER app.TR_NodeContent_Audit ON app.NodeContent;
+                """, ("@n", nodes[0]));
+        }
+
+        await ApiClient.ExpectAsync(factory, TestUsers.Admin, HttpMethod.Post, "/api/admin/audit/reconcile", null, HttpStatusCode.OK);
+
+        Assert.Equal(0, await ListSignedAsync(documentId));
+    }
+
+    [Fact]
+    public async Task Signing_while_the_owner_deletes_never_answers_forbidden()
+    {
+        for (var round = 0; round < 15; round++)
+        {
+            var (documentId, draftId) = await _arrange.CreateAsync();
+            await _arrange.AddNodesAsync(draftId);
+            await _arrange.GrantAsync(documentId, TestUsers.Carol);
+            await _arrange.GrantAsync(documentId, TestUsers.Dave);
+            var rowVersion = Uri.EscapeDataString(await _arrange.RowVersionAsync(documentId));
+
+            var results = await Task.WhenAll(
+                ApiClient.SendAsync(factory, TestUsers.Carol, HttpMethod.Post, $"/api/versions/{draftId}/signatures", new { }),
+                ApiClient.SendAsync(factory, TestUsers.Alice, HttpMethod.Delete, $"/api/documents/{documentId}?rowVersion={rowVersion}"));
+
+            Assert.Contains(results[0].Status, new[] { HttpStatusCode.OK, HttpStatusCode.NotFound, HttpStatusCode.Conflict });
+            Assert.Equal(HttpStatusCode.NoContent, results[1].Status);
+            foreach (var r in results)
+            {
+                r.Response.Dispose();
+            }
+        }
+    }
+
+    private async Task<int> ListSignedAsync(int documentId)
+    {
+        var list = await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, "/api/folders/1/documents?pageSize=200", null, HttpStatusCode.OK);
+        return list.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("id").GetInt32() == documentId).GetProperty("signatureProgress").GetProperty("signed").GetInt32();
+    }
+
     private async Task RecheckFinalizationAsync(int documentId)
     {
         // T10's revoke endpoint does exactly this after deleting the grant.

@@ -13,7 +13,7 @@ public static class CanonicalJson
     public static string Serialize(string json)
     {
         ArgumentNullException.ThrowIfNull(json);
-        using var document = JsonDocument.Parse(json);
+        using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = MaxDepth });
         var buffer = new ArrayBufferWriter();
         using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = false, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
         {
@@ -23,8 +23,25 @@ public static class CanonicalJson
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 
-    /// <summary>SHA-256 of the canonical UTF-8 serialization.</summary>
-    public static byte[] Hash(string json) => SHA256.HashData(Encoding.UTF8.GetBytes(Serialize(json)));
+    /// <summary>Deepest nesting the canonical form handles (validated content is far shallower, ContentSchema.MaxDepth).</summary>
+    public const int MaxDepth = 256;
+
+    /// <summary>
+    /// SHA-256 of the canonical UTF-8 serialization. Content that isn't parseable within <see cref="MaxDepth"/> (only a
+    /// script can store it) is hashed as raw text instead — deterministic, and any change still changes the hash.
+    /// </summary>
+    public static byte[] Hash(string json)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+        try
+        {
+            return SHA256.HashData(Encoding.UTF8.GetBytes(Serialize(json)));
+        }
+        catch (JsonException)
+        {
+            return SHA256.HashData(Encoding.UTF8.GetBytes("raw:" + json));
+        }
+    }
 
     private static void Write(Utf8JsonWriter writer, JsonElement element)
     {

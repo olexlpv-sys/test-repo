@@ -22,7 +22,7 @@ public interface IDocumentAuthorization
     Task DemandAsync(int documentId, PermissionAction action, CancellationToken cancellationToken, int? versionId = null, Guid? logicalNodeId = null);
 }
 
-internal sealed class DocumentAuthorization(IDbProcedures procedures, ICurrentUser user) : IDocumentAuthorization
+internal sealed class DocumentAuthorization(IDbProcedures procedures, ICurrentUser user, DocHubDbContext db) : IDocumentAuthorization
 {
     public async Task EnsureCanViewAsync(int documentId, CancellationToken cancellationToken)
     {
@@ -39,6 +39,15 @@ internal sealed class DocumentAuthorization(IDbProcedures procedures, ICurrentUs
     {
         if (!await CanAsync(documentId, action, cancellationToken, versionId, logicalNodeId))
         {
+            // The document may have been deleted since the caller's earlier checks (a concurrent delete): answer as the
+            // earlier checks would now — not visible → 404, deleted → 409 — rather than a misleading 403.
+            await EnsureCanViewAsync(documentId, cancellationToken);
+            if (action is not (PermissionAction.Move or PermissionAction.Restore)
+                && await db.Documents.AsNoTracking().AnyAsync(d => d.Id == documentId && d.DeletedAt != null, cancellationToken))
+            {
+                throw DomainException.Conflict(ErrorCodes.DocumentDeleted, "The document is deleted; restore it first.");
+            }
+
             throw DomainException.Forbidden($"You are not allowed to {Describe(action)} this document.");
         }
     }
