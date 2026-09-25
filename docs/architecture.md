@@ -48,7 +48,7 @@ flowchart LR
   `rowVersion` (base64) in DTOs for optimistic concurrency, built-in `Microsoft.AspNetCore.OpenApi` + Scalar UI.
 - Layering is intentionally light: `Domain` (entities + rules), `Infrastructure` (EF, SQL, diff, sanitizer), `Api` (endpoints + application services). No MediatR/CQRS.
 
-### ADR-08 Web UI: React SPA
+### ADR-08 Web UI: React SPA (confirmed)
 - Vite + React + TypeScript, TanStack Query for server state, a tree component (e.g. `react-arborist`), TipTap with the table extension, TS API client generated from OpenAPI (`openapi-typescript` + `openapi-fetch`).
 - In development the API serves CORS for the Vite dev server; in production the SPA can be hosted as static files by the API or by Azure Static Web Apps.
 

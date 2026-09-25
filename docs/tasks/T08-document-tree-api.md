@@ -9,6 +9,7 @@
 
 ## Goal
 Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary titles, typed nodes, ordering and moving.
+**The structure is defined by the document Owner only** — Editors change node text (T09), never the tree.
 
 ## API
 | Method | Route | Notes |
@@ -22,9 +23,7 @@ Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary 
 | POST | `/api/versions/{versionId}/nodes/bulk` | *(optional, nice to have)* create a whole subtree in one call: nested `[{ nodeTypeId, title, contentHtml?, children }]` — useful for templates, seeding and tests |
 
 ## Rules
-- Every mutating call: `IVersionGuard.EnsureEditable` (T07) → `409 version-not-editable`, then `IDocumentAuthorization.CanEditNode(...)` (T07/T10) → `403`.
-  - Create: permission is checked on the **parent** node (or document-level for top-level nodes).
-  - Move: permission required on the node **and** on the new parent.
+- Every mutating call (create, rename, change type, move, delete, bulk): `IVersionGuard.EnsureEditable` (T07) → `409 version-not-editable`, then `IDocumentAuthorization.CanEditStructure(docId)` (owner only) → `403`.
 - Title: trimmed, 1–500 chars. Node type must exist and be **active** for create/change.
 - Parent must be in the same version (also enforced by the composite FK).
 - Move under itself/descendant → `409 invalid-move`.
@@ -45,3 +44,4 @@ Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary 
 - [ ] Deleting a node with 50 descendants removes all of them and writes 50+ `D` audit rows (nodes and contents).
 - [ ] Inactive node type on create → `400`.
 - [ ] Stale `rowVersion` → `409 concurrency-conflict`.
+- [ ] Editor (document- or node-level) and Approver get `403` on every structural operation.

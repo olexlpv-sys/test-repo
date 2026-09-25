@@ -51,7 +51,8 @@ confirm or correct them (see [Open questions](#open-questions)).
 - FR-V3 A new `Draft` version can be created from a signed version (deep copy of tree and content). **[A]** At most one draft per document at any time.
 - FR-V4 **Only Draft versions are editable.** Any modification of a Signed/Deleted version or of a deleted document via the API is rejected.
 - FR-V5 **[A]** `Deleted` applies to (a) a whole document (soft delete) and (b) a discarded draft version. Signed versions are never deleted through the API.
-- FR-V6 **[A]** Only the document owner can sign, create a new draft, discard a draft, and delete the document.
+- FR-V6 **Signing is done by an Approver** of the document (any one of them if there are several **[A]**). The owner cannot be granted the Approver role (four-eyes principle) **[A]**. A document without an Approver cannot be signed.
+- FR-V7 **[A]** Only the document owner can create a new draft, discard a draft, delete and move the document.
 
 ### 2.5 Change tracking
 - FR-H1 Every change to folders, documents, versions, nodes, node content, permissions and comments is recorded: who, when, what (old and new values).
@@ -65,9 +66,9 @@ confirm or correct them (see [Open questions](#open-questions)).
 - FR-C2 Result shows per node: added, removed, moved, renamed, type changed, content changed (with text diff).
 
 ### 2.7 Permissions
-- FR-P1 **Owner** — the user who created the document. Full rights.
-- FR-P2 **Editor** — can edit the whole document, **or only a specific node** (and **[A]** its subtree).
-- FR-P3 **Approver** — can leave comments on nodes and on the document as a whole.
+- FR-P1 **Owner** — the user who created the document. **Only the owner defines the structure**: adds, deletes, moves, renames nodes, changes node types, renames the document. The owner can also edit text of any node and manages roles.
+- FR-P2 **Editor** — edits **text (node content) only**, never the structure: either of all nodes (document-level grant) or of a specific node (node-level grant, **[A]** including its descendants).
+- FR-P3 **Approver** — leaves comments on nodes and on the document as a whole, resolves comments and **signs** the draft (FR-V6).
 - FR-P4 **[A]** The owner grants/revokes Editor/Approver roles. Permissions are defined per *document* (not per version), so they carry over to new drafts.
 - FR-P5 **[A]** Any seeded user can view any (non-deleted) document; roles restrict modifications and commenting only.
 
@@ -101,12 +102,20 @@ notifications, approval workflow (multi-step), real-time collaborative editing, 
 
 | # | Question | Current assumption |
 |---|---|---|
-| Q1 | Web UI technology: React (recommended for rich-text/tree components) or Blazor? | React + TS + Vite + TipTap |
 | Q2 | Can a new draft be created from *any* signed version or only the latest? | Any signed version; latest by default |
-| Q3 | Who can sign? Only owner, or does signing require approver approval? | Owner only, no approval step |
-| Q4 | Node-scoped Editor: may they add/delete/move child nodes under their node, or only edit text? | Full edit of the node's subtree, but cannot move/delete the granted node itself |
-| Q5 | Is reading documents open to everyone? | Yes, all users can read |
-| Q6 | Should comments carry over into a new draft? | No; comments are bound to a version, UI can show previous versions' comments |
 | Q7 | Who manages folders and node types — any user or only admins? | Folders: any user; node types: admins (`User.IsAdmin`) |
 | Q8 | Rich-text storage format: sanitized HTML or editor JSON (ProseMirror)? | Sanitized HTML (+ derived plain text) |
 | Q9 | Is there a need to restore deleted documents via the API? | No, support script only |
+| Q10 | Several Approvers: is one signature enough, or must all approve? | One Approver signs |
+| Q11 | May the owner also be an Approver of their own document? | No (four-eyes) |
+| Q12 | Node-level Editor grant — does it include descendant nodes? | Yes |
+
+### Resolved
+
+| # | Question | Decision |
+|---|---|---|
+| Q1 | Web UI technology | **React** + TS + Vite + TipTap |
+| Q3 | Who signs? | **Approver** |
+| Q4 | What may a node-scoped Editor do? | **Text only**; structure is defined by the Owner |
+| Q5 | Is reading open to everyone? | **Yes** |
+| Q6 | Do comments carry over to a new draft? | **No**, bound to a version; previous versions' comments can be shown |

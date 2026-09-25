@@ -30,7 +30,7 @@ Derived document status for lists: `Deleted` if deleted; else `Draft` if a draft
 | GET | `/api/folders/{folderId}/documents?includeDeleted=false&page&pageSize` | any | `{ id, title, status, latestSignedVersion (int?), hasDraft, owner {id,displayName}, modifiedAt }` |
 | POST | `/api/documents` | any | `{ folderId, title }` → creates Document (owner = current user) **and** an empty Draft version in one transaction → `201 { id, draftVersionId }` |
 | GET | `/api/documents/{id}` | any | details + `versions: [{ id, status, versionNumber, label, createdAt, createdBy, signedAt, signedBy, basedOnVersionId, modifiedAfterSigning }]`, `myRoles` (owner/editor/approver + node scopes) |
-| PUT | `/api/documents/{id}` | owner, doc-editor | `{ title, rowVersion }` — only if the document has a draft (**assumption**: title is edited together with the draft) |
+| PUT | `/api/documents/{id}` | owner | `{ title, rowVersion }` — only if the document has a draft (**assumption**: title is edited together with the draft) |
 | POST | `/api/documents/{id}/move` | owner | `{ folderId, rowVersion }` |
 | DELETE | `/api/documents/{id}` | owner | soft delete (`DeletedAt`, `DeletedByUserId`) |
 
@@ -38,7 +38,7 @@ Derived document status for lists: `Deleted` if deleted; else `Draft` if a draft
 | Method | Route | Who | Notes |
 |---|---|---|---|
 | GET | `/api/versions/{versionId}` | any | version header |
-| POST | `/api/versions/{versionId}/sign` | owner | `{ rowVersion }` — Draft only |
+| POST | `/api/versions/{versionId}/sign` | **approver** | `{ rowVersion }` — Draft only; `403` for everyone without an Approver grant (incl. the owner) |
 | POST | `/api/documents/{id}/drafts` | owner | `{ sourceVersionId? }` — default: latest signed; `409 draft-already-exists` if a draft exists |
 | DELETE | `/api/versions/{versionId}` | owner | discard draft → `Status = Deleted`; only Drafts; if it is the only version of the document the document is deleted as well (**assumption**) |
 
@@ -58,14 +58,14 @@ Derived document status for lists: `Deleted` if deleted; else `Draft` if a draft
    - set `SESSION_CONTEXT(N'Operation') = 'CopyVersion'` for the copy so history (T11) collapses the inserted rows.
    - Permissions are per document and comments per version → nothing else to copy.
 4. **modifiedAfterSigning** — on `GET /api/documents/{id}`, recompute the hash for signed versions and compare with `SignedContentHash` (cache per version + `max(ChangeLog.Id)` to keep it cheap). Detects support-script edits (FR-H5).
-5. **Authorization seam** — introduce `IDocumentAuthorization` with methods such as `CanManage(docId)`, `CanEditDocument(docId)`, `CanEditNode(docId, logicalNodeId)`, `CanComment(docId)`. In this task implement it as **owner-only**; T10 replaces the implementation with full role logic. T08/T09/T13 call only this interface, so they can be built in parallel with T10.
+5. **Authorization seam** — introduce `IDocumentAuthorization` with methods `CanManage(docId)` (lifecycle, roles), `CanEditStructure(docId)`, `CanEditContent(docId, logicalNodeId)`, `CanSign(docId)`, `CanComment(docId)`, `CanResolve(docId)`. In this task implement `CanManage`/`CanEditStructure`/`CanEditContent` as **owner-only** and `CanSign` as "has an `Approver` row in `app.DocumentPermission`" (tests insert the grant directly into the DB until T10 adds the API); T10 replaces the implementation with the full role logic. T08/T09/T13 call only this interface, so they can be built in parallel with T10.
 6. Deleted documents: `GET` by id still works (read-only, `status = Deleted`) so history can be viewed; lists exclude them unless `includeDeleted=true`.
 
 ## Acceptance criteria
 - [ ] Create → Draft exists, no version number; list shows status `Draft`.
 - [ ] Sign → `v1`; new draft → copy with identical tree/content and same `LogicalNodeId`s; sign → `v2`.
 - [ ] Second draft → `409 draft-already-exists`. Sign a Signed version → `409 version-not-editable`.
-- [ ] Non-owner sign/delete/new-draft → `403`.
+- [ ] Non-owner delete/new-draft/discard → `403`. Sign by the owner or an editor → `403`; sign by an approver → `200`.
 - [ ] Deep copy of a 2 000-node / depth-15 tree completes in < 2 s locally (test with generated data).
 - [ ] Direct SQL `UPDATE` of content in a signed version → `modifiedAfterSigning = true` for that version.
 - [ ] Two concurrent sign requests on the same draft → exactly one succeeds.

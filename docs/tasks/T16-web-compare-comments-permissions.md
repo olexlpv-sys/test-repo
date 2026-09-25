@@ -31,5 +31,6 @@ Complete the document form with comparison, comments and role management.
 ## Acceptance criteria
 - [ ] Compare v1 vs draft shows the same summary as the API; clicking a changed node shows its diff.
 - [ ] As approver (user switcher), add a node comment and a document comment; owner replies and resolves; badges update.
-- [ ] Owner grants node-scoped Editor to another user; switching to that user shows only that subtree editable.
+- [ ] Owner grants node-scoped Editor to another user; switching to that user shows only that subtree's text editable and no structure actions.
+- [ ] Granting Approver to the owner is not offered in the user picker.
 - [ ] Non-owner sees the permissions dialog read-only.

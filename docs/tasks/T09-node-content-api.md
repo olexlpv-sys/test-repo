@@ -18,7 +18,7 @@ Read and edit the rich-text content (with tables) of a node. Content is **saniti
 | GET | `/api/versions/{versionId}/content?nodeIds=1,2,3` | batch read for rendering a whole document or a subtree (max 200 ids) |
 
 ## Rules
-1. Guard + authorization exactly as in T08 (`EnsureEditable`, `CanEditNode`).
+1. `IVersionGuard.EnsureEditable` → `409`, then `IDocumentAuthorization.CanEditContent(docId, logicalNodeId)` → `403` (owner, document-level editor, or node-level editor on this node or an ancestor — T10).
 2. **Sanitization** with `Ganss.Xss.HtmlSanitizer`, allow-list:
    - blocks: `p, h1–h6, ul, ol, li, blockquote, pre, code, hr, br`
    - inline: `strong, b, em, i, u, s, sub, sup, span, a[href]` (only `http`, `https`, `mailto`; add `rel="noopener noreferrer"`)

@@ -31,12 +31,12 @@ The document form opened from the list: edit the node tree, edit node content wi
 ### 1. Version bar
 - Version selector: all versions (`GET /api/documents/{id}`) with labels; default = draft if exists, else latest signed. Selected version in URL.
 - Read-only banner for Signed/Deleted versions; ⚠ badge when `modifiedAfterSigning`.
-- Buttons (visible per `my-permissions`): **Sign** (confirm: "This will become v{n}"), **New draft** (from selected signed version), **Discard draft** (confirm), **Compare…** (T16).
+- Buttons (visible per `my-permissions`): **Sign** — approvers only (confirm: "This will become v{n}"); for the owner show a hint "Waiting for approver signature" / "Add an approver to sign", **New draft** (from selected signed version), **Discard draft** (confirm), **Compare…** (T16).
 
 ### 2. Tree panel (`GET /api/versions/{id}/tree`)
 - Shows numbering + title + node-type badge; expand/collapse; keyboard navigation.
-- Draft + permission: add child / add sibling (dialog: type + title), inline rename, change type, delete (confirm, shows descendant count), move via **drag-and-drop** (`react-arborist` or equivalent) with drop validation (no drop into own subtree) — fallback "Move up/down/indent/outdent" buttons are acceptable for the first iteration.
-- Nodes the current user cannot edit are visually muted (uses `editableLogicalNodeIds`).
+- Structure editing is **owner-only** (Draft): add child / add sibling (dialog: type + title), inline rename, change type, delete (confirm, shows descendant count), move via **drag-and-drop** (`react-arborist` or equivalent) with drop validation (no drop into own subtree) — fallback "Move up/down/indent/outdent" buttons are acceptable for the first iteration.
+- For editors the tree is read-only; nodes whose **text** they cannot edit are visually muted (uses `editableLogicalNodeIds`).
 - Comment count badges (after T13/T16 — leave a slot).
 
 ### 3. Content editor
@@ -44,7 +44,7 @@ The document form opened from the list: edit the node tree, edit node content wi
 - Load `GET /api/nodes/{id}/content`; **debounced autosave** (e.g. 1.5 s after last keystroke + on blur/node switch) via `PUT` with `rowVersion`; status indicator "Saving… / Saved · time / Conflict".
 - On `409 concurrency-conflict`: show a dialog with options "Reload theirs" / "Overwrite" (overwrite = re-fetch rowVersion and save).
 - After save, replace editor content with the sanitized HTML only if it differs (avoid caret jumps).
-- Read-only mode for non-draft versions or missing permission.
+- Read-only mode for non-draft versions or missing content permission (`editableLogicalNodeIds`).
 
 ### 4. History panel (per selected node)
 - `GET /api/documents/{id}/nodes/{logicalNodeId}/history` — infinite list: time, user (or "Script · login · ticket"), kind, summary, version label.
@@ -57,6 +57,7 @@ The document form opened from the list: edit the node tree, edit node content wi
 - [ ] Type text, insert a 3×3 table, merge two cells → autosaved; reload shows identical content.
 - [ ] Signed version opens read-only; Sign/New draft/Discard work and the selector updates.
 - [ ] History panel shows each save with the correct user; diff view highlights changes; a support-script change is shown as such.
-- [ ] Node-scoped editor (switch user) can edit only their subtree.
+- [ ] Node-scoped editor (switch user) can edit only the text of their node(s) and descendants; no structure actions are shown.
+- [ ] Approver sees **Sign**; owner and editors do not.
 - [ ] Two browser windows editing the same node → second save shows the conflict dialog.
-- [ ] Playwright smoke: add node → type content → sign → new draft → edit → history shows 2 entries.
+- [ ] Playwright smoke: owner adds node → types content → grants approver → approver signs → owner creates new draft → edits → history shows 2 entries.

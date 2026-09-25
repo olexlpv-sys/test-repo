@@ -93,7 +93,7 @@ Parallelization seams already designed into the tasks:
 | Milestone | Tasks | Demo |
 |---|---|---|
 | **M0 Foundation** | T01–T04 | `dotnet test` green in CI with a real SQL container; DACPAC deploys; an API write shows up in `audit.ChangeLog` with the user; a manual SQL script change shows up as `Script`. |
-| **M1 Core API** | T05–T09 | Via Scalar: create folder → document → build the example tree → edit content with a table → sign v1 → new draft → edit → sign v2. |
+| **M1 Core API** | T05–T09 | Via Scalar: create folder → document → build the example tree → edit content with a table → grant approver (DB row until T10) → approver signs v1 → new draft → edit → sign v2. |
 | **M2 Advanced API** | T10–T13 | Node history across v1/v2/draft incl. a support-script change; compare v1 vs draft; approver comments; node-scoped editor restrictions. |
 | **M3 Web UI** | T14–T17 | Full scenario of M1 + M2 from the browser, Playwright smoke suite green. |
 
