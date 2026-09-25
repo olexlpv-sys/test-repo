@@ -57,6 +57,7 @@ public sealed class DeploymentTests(SqlServerContainerFixture server)
                 UPDATE app.NodeType SET Name = N'Kapitel' WHERE Code = 'CHAPTER';
                 DELETE FROM app.Folder WHERE Name = N'Templates';
                 UPDATE app.ContentStyle SET PropertiesJson = N'{"fontSize":48}' WHERE StyleId = 'Heading1';
+                UPDATE app.ContentStyle SET BasedOnStyleId = NULL WHERE StyleId = 'Heading2';
                 UPDATE app.[User] SET DisplayName = N'Changed' WHERE Login = N'alice';
                 INSERT INTO app.[User] (Login, DisplayName) VALUES (N'loadtest-00001', N'Generated user');
                 """);
@@ -68,8 +69,25 @@ public sealed class DeploymentTests(SqlServerContainerFixture server)
         Assert.Equal("Kapitel", await ScalarAsync(check, "SELECT Name FROM app.NodeType WHERE Code = 'CHAPTER'"));
         Assert.Equal(0, await ScalarAsync(check, "SELECT COUNT(*) FROM app.Folder WHERE Name = N'Templates'"));
         Assert.Equal("""{"fontSize":48}""", await ScalarAsync(check, "SELECT PropertiesJson FROM app.ContentStyle WHERE StyleId = 'Heading1'"));
+        Assert.IsType<DBNull>(await ScalarAsync(check, "SELECT BasedOnStyleId FROM app.ContentStyle WHERE StyleId = 'Heading2'"));
         Assert.Equal("Alice Anderson", await ScalarAsync(check, "SELECT DisplayName FROM app.[User] WHERE Login = N'alice'"));
         Assert.Equal(1, await ScalarAsync(check, "SELECT COUNT(*) FROM app.[User] WHERE Login = N'loadtest-00001'"));
+    }
+
+    [Fact]
+    public async Task Redeploy_restores_a_deleted_built_in_style_with_its_inheritance()
+    {
+        var database = NewDatabaseName();
+        DacpacDeployer.Deploy(server.MasterConnectionString, database);
+        await using (var connection = await OpenAsync(database))
+        {
+            await ExecuteAsync(connection, "DELETE FROM app.ContentStyle WHERE StyleId = 'Caption';");
+        }
+
+        DacpacDeployer.Deploy(server.MasterConnectionString, database);
+
+        await using var check = await OpenAsync(database);
+        Assert.Equal("Normal", await ScalarAsync(check, "SELECT BasedOnStyleId FROM app.ContentStyle WHERE StyleId = 'Caption'"));
     }
 
     [Fact]

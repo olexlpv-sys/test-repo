@@ -20,15 +20,18 @@ INSERT INTO @Styles ([StyleId], [Name], [Kind], [BasedOnStyleId], [PropertiesJso
     ('Emphasis',      N'Emphasis',       2, NULL,       N'{"italic":true}');
 
 -- Insert missing built-in styles first without inheritance (the self-reference is set in the second step).
+DECLARE @Inserted TABLE ([StyleId] VARCHAR (50) NOT NULL PRIMARY KEY);
+
 INSERT INTO [app].[ContentStyle] ([StyleId], [Name], [Kind], [BasedOnStyleId], [PropertiesJson], [IsBuiltIn], [IsActive])
+OUTPUT INSERTED.[StyleId] INTO @Inserted ([StyleId])
 SELECT [s].[StyleId], [s].[Name], [s].[Kind], NULL, [s].[PropertiesJson], 1, 1
 FROM @Styles AS [s]
 WHERE NOT EXISTS (SELECT 1 FROM [app].[ContentStyle] AS [c] WHERE [c].[StyleId] = [s].[StyleId]);
 
--- Link inheritance only for styles inserted by this seed that still have no base style.
+-- Link inheritance only for the styles inserted by this run; existing styles are never changed (admins own them).
 UPDATE [c]
 SET [BasedOnStyleId] = [s].[BasedOnStyleId]
 FROM [app].[ContentStyle] AS [c]
+JOIN @Inserted AS [i] ON [i].[StyleId] = [c].[StyleId]
 JOIN @Styles AS [s] ON [s].[StyleId] = [c].[StyleId]
-WHERE [c].[IsBuiltIn] = 1 AND [c].[BasedOnStyleId] IS NULL AND [s].[BasedOnStyleId] IS NOT NULL
-  AND [c].[PropertiesJson] = [s].[PropertiesJson];
+WHERE [s].[BasedOnStyleId] IS NOT NULL;

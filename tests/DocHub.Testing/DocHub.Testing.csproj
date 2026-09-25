@@ -1,6 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- Shared test infrastructure: SQL Server container fixture, DACPAC deployment, test data helpers. -->
+  <PropertyGroup>
+    <!-- The .sqlproj is not part of DocHub.slnx; keep the solution's Configuration for it (MSBuild would otherwise build it in Debug). -->
+    <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="xunit.v3.extensibility.core" />
     <PackageReference Include="Testcontainers.MsSql" />
@@ -10,7 +15,7 @@
 
   <ItemGroup>
     <!-- Builds the SQL Database Project first so its DACPAC can be deployed by the tests. -->
-    <ProjectReference Include="..\..\database\DocHub.Database\DocHub.Database.sqlproj" ReferenceOutputAssembly="false" Private="false" />
+        <ProjectReference Include="..\..\database\DocHub.Database\DocHub.Database.sqlproj" ReferenceOutputAssembly="false" Private="false" />
     <None Include="..\..\database\DocHub.Database\bin\$(Configuration)\DocHub.Database.dacpac" Link="DocHub.Database.dacpac" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
