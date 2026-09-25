@@ -71,6 +71,16 @@ jobs:
       - name: Restore tools
         run: dotnet tool restore
 
+      - name: Generated audit triggers are up to date
+        run: |
+          dotnet run database/tools/GenerateAuditTriggers.cs
+          git status --porcelain database/DocHub.Database
+          if [ -n "$(git status --porcelain database/DocHub.Database)" ]; then
+            echo "::error::Generated audit SQL differs from the committed files. Run 'dotnet run database/tools/GenerateAuditTriggers.cs' and commit."
+            git diff database/DocHub.Database
+            exit 1
+          fi
+
       - name: Build DACPAC
         run: dotnet build database/DocHub.Database.slnx --configuration Release
 

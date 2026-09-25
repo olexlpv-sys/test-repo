@@ -12,6 +12,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- System objects (sys.sp_set_session_context, …) for reference resolution. -->
+    <PackageReference Include="Microsoft.SqlServer.Dacpacs.Azure.Master" DacpacName="master" DatabaseVariableLiteralValue="master" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Build Remove="Scripts\**\*.sql" />
     <PostDeploy Include="Scripts\PostDeployment\Script.PostDeployment.sql" />
     <None Include="Scripts\PostDeployment\*.sql" Exclude="Scripts\PostDeployment\Script.PostDeployment.sql" />

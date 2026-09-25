@@ -40,8 +40,12 @@ public static class DacpacDeployer
             .ToList();
     }
 
+    /// <summary>
+    /// Connection string for tests. Pooling is off: tests impersonate database users (EXECUTE AS) and set session context,
+    /// and a pooled session that still carries an impersonation is killed by SQL Server when it is reused.
+    /// </summary>
     public static string DatabaseConnectionString(string masterConnectionString, string databaseName) =>
-        new SqlConnectionStringBuilder(masterConnectionString) { InitialCatalog = databaseName }.ConnectionString;
+        new SqlConnectionStringBuilder(masterConnectionString) { InitialCatalog = databaseName, Pooling = false }.ConnectionString;
 
     private static DacDeployOptions CreateOptions() => new()
     {

@@ -33,7 +33,7 @@ flowchart LR
 ### ADR-04 Change tracking in the database (triggers → `audit.ChangeLog`)
 - `AFTER INSERT, UPDATE, DELETE` triggers on every tracked table write a row per changed record to `audit.ChangeLog` with old/new values as JSON (`FOR JSON`).
 - **Who**: the API sets `SESSION_CONTEXT` keys `UserId` and `CorrelationId` on every opened connection (EF Core `DbConnectionInterceptor`). Triggers read them.
-- **Scripts**: if `SESSION_CONTEXT('UserId')` is empty, the change is recorded with `Source = 'Script'`, `DbLogin = ORIGINAL_LOGIN()`. Support scripts should start with `EXEC audit.usp_SetSupportContext @Ticket = 'INC-123', @Reason = '…'` so the ticket is recorded too.
+- **Scripts**: every change not made by the API is recorded with `Source = 'Script'`, `DbLogin = ORIGINAL_LOGIN()`. `Source = 'App'` requires the API context **and** a caller in the `app_api` role (or `db_owner` for local development), so a support script cannot pose as the API by setting `UserId`. Support scripts should start with `EXEC audit.usp_SetSupportContext @Ticket = 'INC-123', @Reason = '…'` so the ticket is recorded too.
 - Rationale: application-level auditing (EF `SaveChanges` interceptor) cannot see script changes — a hard requirement. Temporal tables were considered but do not record *who* changed a row nor the reason; triggers do both. (Temporal tables can be added later for point-in-time queries if needed.)
 
 ### ADR-05 Rich text = schema-validated JSON modelled on Word (see [content-format.md](content-format.md))

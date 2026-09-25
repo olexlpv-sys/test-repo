@@ -24,6 +24,26 @@ public sealed class RolledBackScope(SqlConnection connection, SqlTransaction tra
         return (T)Convert.ChangeType(result!, typeof(T), System.Globalization.CultureInfo.InvariantCulture);
     }
 
+    /// <summary>Reads all rows as column-name → value dictionaries (DBNull becomes null).</summary>
+    public async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string sql, params (string Name, object? Value)[] parameters)
+    {
+        await using var command = CreateCommand(sql, parameters);
+        await using var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        var rows = new List<IReadOnlyDictionary<string, object?>>();
+        while (await reader.ReadAsync().ConfigureAwait(false))
+        {
+            var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                row[reader.GetName(i)] = await reader.IsDBNullAsync(i).ConfigureAwait(false) ? null : reader.GetValue(i);
+            }
+
+            rows.Add(row);
+        }
+
+        return rows;
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (Transaction.Connection is not null)

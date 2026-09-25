@@ -10,7 +10,7 @@ public sealed class DeploymentTests(SqlServerContainerFixture server)
     [
         "app.Comment", "app.ContentStyle", "app.ContentStyleUsage", "app.Document", "app.DocumentNode",
         "app.DocumentPermission", "app.DocumentVersion", "app.Folder", "app.NodeContent", "app.NodeType",
-        "app.User", "app.VersionSignature", "app.VersionStamp",
+        "app.User", "app.VersionSignature", "app.VersionStamp", "audit.ChangeLog",
     ];
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

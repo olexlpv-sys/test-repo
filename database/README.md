@@ -6,12 +6,17 @@ The SQL Database Project `DocHub.Database` (SDK `Microsoft.Build.Sql`, target Az
 | Folder | Content |
 |---|---|
 | `Schemas/` | `app` (domain), `audit` (change log, T03) |
+| `app/Triggers/` | **generated** audit triggers — edit `database/tools/GenerateAuditTriggers.cs`, then run `dotnet run database/tools/GenerateAuditTriggers.cs` |
+| `audit/` | `ChangeLog` (partitioned, generated partition function in `audit/Storage/`), `fn_ChangeContext`, `usp_SetSupportContext`, `vSignedVersionTampering` |
 | `app/Tables/` | tables with their constraints and indexes (one file per table) |
 | `app/Views/`, `app/Functions/`, `app/StoredProcedures/` | added by later tasks |
 | `Security/` | roles `app_api`, `support_writer`, `readonly` and their grants |
 | `Scripts/PostDeployment/` | idempotent seed data (users, content styles, node types, root folders) |
 
 Seed rules: users are seed-managed (upserted, extra users are kept); built-in styles are inserted when missing and never overwritten; node types and root folders are initial data inserted only into empty tables.
+
+## Support scripts
+Start from `database/support/_TEMPLATE.sql`: it sets the ticket and reason (`audit.usp_SetSupportContext`) and edits only `ContentJson`. Every change is audited by triggers whether or not the context is set (`Source = 'Script'`, database login).
 
 ## Build
 ```bash

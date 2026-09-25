@@ -7,5 +7,5 @@ CREATE TABLE [app].[VersionStamp]
     -- First change to nodes/content of a Signed version after signing (FR-H5).
     [TamperedAt]        DATETIME2 (3) NULL,
     CONSTRAINT [PK_VersionStamp] PRIMARY KEY CLUSTERED ([DocumentVersionId]),
-    CONSTRAINT [FK_VersionStamp_Version] FOREIGN KEY ([DocumentVersionId]) REFERENCES [app].[DocumentVersion] ([Id])
+    CONSTRAINT [FK_VersionStamp_Version] FOREIGN KEY ([DocumentVersionId]) REFERENCES [app].[DocumentVersion] ([Id]) ON DELETE CASCADE
 );

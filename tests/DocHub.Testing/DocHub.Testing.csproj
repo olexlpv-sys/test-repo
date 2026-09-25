@@ -17,6 +17,8 @@
     <!-- Builds the SQL Database Project first so its DACPAC can be deployed by the tests. -->
         <ProjectReference Include="..\..\database\DocHub.Database\DocHub.Database.sqlproj" ReferenceOutputAssembly="false" Private="false" />
     <None Include="..\..\database\DocHub.Database\bin\$(Configuration)\DocHub.Database.dacpac" Link="DocHub.Database.dacpac" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <!-- Referenced system database (sys.sp_set_session_context, …); DacFx resolves it next to the DACPAC. -->
+    <None Include="..\..\database\DocHub.Database\bin\$(Configuration)\master.dacpac" Link="master.dacpac" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
 </Project>

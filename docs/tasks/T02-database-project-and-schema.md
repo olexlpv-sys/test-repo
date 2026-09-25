@@ -138,7 +138,7 @@ Unique filtered index `(DocumentVersionId, UserId) WHERE WithdrawnAt IS NULL`.
 **`app.VersionStamp`** — per-version change stamp (maintained by T03 triggers, **not** audited itself)
 | Column | Type | Notes |
 |---|---|---|
-| DocumentVersionId | int PK, FK | |
+| DocumentVersionId | int PK, FK `ON DELETE CASCADE` | derived data; never blocks deleting a version |
 | LastChangeLogId | bigint | `audit.ChangeLog.Id` of the latest change to the version's nodes/content; cache key + ETag (NFR-L9) |
 | TamperedAt | datetime2(3) null | first change to nodes/content of a **Signed** version after `SignedAt` (FR-H5), excluding `OperationContext = 'RebuildDerived'` |
 

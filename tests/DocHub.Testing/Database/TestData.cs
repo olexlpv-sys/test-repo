@@ -1,6 +1,9 @@
 namespace DocHub.Testing.Database;
 
-/// <summary>Minimal SQL insert helpers for DB-level tests. Ids of the seeded users/types/folders are stable.</summary>
+/// <summary>
+/// Minimal SQL insert helpers for DB-level tests. Ids of the seeded users/types/folders are stable.
+/// Audited tables have triggers, so inserts return ids via SCOPE_IDENTITY() (OUTPUT without INTO is not allowed).
+/// </summary>
 public sealed class TestData(RolledBackScope scope)
 {
     public const int AdminUserId = 1;
@@ -17,17 +20,25 @@ public sealed class TestData(RolledBackScope scope)
 
     private static readonly byte[] EmptyHash = new byte[32];
 
+    /// <summary>Creates a database user without login in <paramref name="role"/> (rolled back with the scope) and returns its name.</summary>
+    public async Task<string> DatabaseUserInRoleAsync(string role)
+    {
+        var name = $"test_{role}_{Guid.NewGuid():N}";
+        await scope.ExecuteAsync($"CREATE USER [{name}] WITHOUT LOGIN; ALTER ROLE [{role}] ADD MEMBER [{name}];").ConfigureAwait(false);
+        return name;
+    }
+
     public Task<int> DocumentAsync(string title = "Test document", int folderId = GeneralFolderId, int ownerUserId = AliceUserId) =>
         scope.ScalarAsync<int>(
-            "INSERT INTO app.Document (FolderId, Title, OwnerUserId) OUTPUT INSERTED.Id VALUES (@f, @t, @o);",
+            "INSERT INTO app.Document (FolderId, Title, OwnerUserId) VALUES (@f, @t, @o); SELECT CAST(SCOPE_IDENTITY() AS int);",
             ("@f", folderId), ("@t", title), ("@o", ownerUserId));
 
     public Task<int> VersionAsync(int documentId, byte status = StatusDraft, int? versionNumber = null, bool isCurrent = false) =>
         scope.ScalarAsync<int>(
             """
             INSERT INTO app.DocumentVersion (DocumentId, Status, VersionNumber, SignedAt, CreatedByUserId, IsCurrent)
-            OUTPUT INSERTED.Id
             VALUES (@d, @s, @n, CASE WHEN @s = 2 THEN SYSUTCDATETIME() END, @u, @c);
+            SELECT CAST(SCOPE_IDENTITY() AS int);
             """,
             ("@d", documentId), ("@s", status), ("@n", versionNumber), ("@u", AliceUserId), ("@c", isCurrent));
 
@@ -35,8 +46,8 @@ public sealed class TestData(RolledBackScope scope)
         scope.ScalarAsync<int>(
             """
             INSERT INTO app.DocumentNode (DocumentVersionId, LogicalNodeId, ParentNodeId, NodeTypeId, Title, SortOrder, CreatedByUserId, ModifiedByUserId)
-            OUTPUT INSERTED.Id
             VALUES (@v, @l, @p, @t, @title, @s, @u, @u);
+            SELECT CAST(SCOPE_IDENTITY() AS int);
             """,
             ("@v", versionId), ("@l", logicalNodeId ?? Guid.NewGuid()), ("@p", parentNodeId), ("@t", ChapterNodeTypeId),
             ("@title", title), ("@s", sortOrder), ("@u", AliceUserId));
