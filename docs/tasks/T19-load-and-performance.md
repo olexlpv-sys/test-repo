@@ -11,7 +11,7 @@
 Prove NFR-L4 (p99 ≤ 3 s at 20 req/s on production-scale data) and keep proving it on every nightly build.
 
 ## Scope
-1. **Data generator** `tools/DocHub.DataGen` (.NET console app): builds the NFR-L2 volume with set-based inserts (`SqlBulkCopy`) into a deployed DACPAC database. Deterministic seed, configurable scale (`--scale 0.1` for CI, `1.0` for the full test). It creates 50 500 users, 100 folders, 10 000 documents with 5 versions each, realistic tree shapes (depth distribution, 1–2 000 nodes), content produced from the Content Schema fixtures, grants, comments and signatures. The audit triggers are disabled during the bulk load, and the generator writes one synthetic audit row per entity so history queries have data.
+1. **Data generator** `tools/DocHub.DataGen` (.NET console app): builds the NFR-L2 volume with set-based inserts (`SqlBulkCopy`) into a deployed DACPAC database. Deterministic seed, configurable scale (`--scale 0.1` for CI, `1.0` for the full test). It creates 50 500 users, 100 folders, 10 000 documents with 5 versions each, realistic tree shapes (depth distribution, 1–2 000 nodes), content produced from the Content Schema fixtures (with derived columns and `ContentStyleUsage` rows), grants, comments and signatures. The audit triggers are disabled during the bulk load, and the generator writes one synthetic audit row per entity so history queries have data.
 2. **Load scenarios** with **NBomber** (`tests/DocHub.LoadTests`), following the NFR-L3 mix:
    - Reader: list folder → open document → read 5 nodes → search.
    - Editor: open draft → autosave content every 3 s × 10 → view node history → compare with latest signed.

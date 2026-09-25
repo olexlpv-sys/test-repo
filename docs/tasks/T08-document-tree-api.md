@@ -15,13 +15,13 @@ Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary 
 ## API
 | Method | Route | Notes |
 |---|---|---|
-| GET | `/api/versions/{versionId}/tree` | full nested tree: `[{ id, logicalNodeId, nodeType {id,code,name}, title, number: "1.2.1", hasContent, sortOrder, rowVersion, children: [...] }]`; works for any version status |
+| GET | `/api/versions/{versionId}/tree` | full nested tree: `[{ id, logicalNodeId, nodeTypeId, title, number: "1.2.1", hasContent, sortOrder, rowVersion, children: [...] }]`; works for any version status |
 | GET | `/api/nodes/{nodeId}` | node header + `path` (ancestors) |
 | POST | `/api/versions/{versionId}/nodes` | `{ parentNodeId?, nodeTypeId, title, position? }` → `201`; `position` = 0-based index among siblings, default last; new `LogicalNodeId = NEWID()`; creates an empty `NodeContent` |
 | PATCH | `/api/nodes/{nodeId}` | `{ title?, nodeTypeId?, rowVersion }` |
 | POST | `/api/nodes/{nodeId}/move` | `{ newParentNodeId?, position, rowVersion }` — re-parent and/or reorder within the same version |
 | DELETE | `/api/nodes/{nodeId}?rowVersion=…` | deletes node **with its whole subtree** and contents; response `{ deletedCount }` |
-| POST | `/api/versions/{versionId}/nodes/bulk` | *(optional, nice to have)* create a whole subtree in one call: nested `[{ nodeTypeId, title, contentJson?, children }]` — `contentJson` validated/canonicalized exactly like T09 (never HTML) — useful for templates, seeding and tests |
+| POST | `/api/versions/{versionId}/nodes/bulk` | *(optional, nice to have)* create a whole subtree in one call: nested `[{ nodeTypeId, title, contentJson?, children }]` — `contentJson` validated/canonicalized exactly like T09, derived columns and `ContentStyleUsage` written in the same way (never HTML) — useful for templates, seeding and tests |
 
 ## Rules
 - Every mutating call (create, rename, change type, move, delete, bulk): `IVersionGuard.EnsureEditable` (T07) → `409 version-not-editable`, then `IDocumentAuthorization.CanEditStructure(docId)` (owner only) → `403`.
@@ -34,6 +34,7 @@ Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary 
 - Each mutation updates `ModifiedAt/ModifiedByUserId` of the node.
 
 ## Performance
+- Tree items carry `nodeTypeId` only; the UI resolves names from the separately cached `/api/node-types`, so a dictionary rename never makes a cached tree stale.
 - **Caching** (NFR-L9): tree responses carry `ETag` = `VersionStamp.LastChangeLogId`, `Cache-Control: private, no-cache`, `Vary: X-User-Id`, honor `If-None-Match` → `304`; Signed-version trees are kept in `HybridCache` keyed by `versionId + LastChangeLogId` (any change incl. script edits → new stamp → miss). `EnsureCanView` always runs first.
 - [AC] After a script edit of a Signed version, the next tree/content read returns the new data (no stale `304`); after the document is deleted, another user's revalidation gets `404`.
 - Tree load = one query for nodes of the version (+ `hasContent` via `EXISTS`/`LEN(PlainText) > 0` projection, **not** loading `ContentHtml`), assembled in memory.

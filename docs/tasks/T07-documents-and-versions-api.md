@@ -63,14 +63,14 @@ Derived document status for lists: `Deleted` if deleted; else `Draft` if a draft
 3. **New draft** = deep copy in stored procedure **`app.usp_CopyVersionToDraft @SourceVersionId, @UserId`** (single transaction, set-based — FR-D3):
    - new `DocumentVersion(Status=Draft, BasedOnVersionId=latest signed)`;
    - copy all `DocumentNode` rows keeping `LogicalNodeId`, remapping `ParentNodeId` (e.g. `MERGE … OUTPUT` old→new id map into a temp table);
-   - copy all `NodeContent` rows;
+   - copy all `NodeContent` rows (with their derived columns) **and their `ContentStyleUsage` rows**;
    - set `SESSION_CONTEXT(N'OperationContext') = 'CopyVersion'` for the copy (and clear it afterwards) so history (T11) collapses the inserted rows.
    - Permissions are per document and comments per version → nothing else to copy.
 4. **modifiedAfterSigning** = `VersionStamp.TamperedAt IS NOT NULL` — a single indexed read, no hash recomputation on document open (NFR-L5). The detail view (T11 history) can additionally recompute the hash from `ContentJson` and report whether content still differs from `SignedContentHash` (cached by `LastChangeLogId`). Detects support-script edits (FR-H5).
 5. **Authorization seam** — introduce `IDocumentAuthorization` with methods `CanManage(docId)` (lifecycle, roles), `CanEditStructure(docId)`, `CanEditContent(docId, logicalNodeId)`, `CanSign(docId)`, `CanComment(docId)`, `CanResolve(docId)`. In this task implement `CanManage`/`CanEditStructure`/`CanEditContent` as **owner-only** and `CanSign` as "has an `Approver` row in `app.DocumentPermission`" (and "required approvers" = all such rows) (tests insert the grant directly into the DB until T10 adds the API); T10 replaces the implementation with the full role logic. T08/T09/T13 call only this interface, so they can be built in parallel with T10.
 6. Deleted documents: visible read-only (`status = Deleted`, incl. history/compare) **to the owner and admins only**; other users get `404`. Implement once as `IDocumentAuthorization.EnsureCanView(documentId)` (`usp_CheckPermission` action `View`) — **every read endpoint that takes a document, version, node or comment id** (T07, T08, T09, T11, T12, T13, T18) must call it — including T10 `GET /permissions` and `/my-permissions`. Lists exclude them unless `includeDeleted=true`.
 7. **`IsCurrent`** (NFR-L8): set on the new draft by create / new draft (and cleared on the signed version it replaces), moved back to the latest signed version on discard, kept on the version when it is finalized. Always changed inside the same transaction; a DB test checks exactly one current version per non-empty document.
-8. **Caching** (NFR-L9): version reads return `ETag` = `VersionStamp.LastChangeLogId` with `Cache-Control: private, no-cache`, `Vary: X-User-Id`, honoring `If-None-Match` → `304`; `EnsureCanView` runs before any cache hit.
+8. **Caching** (NFR-L9): version reads return `ETag` = `VersionStamp.LastChangeLogId` (advanced also by status and signature changes, T03 §2b) with `Cache-Control: private, no-cache`, `Vary: X-User-Id`, honoring `If-None-Match` → `304`; `EnsureCanView` runs before any cache hit.
 9. **Data access** ([FR-D1/D2](../requirements/11-data-access.md)): all CRUD through EF Core; the list endpoint through `app.usp_ListDocuments`, the deep copy through `app.usp_CopyVersionToDraft`. Both procedures live in the DB project with DB tests.
 
 ## Acceptance criteria
@@ -80,6 +80,8 @@ Derived document status for lists: `Deleted` if deleted; else `Draft` if a draft
 - [ ] Revoking dave's approver grant while carol has a valid signature finalizes the version.
 - [ ] Only approver carol, no signatures: revoking carol does **not** finalize; the draft stays Draft and signing returns `409 no-approvers`.
 - [ ] On a deleted document: rename, sign, withdraw, discard, new draft, grant/revoke, comment, owner move → exactly `409 document-deleted`; admin move and restore work. On a non-deleted document, sign/discard/edit of a Signed version → exactly `409 version-not-editable`.
+- [ ] A style used only in a freshly created draft → style delete `409 in-use`.
+- [ ] After the last approver signs, revalidating the version header returns `200` with `Signed` (no stale `304`).
 - [ ] Admin renames a node-type `code` → no signature becomes outdated, no `modifiedAfterSigning` flag.
 - [ ] Direct SQL update of `ContentJson` (not `ContentHash`) in a draft → existing signatures reported `isValid = false`.
 - [ ] Discard the only version → `409 only-version`. Restore into another folder via `folderId`; restore without `folderId` when the folder is gone → `409 folder-missing`.

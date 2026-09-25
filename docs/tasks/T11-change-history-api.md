@@ -17,9 +17,9 @@ Read `audit.ChangeLog` (written by triggers — T03) and present a human-readabl
 |---|---|---|
 | GET | `/api/documents/{id}/nodes/{logicalNodeId}/history?page&pageSize` | history of one node **across all versions**, newest first |
 | GET | `/api/history/entries/{entryId}/diff` | diff between `OldValues` and `NewValues` of a content entry |
-| GET | `/api/history/entries/{entryId}/content` | the node's content (`contentJson` + `contentHtml`) and header (title, type) **as of** that entry — for "View" and "Restore this text" in the editor (T15) |
-| GET | `/api/versions/{versionId}/change-summary?since=latestSigned|{versionId}|{isoDate}` | per `logicalNodeId` of the version: `{ changeCount, lastChangedAt, lastChangedBy, hasScriptChange, hasChangeAfterSigning, structural: [Added, Moved, Renamed, TypeChanged] }` + removed nodes since the baseline — **one call for all section badges** |
-| GET | `/api/documents/{id}/nodes/{logicalNodeId}/changes?since=…&until=current|{entryId}` | **attributed diff** for track changes: same block/ops format as `/diff`, each `insert`/`delete`/`format` op carrying `{ entryId, userId, displayName, source, ticket, changedAt }` |
+| GET | `/api/history/entries/{entryId}/content` | resolves the entry's document and calls `EnsureCanView` (FR-P5) — the node's content (`contentJson` + `contentHtml`) and header (title, type) **as of** that entry — for "View" and "Restore this text" in the editor (T15) |
+| GET | `/api/versions/{versionId}/change-summary?since=latestSigned|v:{versionId}|e:{entryId}|d:{isoDate}` | **one call for all section badges**: `{ nodes: [{ logicalNodeId, changeCount, lastChangedAt, lastChangedBy, hasScriptChange, hasChangeAfterSigning, structural: [{ kind: Added|Moved|Renamed|TypeChanged, oldNumber?, newNumber?, oldTitle?, newTitle?, oldNodeTypeId?, newNodeTypeId? }] }], removed: [{ logicalNodeId, title, number, nodeTypeId, formerParentLogicalNodeId, formerPosition, lastEntryId }] }` — `lastEntryId` feeds `entries/{id}/content` to expand a deleted placeholder |
+| GET | `/api/documents/{id}/nodes/{logicalNodeId}/changes?since=latestSigned|v:{versionId}|e:{entryId}|d:{isoDate}&until=current|e:{entryId}` | **attributed diff** for track changes: same block/ops format as `/diff`, each `insert`/`delete`/`format` op carrying `{ entryId, userId, displayName, source, ticket, changedAt }` |
 | GET | `/api/documents/{id}/history?versionId?&from?&to?&userId?&source?&page&pageSize` | document-wide activity feed (nodes, content, versions, permissions, comments) |
 | GET | `/api/admin/audit?from&to&table&operation&source&userId&dbLogin&ticket&page&pageSize` | **admin only**; `from`/`to` required, range ≤ 31 days (partition elimination; `400` otherwise); indexed filters (T03); raw `audit.ChangeLog` rows (all tables incl. folders, node types, styles, users) for the Admin tab (FR-UI3) |
 
@@ -74,10 +74,12 @@ Unit tests with fixtures in `tests/DocHub.Domain.Tests/DiffFixtures/`. Whoever s
 - [ ] `change-summary` since v1 returns correct counts for changed, unchanged, added, moved and removed nodes in one call.
 - [ ] Attributed diff: Alice inserts a sentence, Bob changes one word in it, and a script fixes a typo. The result attributes each run correctly (Alice / Bob / Script + ticket), and text added and then removed within the range doesn't appear.
 - [ ] `entries/{id}/content` returns exactly the historical content and title.
+- [ ] For a deleted document, `entries/{id}/content`, `entries/{id}/diff`, `change-summary` and `/changes` → `404` for non-owner/non-admin (FR-P5).
+- [ ] `change-summary` returns old/new number, title and type for moved/renamed/retyped nodes and the removed-node shape; `since=e:{entryId}` works for both endpoints.
 - [ ] A direct SQL update (no session context) appears with `source = Script` and `dbLogin`; with `usp_SetSupportContext` it shows `ticket` and `reason`.
 - [ ] Script edit of a Signed version appears with `afterSigning = true`.
 - [ ] Diff of a table where one cell changed marks only that cell.
 - [ ] `GET /api/admin/audit` filters by `source=Script` and `ticket`; non-admin → `403`; a 31-day filtered query on 24 M rows returns the first page in < 1 s (tagged perf test).
-- [ ] Rows written with `OperationContext = 'RebuildDerived'` never appear (not logged, T03 §2c).
+- [ ] Derived-only rebuilds never appear (not logged, T03 §2c).
 - [ ] Making a word bold (no text change) is reported as a formatting change, not as delete+insert.
 - [ ] A deleted document's node history, document history and diff → `404` for non-owner/non-admin users, `200` for owner and admin (FR-P5, via `EnsureCanView`).

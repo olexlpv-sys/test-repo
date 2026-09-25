@@ -63,7 +63,7 @@ The document form opened from the list: the whole document is shown as **one Wor
 - **Section header indicators:** 🕘 *n* = number of changes to this node since the chosen baseline (default: the latest signed version); a coloured side bar marks sections changed since the baseline; a ⚠ icon marks script changes and changes after signing. Data comes from `GET /api/versions/{id}/change-summary?since=…` (T11) — one call for all sections.
 - **Section history (inline):** clicking 🕘 expands a timeline **inside the section**, between the heading and the text. It shows every change of this node across versions, newest first: time, user or "Script · login · ticket", kind (content, rename, type change, move, created, copied to draft), `+/−` word stats, and version markers ("v2 signed · carol, dave"). Data: `GET /api/documents/{id}/nodes/{logicalNodeId}/history` (T11), paged.
   - **View:** the section text switches to a read-only rendering of the node as it was at that entry.
-  - **Compare:** the section text switches to **track changes** between that entry and the current state.
+  - **Compare:** the section text switches to **track changes** between that entry and the current state (`/changes?since=e:{entryId}`).
   - **Restore this text** (owner/editor with rights, Draft only): puts the historical content into the section editor as a normal edit. It is saved and audited like any change.
 - **Track changes in the text (per section and document-wide):**
   - The *Show changes since* selector in the toolbar offers: latest signed version, any version, or a date. When it is on, every changed section shows its text in track-changes mode: insertions underlined in the author's colour, deletions struck through, formatting changes dotted-underlined.

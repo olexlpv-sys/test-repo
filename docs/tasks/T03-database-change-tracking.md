@@ -56,13 +56,13 @@ Requirements for triggers:
 - To avoid hand-writing 9 near-identical triggers, a generator script (`database/tools/Generate-AuditTriggers.sql` or a small PowerShell/C# script) is acceptable; the generated `.sql` files are committed.
 
 ### 2a. Derived-content flag
-The `app.NodeContent` trigger also sets `DerivedStale = 1` for rows whose `ContentJson` changed **unless `SESSION_CONTEXT('OperationContext')` is `'ApiContentSave'`** (set by the API content endpoint, T09) — so every edit outside the API content path is caught, including scripts run with `usp_SetSupportContext @ActingUserId`.
+The `app.NodeContent` trigger sets `DerivedStale = 1` for every row whose `ContentJson` changed **unless the same statement also updated all derived columns** (`ContentHtml`, `PlainText`, `ContentHash` — checked with `UPDATE()` and a value comparison), which is what the API content save does. The decision never depends on session context, so scripts cannot suppress it; a script that deliberately rewrites derived columns too is still fully audited (below).
 
 ### 2b. Version stamp
-The node and content triggers upsert `app.VersionStamp` for each affected version: `LastChangeLogId` = the new log id; `TamperedAt` = `SYSUTCDATETIME()` if still null and the version is Signed and `OperationContext <> 'RebuildDerived'`. `app.VersionStamp` has no audit trigger.
+The triggers on `DocumentVersion`, `VersionSignature`, `DocumentNode` and `NodeContent` upsert `app.VersionStamp` for each affected version: `LastChangeLogId` = the new log id (so the version header — status, signatures — and the tree/content all revalidate). `TamperedAt` = `SYSUTCDATETIME()` if still null, the version is Signed, and a **non-derived** column of a node/content row changed (column-based, independent of session context).
 
 ### 2c. Derived-content rebuild
-Writes with `OperationContext = 'RebuildDerived'` (refresher, T09 rule 8; runs as the seeded `system` user) change only derived columns (`ContentHtml`, `PlainText`, `ContentHash`, `DerivedStale`) and are **not written to `audit.ChangeLog`** (they carry no user-visible change).
+**Column-based audit rule:** an `UPDATE` of `NodeContent` in which only derived columns changed (`ContentHtml`, `PlainText`, `ContentHash`, `DerivedStale`) is not written to `audit.ChangeLog` and does not set `TamperedAt` — whatever the session context. Any change to `ContentJson` (or any other non-derived column) is **always** audited. `OperationContext` (e.g. `RebuildDerived` from the refresher, `CopyVersion`) is recorded as a label only and never changes what is audited or flagged.
 
 ### 3. Session context contract
 | Key | Set by | Meaning |
@@ -96,6 +96,7 @@ API for reading the log (T11). Retention/archiving of the log.
 - [ ] `UPDATE`/`DELETE` on `audit.ChangeLog` by a non-dbo user fails.
 - [ ] The support template `database/support/_TEMPLATE.sql` executes successfully **as a `support_writer` user** and produces audit rows with `Ticket`/`Reason`; the same template as `readonly` fails on the DML.
 - [ ] An API write executed as an `app_api` user succeeds and is audited.
-- [ ] A script update of `ContentJson` with `usp_SetSupportContext @ActingUserId = 3` sets `DerivedStale = 1`; an update with `OperationContext = 'ApiContentSave'` does not.
-- [ ] A write with `OperationContext = 'RebuildDerived'` produces no `ChangeLog` row and does not set `TamperedAt`.
+- [ ] A script update of `ContentJson` (with or without `usp_SetSupportContext @ActingUserId`, and even with `OperationContext` spoofed to `RebuildDerived`/`ApiContentSave`) is audited, sets `DerivedStale = 1` (unless derived columns were rewritten in the same statement) and sets `TamperedAt` on a Signed version.
+- [ ] An update that changes only derived columns produces no `ChangeLog` row and does not set `TamperedAt`.
+- [ ] Signing (status change, new `VersionSignature`) advances `VersionStamp.LastChangeLogId`.
 - [ ] Any node/content change advances `VersionStamp.LastChangeLogId` of its version; a script change to a Signed version sets `TamperedAt` once.
