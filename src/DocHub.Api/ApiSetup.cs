@@ -72,6 +72,7 @@ internal static class ApiSetup
         services.AddSingleton<IEndpointModule, NodeEndpoints>();
         services.AddSingleton<IEndpointModule, ContentEndpoints>();
         services.AddSingleton<IEndpointModule, PermissionEndpoints>();
+        services.AddSingleton<IEndpointModule, HistoryEndpoints>();
 
         // Documents and versions (T07): the authorization seam, guards, signing and read models.
         services.AddScoped<IDocumentAuthorization, DocumentAuthorization>();
@@ -80,6 +81,9 @@ internal static class ApiSetup
         services.AddScoped<DocumentViews>();
         services.AddScoped<NodeRules>();
         services.AddScoped<NodeContents>();
+        services.AddSingleton<DocHub.Infrastructure.Content.Diff.IContentDiffService, DocHub.Infrastructure.Content.Diff.ContentDiffService>();
+        services.AddScoped<History.ChangeHistory>();
+        services.AddScoped<History.ChangeTracking>();
 
         // Signed-version trees and contents (NFR-L9).
         // Values are serialized (also for the in-memory copy) with the API's depth limit: trees are up to 100 levels deep.

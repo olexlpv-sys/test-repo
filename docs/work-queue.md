@@ -33,7 +33,7 @@ Q22 is placed right after Q04 (it hardens the Q03 schema before feature work bui
 | Q11 | [T09](tasks/T09-node-content-api.md) Styled content | CODE + TEST | Q05, Q10 | A | done | **GREEN** (3 rounds) |
 | Q12 | [T17](tasks/T17-web-admin-tab.md) Web admin | CODE + TEST | Q05, Q08, Q14, Q22 | C | todo | – |
 | Q13 | [T13](tasks/T13-comments-api.md) Comments | CODE + TEST | Q07, Q09 | B | todo | – |
-| Q14 | [T11](tasks/T11-change-history-api.md) History + diff engine | CODE + TEST | Q03, Q11, Q22 | A | todo | – |
+| Q14 | [T11](tasks/T11-change-history-api.md) History + diff engine | CODE + TEST | Q03, Q11, Q22 | A | in-review | – |
 | Q15 | [T12](tasks/T12-version-comparison-api.md) Compare | CODE + TEST | Q11, Q14 (diff engine) | B | todo | – |
 | Q16 | [T15](tasks/T15-web-document-editor.md) Web section editor + inline history | CODE + TEST | Q08, Q09, Q10, Q11, Q14 | C | todo | – |
 | Q17 | [T16](tasks/T16-web-compare-comments-permissions.md) Web compare/comments/permissions | CODE + TEST | Q09, Q13, Q15, Q16 | C | todo | – |

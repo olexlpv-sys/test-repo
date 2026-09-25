@@ -118,3 +118,72 @@ public sealed class ContentDiffTests
 
     private static string SourceFixtures([CallerFilePath] string path = "") => Path.Combine(Path.GetDirectoryName(path)!, "DiffFixtures");
 }
+
+/// <summary>T11 §2a: attributed diff (track changes).</summary>
+public sealed class AttributedDiffTests
+{
+    private static readonly ContentDiffService Service = new();
+    private static readonly DiffAuthor Alice = new(1, 2, "Alice", "App", null, new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc));
+    private static readonly DiffAuthor Bob = new(2, 3, "Bob", "App", null, new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc));
+    private static readonly DiffAuthor Script = new(3, null, null, "Script", "INC-7", new DateTime(2026, 9, 3, 0, 0, 0, DateTimeKind.Utc));
+
+    private static string Doc(params string[] paragraphs) =>
+        $$"""{"type":"doc","content":[{{string.Join(',', paragraphs.Select(p => $$"""{"type":"paragraph","content":[{"type":"text","text":"{{p}}"}]}"""))}}]}""";
+
+    [Fact]
+    public void Each_run_is_attributed_and_text_added_then_removed_leaves_no_trace()
+    {
+        var baseline = Doc("The systm is fast.");
+        var steps = new[]
+        {
+            new ContentStep(Doc("The systm is fast. It stores every change."), Alice),
+            new ContentStep(Doc("The systm is fast. It stores every change. Temporary words."), Alice),
+            new ContentStep(Doc("The systm is fast. It records every change."), Bob),
+            new ContentStep(Doc("The system is fast. It records every change."), Script),
+        };
+
+        var ops = Assert.Single(AttributedDiff.Diff(Service, baseline, steps).Blocks).Ops!;
+        var changes = ops.Where(o => o.Op != "equal").Select(o => (o.Op, o.Text, o.By?.DisplayName ?? o.By?.Source)).ToList();
+        Assert.Contains(("delete", "systm", "Script"), changes);
+        Assert.Contains(("insert", "system", "Script"), changes);
+        Assert.Contains(("insert", "records", "Bob"), changes);
+        Assert.Contains(changes, c => c.Op == "insert" && c.Item3 == "Alice" && c.Text.Contains("every change", StringComparison.Ordinal));
+        Assert.DoesNotContain(ops, o => o.Text.Contains("Temporary", StringComparison.Ordinal) || o.Text.Contains("stores", StringComparison.Ordinal));
+        Assert.Equal("INC-7", ops.First(o => o.By?.Source == "Script").By!.Ticket);
+        Assert.All(ops.Where(o => o.Op == "equal"), o => Assert.Null(o.By));
+    }
+
+    [Fact]
+    public void A_format_change_keeps_the_text_author_and_records_the_formatter()
+    {
+        var baseline = Doc("Intro.");
+        var steps = new[]
+        {
+            new ContentStep(Doc("Intro. Scope matters."), Alice),
+            new ContentStep("""{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Intro. "},{"type":"text","text":"Scope","marks":[{"type":"bold"}]},{"type":"text","text":" matters."}]}]}""", Bob),
+        };
+
+        var ops = Assert.Single(AttributedDiff.Diff(Service, baseline, steps).Blocks).Ops!;
+        // Inserted within the range: shown as Alice's insert (with Bob's bold applied), not as Bob's text.
+        Assert.All(ops.Where(o => o.Op == "insert"), o => Assert.Equal("Alice", o.By!.DisplayName));
+        Assert.Contains("Scope", string.Concat(ops.Where(o => o.Op == "insert").Select(o => o.Text)), StringComparison.Ordinal);
+
+        // Bolding baseline text is Bob's format change.
+        var formatted = AttributedDiff.Diff(Service, Doc("Scope matters."),
+            [new ContentStep("""{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Scope","marks":[{"type":"bold"}]},{"type":"text","text":" matters."}]}]}""", Bob)]);
+        var format = Assert.Single(Assert.Single(formatted.Blocks).Ops!, o => o.Op == "format");
+        Assert.Equal(("Scope", "Bob"), (format.Text, format.By!.DisplayName));
+    }
+
+    [Fact]
+    public void Deleted_and_inserted_paragraphs_and_tables_are_attributed()
+    {
+        var baseline = Doc("Keep.", "Remove me.");
+        var steps = new[] { new ContentStep(Doc("Keep."), Bob), new ContentStep(Doc("Keep.", "Added by Alice."), Alice) };
+        var blocks = AttributedDiff.Diff(Service, baseline, steps).Blocks;
+        Assert.Equal(["equal", "deleted", "inserted"], blocks.Select(b => b.Status));
+        Assert.Equal("Bob", Assert.Single(blocks[1].Ops!).By!.DisplayName);
+        Assert.Equal("Alice", Assert.Single(blocks[2].Ops!).By!.DisplayName);
+        Assert.DoesNotContain(AttributedDiff.Diff(Service, baseline, []).Blocks, b => b.Status != "equal");
+    }
+}

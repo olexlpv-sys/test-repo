@@ -146,6 +146,14 @@ public sealed partial class StyleProperties(IEnumerable<string> fontFamilies)
         // Style ids compare case-insensitively, like the database collation (BasedOn references).
         var byId = styles.GroupBy(s => s.StyleId, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var css = new StringBuilder("/* Generated from the DocHub style catalog (app.ContentStyle). */\n");
+        // Diffs and track changes (T11/T12) render with these classes on top of the styles.
+        css.Append(".ds-diff-insert { background-color: #D4F7D4; text-decoration: underline; }\n")
+            .Append(".ds-diff-delete { background-color: #FBD5D5; text-decoration: line-through; }\n")
+            .Append(".ds-diff-format { background-color: #FFF2C2; }\n")
+            .Append(".ds-diff-inserted { border-left: 3px solid #2E7D32; }\n")
+            .Append(".ds-diff-deleted { border-left: 3px solid #C62828; }\n")
+            .Append(".ds-diff-changed { border-left: 3px solid #F9A825; }\n")
+            .Append(".ds-page-break { break-after: page; }\n");
         foreach (var style in styles.OrderBy(s => s.StyleId, StringComparer.Ordinal))
         {
             var merged = Resolve(style, byId);

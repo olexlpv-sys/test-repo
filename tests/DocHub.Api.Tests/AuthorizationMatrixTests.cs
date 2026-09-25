@@ -22,7 +22,7 @@ public sealed class AuthorizationMatrixTests(DocHubApiFactory factory) : IClassF
         await AuthorizationMatrix.AssertAsync(factory, cases, TestContext.Current.CancellationToken);
     }
 
-    /// <summary>T05–T10: dictionaries, folders, documents, trees, contents and permissions are readable by every user; writes are admin-only (non-existing ids/invalid bodies: no side effects).</summary>
+    /// <summary>T05–T11: dictionaries, folders, documents, trees, contents, permissions and history are readable by every user; writes are admin-only (non-existing ids/invalid bodies: no side effects).</summary>
     [Fact]
     public async Task Dictionary_endpoints_follow_the_matrix()
     {
@@ -88,6 +88,15 @@ public sealed class AuthorizationMatrixTests(DocHubApiFactory factory) : IClassF
                 new AccessCase("GET", "/api/documents/999999/my-permissions", user, Missing),
                 new AccessCase("POST", "/api/documents/999999/permissions", user, Missing, new { userId = 3, role = "Editor" }),
                 new AccessCase("DELETE", "/api/documents/999999/permissions/1", user, Missing),
+
+                // T11 history (per-document visibility: HistoryTests).
+                new AccessCase("GET", $"/api/documents/999999/nodes/{Guid.Empty}/history", user, Missing),
+                new AccessCase("GET", "/api/documents/999999/history", user, Missing),
+                new AccessCase("GET", $"/api/documents/999999/nodes/{Guid.Empty}/changes", user, Missing),
+                new AccessCase("GET", "/api/versions/999999/change-summary", user, Missing),
+                new AccessCase("GET", "/api/history/entries/999999999/diff", user, Missing),
+                new AccessCase("GET", "/api/history/entries/999999999/content", user, Missing),
+                new AccessCase("GET", "/api/admin/audit", user, Admin(HttpStatusCode.BadRequest)),
             };
         });
 

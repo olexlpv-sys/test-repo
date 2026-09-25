@@ -68,6 +68,13 @@ Built by **folding consecutive content states** from `audit.ChangeLog` (baseline
 - rendering to `ops` JSON and to `<ins>/<del>` HTML (via the T09 `ContentHtmlRenderer`, keeping the original styles visible in the diff).
 Unit tests with fixtures in `tests/DocHub.Domain.Tests/DiffFixtures/`. Whoever starts first (T11 or T12) builds it.
 
+## Implementation notes (Q14)
+- **Diff engine** (`Infrastructure/Content/Diff`): a tree diff of the content JSON. Children are aligned by LCS, and changed stretches are paired by word similarity (Jaccard ≥ 0.3). Paired text blocks get a DiffPlex word diff. Tables are diffed row by row, then cell by cell. The HTML is the T09 renderer output of a diff document with `diffInsert`/`diffDelete`/`diffFormat` marks and `ds-diff-*` classes (styles in `stylesheet.css`).
+- **Track changes** (`AttributedDiff`): folds the states character by character. The ops of changed text blocks come from that fold, so the attribution is exact. The `html` of `/changes` is the plain baseline→final diff.
+- **Baselines**: `latestSigned`/`v:` count rows after the baseline's signing in the target and its ancestors after it. `e:`/`d:` rebuild the tree and content as of the point from the log. `/changes` tracks the draft, else the current version.
+- **Entry ids**: an entry is the content row of its group if it has one (this is what `/diff` and `/content` take), else its last row.
+- **Performance data**: the perf tests use 1 M log rows (weak-environment profile, decisions log Q19) instead of 24 M.
+
 ## Acceptance criteria
 - [ ] Edit content of a node 3 times in v1-draft, sign, create draft, edit once more → node history shows 4 `ContentChanged` + `VersionSigned` context + 1 `CopiedToNewDraft`, in the correct order, with correct users.
 - [ ] Rename + change type in one request → one grouped entry.
