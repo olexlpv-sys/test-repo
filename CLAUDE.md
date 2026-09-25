@@ -14,4 +14,6 @@
 - Run API: `dotnet run --project src/DocHub.Api` → http://localhost:5080 (`/health`, `/openapi/v1.json`, `/scalar`)
 - Local SQL Server: `cp .env.example .env && docker compose up -d`
 - Package versions live only in `Directory.Packages.props`.
+- API contract snapshot: `src/DocHub.Api/openapi.v1.json`; after an intended API change run the API tests with `UPDATE_OPENAPI_SNAPSHOT=1` and commit the file.
+- New endpoints: add an `IEndpointModule` (Minimal API) and register it in `ApiSetup`; extend `AuthorizationMatrixTests`.
 - DB: build `dotnet build database/DocHub.Database.slnx`; publish with `dotnet tool restore && dotnet sqlpackage /Action:Publish …` (see `database/README.md`). DB tests need Docker (start the daemon with `dockerd &` in cloud sessions if `docker ps` fails).

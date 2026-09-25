@@ -38,7 +38,7 @@ Cross-cutting plumbing every feature task relies on, so feature tasks only add e
 ### 4. Errors, validation, conventions
 - `ProblemDetails` everywhere (`AddProblemDetails`, `IExceptionHandler`); domain exceptions map to the codes in [architecture §3](../architecture.md#3-standard-error-codes-problemdetails-type).
 - `DbUpdateConcurrencyException` → `409 concurrency-conflict`. Unique-index violations (SQL 2601/2627) → `409` with a meaningful `type`.
-- Validation: FluentValidation **or** DataAnnotations + endpoint filter (pick one), → `400 validation-failed` with field errors.
+- Validation: DataAnnotations + endpoint filter (`.WithValidation<T>()`) → `400 validation-failed` with field errors.
 - JSON: camelCase, enums as strings, `rowVersion` serialized as base64 string.
 - Pick **Controllers or Minimal API endpoint groups** and document the choice in `architecture.md` (ADR-07).
 - Paging convention for list endpoints: `?page=1&pageSize=50` → `{ items, page, pageSize, totalCount }`.
@@ -47,16 +47,17 @@ Cross-cutting plumbing every feature task relies on, so feature tasks only add e
 
 ### 5. Test infrastructure (`DocHub.Api.Tests`)
 - `DocHubApiFactory : WebApplicationFactory<Program>` reusing the SQL container fixture from `tests/DocHub.Testing` (T02).
-- Isolation: **Respawn** reset of `app` tables (except seed) between tests, or one database per test class.
+- Isolation: one freshly deployed database per test class (`DocHubApiFactory` class fixture). Respawn was rejected: its deletes would fire the audit triggers and wipe the seed.
+- The API connects with a SQL login in the `app_api` role (as in production), so grants and `Source = 'App'` are exercised.
 - Helpers: `client.AsUser(2)` sets `X-User-Id`; builders for folders/documents/nodes.
 - Test: EF model ↔ DB schema check (compare `IModel` tables/columns with `INFORMATION_SCHEMA.COLUMNS`).
 - CI runs these tests (Docker available on `ubuntu-latest`).
 - Authorization-matrix test harness (endpoint × role → expected status) that later tasks extend — see [testing strategy](../testing-strategy.md).
-- OpenAPI snapshot test (Verify) + committed `src/DocHub.Api/openapi.v1.json`.
+- OpenAPI snapshot test: the served document must equal the committed `src/DocHub.Api/openapi.v1.json` (`UPDATE_OPENAPI_SNAPSHOT=1` accepts a change).
 
 ## Acceptance criteria
 - [ ] `GET /api/me` with `X-User-Id: 2` → alice; without header → `401` ProblemDetails.
 - [ ] An integration test updates a row through `DbContext` inside a request and finds a matching `audit.ChangeLog` row with `Source='App'`, `UserId`, `CorrelationId`.
 - [ ] Concurrency conflict returns `409 concurrency-conflict`.
 - [ ] Schema-drift test passes and fails when a column is renamed in the DB project.
-- [ ] Integration tests run green in CI.
+- [ ] Integration tests run green (locally on a clean copy; CI deferred — decisions log Q17).

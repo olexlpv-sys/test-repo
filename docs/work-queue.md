@@ -20,7 +20,7 @@ Status: `todo` · `in-progress` · `in-review` · `done` · `blocked`
 | Q01 | [T01](tasks/T01-api-solution-setup.md) API solution | CODE | Q00 | A | done | **GREEN** (2 rounds) |
 | Q02 | [T02](tasks/T02-database-project-and-schema.md) DB project & schema | DB + TEST | Q01 | A | done | **GREEN** (2 rounds) |
 | Q03 | [T03](tasks/T03-database-change-tracking.md) Audit triggers | DB + TEST | Q02 | A | done | **GREEN** (3 rounds) |
-| Q04 | [T04](tasks/T04-api-foundation.md) API foundation | CODE + TEST | Q01, Q03 | A | in-progress | – |
+| Q04 | [T04](tasks/T04-api-foundation.md) API foundation | CODE + TEST | Q01, Q03 | A | in-review | – |
 | Q05 | [T05](tasks/T05-users-and-node-types-api.md) Users, node types, content styles | CODE + TEST | Q04 | B | todo | – |
 | Q06 | [T06](tasks/T06-virtual-folders-api.md) Folders | CODE + TEST | Q04 | B | todo | – |
 | Q07 | [T07](tasks/T07-documents-and-versions-api.md) Documents, signing, restore | CODE + TEST | Q04, Q06 | A | todo | – |

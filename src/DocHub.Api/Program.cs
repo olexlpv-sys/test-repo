@@ -1,18 +1,11 @@
-using Scalar.AspNetCore;
+using DocHub.Api;
 
 var builder = WebApplication.CreateBuilder(args);
-
-builder.Services.AddOpenApi();
-builder.Services.AddHealthChecks();
+builder.AddDocHubApi();
 
 var app = builder.Build();
-
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-    app.MapScalarApiReference();
-}
-
-app.MapHealthChecks("/health");
-
+app.UseDocHubApi();
 app.Run();
+
+/// <summary>Entry point; public for WebApplicationFactory in the integration tests.</summary>
+public partial class Program;

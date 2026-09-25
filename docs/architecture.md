@@ -49,7 +49,7 @@ flowchart LR
 - Designed so it can be swapped for Entra ID (JWT bearer) later without touching endpoints: everything uses `ICurrentUser`.
 
 ### ADR-07 API style
-- Controllers (or Minimal API endpoint groups — pick one in T04 and use consistently), JSON camelCase, `ProblemDetails` for errors,
+- REST over HTTP/JSON implemented with **Minimal API** (decided in T04): each feature area is an `IEndpointModule` registered in DI and mapped at startup (tests add test-only modules the same way). JSON camelCase, enums as strings, `ProblemDetails` for errors,
   `rowVersion` (base64) in DTOs for optimistic concurrency, built-in `Microsoft.AspNetCore.OpenApi` + Scalar UI.
 - Layering is intentionally light: `Domain` (entities + rules), `Infrastructure` (EF, SQL, diff, content schema validator/renderer), `Api` (endpoints + application services). No MediatR/CQRS.
 

@@ -18,4 +18,9 @@ trim_trailing_whitespace = false
 dotnet_sort_system_directives_first = true
 csharp_style_namespace_declarations = file_scoped:warning
 csharp_style_var_for_built_in_types = true:suggestion
-dotnet_style_require_accessibility_modifiers = always:warning
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+
+# Domain entities mirror table and status names (DocumentPermission, VersionStatus.Signed).
+[src/DocHub.Domain/Entities/*.cs]
+dotnet_diagnostic.CA1711.severity = none
+dotnet_diagnostic.CA1720.severity = none
