@@ -57,6 +57,22 @@ public sealed class AuthenticationTests(DocHubApiFactory factory) : IClassFixtur
         Assert.Equal(401, problem.GetProperty("status").GetInt32());
     }
 
+    [Theory]
+    [InlineData("text/html")]
+    [InlineData("application/xml")]
+    public async Task Problems_are_json_even_when_the_client_does_not_accept_json(string accept)
+    {
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Accept.ParseAdd(accept);
+
+        using var response = await client.GetAsync(new Uri("/api/me", UriKind.Relative), Ct);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        Assert.Equal("unauthenticated", problem.GetProperty("type").GetString());
+    }
+
     [Fact]
     public async Task System_info_is_anonymous_and_reports_test_mode()
     {

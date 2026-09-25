@@ -8,8 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DocHub.Api.Tests;
 
 /// <summary>
-/// No EF migrations (ADR-01): the EF model must match the schema deployed from the DACPAC — every app table mapped, and for
-/// every mapped column the same name, store type and nullability.
+/// No EF migrations (ADR-01): the EF model must match the schema deployed from the DACPAC — every app table mapped, every
+/// visible column of a mapped table mapped, and for every mapped column the same name, store type and nullability.
 /// </summary>
 public sealed class SchemaDriftTests(DocHubApiFactory factory) : IClassFixture<DocHubApiFactory>
 {
@@ -37,6 +37,11 @@ public sealed class SchemaDriftTests(DocHubApiFactory factory) : IClassFixture<D
         problems.AddRange(database.Select(c => c.Table).Distinct(StringComparer.OrdinalIgnoreCase)
             .Where(t => t.StartsWith("app.", StringComparison.OrdinalIgnoreCase) && !mappedTables.Contains(t))
             .Select(t => $"table {t} is not mapped in the EF model"));
+
+        var mappedColumns = modelColumns.Select(c => (c.Table.ToUpperInvariant(), c.Name.ToUpperInvariant())).ToHashSet();
+        problems.AddRange(database
+            .Where(c => mappedTables.Contains(c.Table) && !mappedColumns.Contains((c.Table.ToUpperInvariant(), c.Name.ToUpperInvariant())))
+            .Select(c => $"{c.Table}.{c.Name}: exists in the database but is not mapped in the EF model"));
 
         var byKey = database.ToDictionary(c => (c.Table.ToUpperInvariant(), c.Name.ToUpperInvariant()));
         foreach (var column in modelColumns)
@@ -68,7 +73,9 @@ public sealed class SchemaDriftTests(DocHubApiFactory factory) : IClassFixture<D
             SELECT TABLE_SCHEMA + '.' + TABLE_NAME AS [Table], COLUMN_NAME AS [Name], DATA_TYPE AS [Type],
                    CHARACTER_MAXIMUM_LENGTH AS [Length], DATETIME_PRECISION AS [Precision], IS_NULLABLE AS [Nullable]
             FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA IN ('app', 'audit');
+            WHERE TABLE_SCHEMA IN ('app', 'audit')
+              -- Hidden columns (temporal period / ledger columns) are managed by SQL Server and never mapped.
+              AND COLUMNPROPERTY(OBJECT_ID(QUOTENAME(TABLE_SCHEMA) + '.' + QUOTENAME(TABLE_NAME)), COLUMN_NAME, 'IsHidden') = 0;
             """);
 
         return rows.Select(r => new Column(

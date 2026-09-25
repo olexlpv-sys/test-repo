@@ -45,6 +45,8 @@ internal static class ApiSetup
                 context.ProblemDetails.Type = Domain.Errors.ErrorCodes.NotFound;
             }
         });
+        // Registered after the default writer: used when the client's Accept header excludes JSON.
+        services.AddSingleton<Microsoft.AspNetCore.Http.IProblemDetailsWriter, JsonProblemDetailsWriter>();
         services.AddExceptionHandler<ExceptionToProblemHandler>();
         services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 

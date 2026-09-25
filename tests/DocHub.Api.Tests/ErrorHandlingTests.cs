@@ -25,6 +25,18 @@ public sealed class ErrorHandlingTests(DocHubApiWithTestEndpointsFactory factory
     }
 
     [Fact]
+    public async Task Mapped_errors_keep_their_status_when_the_client_accepts_only_xml()
+    {
+        using var client = factory.CreateClientFor(TestUsers.Alice);
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/xml");
+
+        using var response = await client.PostAsync(new Uri("/__test/errors/conflict", UriKind.Relative), null, Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("version-not-editable", await response.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Unhandled_errors_are_500_problems_without_internal_details()
     {
         using var client = factory.CreateClientFor(TestUsers.Alice);
