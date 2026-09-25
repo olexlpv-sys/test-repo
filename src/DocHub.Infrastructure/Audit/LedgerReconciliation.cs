@@ -7,8 +7,8 @@ namespace DocHub.Infrastructure.Audit;
 
 internal sealed class LedgerReconciliation(DocHubDbContext db, IAuditModuleHashes expected, TimeProvider time) : ILedgerReconciliation
 {
-    /// <summary>Reconciliation scans the ledger history of the window; it runs nightly, so it may take minutes.</summary>
-    private static readonly TimeSpan CommandTimeout = TimeSpan.FromMinutes(30);
+    /// <summary>Upper bound for one reconciliation command (the nightly window is small; a longer run is a problem to report).</summary>
+    private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(30);
 
     private const string ModulesSql = """
         SELECT OBJECT_SCHEMA_NAME([o].[object_id]) + N'.' + [o].[name] AS [Name], [m].[definition] AS [Definition],

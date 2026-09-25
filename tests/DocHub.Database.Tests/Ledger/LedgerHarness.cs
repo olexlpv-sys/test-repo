@@ -49,7 +49,7 @@ internal sealed class LedgerHarness(DocHubDatabaseFixture database)
         await using var command = new Microsoft.Data.SqlClient.SqlCommand("audit.usp_ReconcileLedger", session.Connection)
         {
             CommandType = System.Data.CommandType.StoredProcedure,
-            CommandTimeout = 120,
+            CommandTimeout = 30,
         };
         command.Parameters.AddWithValue("@From", from);
         command.Parameters.AddWithValue("@Digest", (object?)digest ?? DBNull.Value);

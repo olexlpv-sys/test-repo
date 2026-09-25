@@ -16,4 +16,6 @@ public static class ErrorCodes
     public const string PayloadTooLarge = "payload-too-large";
     public const string UnsupportedMediaType = "unsupported-media-type";
     public const string RequestFailed = "request-failed";
+    public const string InUse = "in-use";
+    public const string BuiltInStyle = "built-in-style";
 }

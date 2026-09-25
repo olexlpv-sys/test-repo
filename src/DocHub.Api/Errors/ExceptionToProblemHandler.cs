@@ -40,8 +40,14 @@ internal sealed partial class ExceptionToProblemHandler(IProblemDetailsService p
             "The item was changed by someone else. Reload it and try again."),
         DbUpdateException { InnerException: SqlException sql } when sql.Number is UniqueIndexViolation or UniqueConstraintViolation =>
             (StatusCodes.Status409Conflict, UniqueConstraintCodes.For(IndexName(sql.Message)), "Duplicate", "An item with the same key already exists."),
+        DbUpdateException { InnerException: SqlException { Number: ConstraintViolation } fk } when InUseReference().IsMatch(fk.Message) =>
+            (StatusCodes.Status409Conflict, ErrorCodes.InUse, "In use", "The item is referenced by other data; deactivate it instead."),
         DbUpdateException { InnerException: SqlException { Number: ConstraintViolation } } =>
             (StatusCodes.Status409Conflict, ErrorCodes.Conflict, "Conflict", "The change conflicts with related data."),
+        BadHttpRequestException { StatusCode: StatusCodes.Status413PayloadTooLarge } =>
+            (StatusCodes.Status413PayloadTooLarge, ErrorCodes.PayloadTooLarge, "Payload too large", "The request body is too large."),
+        BadHttpRequestException { StatusCode: StatusCodes.Status415UnsupportedMediaType } =>
+            (StatusCodes.Status415UnsupportedMediaType, ErrorCodes.UnsupportedMediaType, "Unsupported media type", "Send the request body as application/json."),
         BadHttpRequestException bad => (bad.StatusCode, ErrorCodes.ValidationFailed, "Invalid request", "The request could not be read."),
         _ => (StatusCodes.Status500InternalServerError, ErrorCodes.InternalError, "Internal error", null),
     };
@@ -66,6 +72,10 @@ internal sealed partial class ExceptionToProblemHandler(IProblemDetailsService p
 
     [GeneratedRegex(@"'((?:UX|UQ|PK)_[A-Za-z0-9_]+)'", RegexOptions.CultureInvariant)]
     private static partial Regex IndexNamePattern();
+
+    // A DELETE that lost a race with a new reference (node → node type, content → style, style → base style).
+    [GeneratedRegex(@"DELETE statement conflicted with the REFERENCE constraint ""(FK_DocumentNode_NodeType|FK_ContentStyleUsage_Style|FK_ContentStyle_BasedOn)""", RegexOptions.CultureInvariant)]
+    private static partial Regex InUseReference();
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Unhandled exception")]
     private static partial void LogUnhandled(ILogger logger, Exception exception);

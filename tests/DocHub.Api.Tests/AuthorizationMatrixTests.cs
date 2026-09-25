@@ -21,4 +21,35 @@ public sealed class AuthorizationMatrixTests(DocHubApiFactory factory) : IClassF
 
         await AuthorizationMatrix.AssertAsync(factory, cases, TestContext.Current.CancellationToken);
     }
+
+    /// <summary>T05: dictionaries are readable by every user; writes are admin-only (non-existing ids/invalid bodies: no side effects).</summary>
+    [Fact]
+    public async Task Dictionary_endpoints_follow_the_matrix()
+    {
+        var updateType = new { code = "NOPE", name = "Nope", sortOrder = 0, isActive = true, rowVersion = "AAAAAAAAAAA=" };
+        var cases = AllCallers.SelectMany(user =>
+        {
+            var authenticated = user is not (null or TestUsers.System);
+            var read = authenticated ? HttpStatusCode.OK : HttpStatusCode.Unauthorized;
+            HttpStatusCode Admin(HttpStatusCode forAdmin) => !authenticated ? HttpStatusCode.Unauthorized : user == TestUsers.Admin ? forAdmin : HttpStatusCode.Forbidden;
+            return new[]
+            {
+                new AccessCase("GET", "/api/users", user, read),
+                new AccessCase("GET", "/api/users/2", user, read),
+                new AccessCase("GET", "/api/node-types", user, read),
+                new AccessCase("GET", "/api/node-types/1", user, read),
+                new AccessCase("GET", "/api/content-styles", user, read),
+                new AccessCase("GET", "/api/content-styles/1", user, read),
+                new AccessCase("GET", "/api/content-styles/stylesheet.css", user, HttpStatusCode.OK),
+                new AccessCase("POST", "/api/node-types", user, Admin(HttpStatusCode.BadRequest), new { code = "x" }),
+                new AccessCase("PUT", "/api/node-types/999999", user, Admin(HttpStatusCode.NotFound), updateType),
+                new AccessCase("DELETE", "/api/node-types/999999", user, Admin(HttpStatusCode.NotFound)),
+                new AccessCase("POST", "/api/content-styles", user, Admin(HttpStatusCode.BadRequest), new { styleId = "x" }),
+                new AccessCase("PUT", "/api/content-styles/999999", user, Admin(HttpStatusCode.NotFound), new { name = "x", properties = new { }, rowVersion = "AAAAAAAAAAA=" }),
+                new AccessCase("DELETE", "/api/content-styles/999999?rowVersion=AAAAAAAAAAA=", user, Admin(HttpStatusCode.NotFound)),
+            };
+        });
+
+        await AuthorizationMatrix.AssertAsync(factory, cases, TestContext.Current.CancellationToken);
+    }
 }

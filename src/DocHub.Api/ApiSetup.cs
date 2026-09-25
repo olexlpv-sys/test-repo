@@ -5,6 +5,7 @@ using DocHub.Api.Endpoints;
 using DocHub.Api.Errors;
 using DocHub.Api.OpenApi;
 using DocHub.Infrastructure;
+using DocHub.Infrastructure.Content;
 using DocHub.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Scalar.AspNetCore;
@@ -55,6 +56,12 @@ internal static class ApiSetup
         services.AddSingleton<IEndpointModule, SystemEndpoints>();
         services.AddSingleton<IEndpointModule, MeEndpoints>();
         services.AddSingleton<IEndpointModule, AuditEndpoints>();
+        services.AddSingleton<IEndpointModule, UserEndpoints>();
+        services.AddSingleton<IEndpointModule, NodeTypeEndpoints>();
+        services.AddSingleton<IEndpointModule, ContentStyleEndpoints>();
+
+        // Style catalog schema (docs/content-format.md §2); the font list is configurable.
+        services.AddSingleton(new StyleProperties(configuration.GetSection("Content:FontFamilies").Get<string[]>() is { Length: > 0 } fonts ? fonts : StyleProperties.DefaultFontFamilies));
 
         // Tamper evidence (T21 §4): nightly ledger reconciliation.
         services.Configure<ReconciliationOptions>(configuration.GetSection(ReconciliationOptions.SectionName));

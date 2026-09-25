@@ -56,7 +56,7 @@ public sealed class SqlSession(SqlConnection connection) : ISqlCommands, IAsyncD
     private SqlCommand CreateCommand(string sql, (string Name, object? Value)[] parameters)
     {
 #pragma warning disable CA2100 // Test helper: SQL text comes from the tests themselves; values are always parameters.
-        var command = new SqlCommand(sql, Connection) { CommandTimeout = 120 };
+        var command = new SqlCommand(sql, Connection) { CommandTimeout = 30 };
 #pragma warning restore CA2100
         foreach (var (name, value) in parameters)
         {

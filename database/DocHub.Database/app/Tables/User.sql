@@ -19,3 +19,10 @@ WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [history].[User]), LEDGER = ON (LE
 GO
 CREATE NONCLUSTERED INDEX [IX_User_IsActive]
     ON [app].[User] ([IsActive]) INCLUDE ([DisplayName]);
+GO
+-- Prefix search of the user picker (T05): login is covered by UQ_User_Login.
+CREATE NONCLUSTERED INDEX [IX_User_DisplayName]
+    ON [app].[User] ([DisplayName]) INCLUDE ([Login], [Email], [IsAdmin]) WHERE [IsActive] = 1;
+GO
+CREATE NONCLUSTERED INDEX [IX_User_Email]
+    ON [app].[User] ([Email]) WHERE [Email] IS NOT NULL AND [IsActive] = 1;

@@ -85,6 +85,7 @@ flowchart LR
 | `payload-too-large` / `unsupported-media-type` | 413 / 415 | Request body too large / wrong content type |
 | `internal-error` | 500 | Unexpected error (no internal details are returned) |
 | `in-use` | 409 | Deleting a node type/style/folder that is referenced |
+| `built-in-style` | 409 | Deleting a built-in content style (deactivate it instead) |
 | `document-deleted` | 409 | Mutating a soft-deleted document |
 | `not-deleted` | 409 | Restoring a document that is not deleted |
 | `folder-missing` | 409 | Restoring without `folderId` when the original folder is gone |
