@@ -1,0 +1,14 @@
+{"type":"doc","content":[
+  {"type":"heading","attrs":{"level":1},"content":[{"type":"text","text":"Scope"}]},
+  {"type":"paragraph","attrs":{"styleId":"Normal"},"content":[{"type":"text","text":"The old system stores <data> in files."}]},
+  {"type":"paragraph","content":[{"type":"text","text":"This paragraph is removed."}]},
+  {"type":"bulletList","content":[
+    {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"First point"}]}]},
+    {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Second point"}]}]}]},
+  {"type":"table","attrs":{"styleId":"TableGrid"},"content":[
+    {"type":"tableRow","content":[
+      {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"Name"}]}]},
+      {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"Value"}]}]}]},
+    {"type":"tableRow","content":[
+      {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"Speed"}]}]},
+      {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"10 km/h"}]}]}]}]}]}

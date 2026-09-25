@@ -12,10 +12,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DocHub.Domain\DocHub.Domain.csproj" />
+    <!-- The diff engine (T11 §3) lives in Infrastructure; its fixtures live here. -->
+    <ProjectReference Include="..\..\src\DocHub.Infrastructure\DocHub.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="ContentFixtures\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="DiffFixtures\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

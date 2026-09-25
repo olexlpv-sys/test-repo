@@ -111,7 +111,8 @@ public static partial class ContentHtmlRenderer
     private static void Block(StringBuilder html, string tag, JsonElement node, int depth, string? classes, string css, string extraAttributes = "")
     {
         html.Append('<').Append(tag);
-        if (!string.IsNullOrEmpty(classes))
+        classes = string.Join(' ', new[] { classes, DiffClass(node) }.Where(c => !string.IsNullOrEmpty(c)));
+        if (classes.Length > 0)
         {
             html.Append(" class=\"").Append(classes).Append('"');
         }
@@ -130,6 +131,13 @@ public static partial class ContentHtmlRenderer
         Children(html, node, depth);
         html.Append("</").Append(tag).Append('>');
     }
+
+    /// <summary>Diff output only: <c>attrs.diff</c> ∈ inserted/deleted/changed → <c>ds-diff-{value}</c>.</summary>
+    private static string? DiffClass(JsonElement node) =>
+        node.TryGetProperty("attrs", out var attrs) && attrs.ValueKind == JsonValueKind.Object && attrs.TryGetProperty("diff", out var diff)
+            && diff.ValueKind == JsonValueKind.String && diff.GetString() is "inserted" or "deleted" or "changed"
+            ? $"ds-diff-{diff.GetString()}"
+            : null;
 
     private static bool HasChildren(JsonElement node) =>
         node.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array && content.GetArrayLength() > 0;
@@ -173,9 +181,10 @@ public static partial class ContentHtmlRenderer
 
         AppendBorders(css, attrs);
         html.Append("<table");
-        if (StyleId(attrs) is { } styleId)
+        var tableClasses = string.Join(' ', new[] { StyleId(attrs) is { } styleId ? Classes(styleId) : null, DiffClass(node) }.Where(c => !string.IsNullOrEmpty(c)));
+        if (tableClasses.Length > 0)
         {
-            html.Append(" class=\"").Append(Classes(styleId)).Append('"');
+            html.Append(" class=\"").Append(tableClasses).Append('"');
         }
 
         html.Append(" style=\"").Append(css.ToString().TrimEnd(';')).Append('"');
@@ -228,9 +237,10 @@ public static partial class ContentHtmlRenderer
         }
 
         html.Append("<tr");
-        if (Flag(attrs, "isHeader") == true)
+        var rowClasses = string.Join(' ', new[] { Flag(attrs, "isHeader") == true ? "ds-header-row" : null, DiffClass(row) }.Where(c => c is not null));
+        if (rowClasses.Length > 0)
         {
-            html.Append(" class=\"ds-header-row\"");
+            html.Append(" class=\"").Append(rowClasses).Append('"');
         }
 
         if (css.Length > 0)
@@ -491,6 +501,13 @@ public static partial class ContentHtmlRenderer
                     : null;
             case "charStyle":
                 return StyleId(attrs) is { } styleId ? ($"<span class=\"{Classes(styleId)}\">", "</span>") : null;
+            // Diff output only (T11/T12, never valid in stored content): the change is shown on top of the formatting.
+            case "diffInsert":
+                return ("<ins class=\"ds-diff-insert\">", "</ins>");
+            case "diffDelete":
+                return ("<del class=\"ds-diff-delete\">", "</del>");
+            case "diffFormat":
+                return ("<span class=\"ds-diff-format\">", "</span>");
             default:
                 return null;
         }

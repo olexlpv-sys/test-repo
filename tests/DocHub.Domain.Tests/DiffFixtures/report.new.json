@@ -1,0 +1,15 @@
+{"type":"doc","content":[
+  {"type":"heading","attrs":{"level":1},"content":[{"type":"text","text":"Scope"}]},
+  {"type":"paragraph","attrs":{"styleId":"Quote"},"content":[{"type":"text","text":"The new system stores "},{"type":"text","text":"<data>","marks":[{"type":"bold"}]},{"type":"text","text":" in a database."}]},
+  {"type":"bulletList","content":[
+    {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"First point"}]}]},
+    {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Inserted point"}]}]},
+    {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Second point"}]}]}]},
+  {"type":"table","attrs":{"styleId":"TableGrid"},"content":[
+    {"type":"tableRow","content":[
+      {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"Name"}]}]},
+      {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"Value"}]}]}]},
+    {"type":"tableRow","content":[
+      {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"Speed"}]}]},
+      {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"12 km/h"}]}]}]}]},
+  {"type":"paragraph","content":[{"type":"text","text":"A new closing paragraph."}]}]}
