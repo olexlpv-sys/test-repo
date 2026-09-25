@@ -78,7 +78,8 @@ BEGIN
     -- for rows that move between versions — and record the first tampering with a Signed version (TamperedAt = ChangedAt of that log row).
     MERGE [app].[VersionStamp] WITH (HOLDLOCK) AS [target]
     USING (
-        SELECT [x].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], MIN(CASE WHEN [v].[Status] = 2 THEN [l].[ChangedAt] END) AS [TamperedAt]
+        SELECT [x].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], MAX([l].[Id]) AS [ContentChangeLogId], MAX([l].[ChangedAt]) AS [LastChangedAt],
+               MIN(CASE WHEN [v].[Status] = 2 THEN [l].[ChangedAt] END) AS [TamperedAt]
         FROM @Logged AS [l]
         LEFT JOIN inserted AS [i] ON [i].[NodeId] = [l].[EntityId]
         LEFT JOIN deleted AS [d] ON [d].[NodeId] = [l].[EntityId]
@@ -89,8 +90,10 @@ BEGIN
     ON [target].[DocumentVersionId] = [source].[DocumentVersionId]
     WHEN MATCHED THEN
         UPDATE SET [LastChangeLogId] = CASE WHEN [source].[LastChangeLogId] > [target].[LastChangeLogId] THEN [source].[LastChangeLogId] ELSE [target].[LastChangeLogId] END,
+                   [ContentChangeLogId] = CASE WHEN [source].[ContentChangeLogId] > [target].[ContentChangeLogId] OR [target].[ContentChangeLogId] IS NULL THEN COALESCE([source].[ContentChangeLogId], [target].[ContentChangeLogId]) ELSE [target].[ContentChangeLogId] END,
+                   [LastChangedAt] = CASE WHEN [source].[LastChangedAt] > [target].[LastChangedAt] OR [target].[LastChangedAt] IS NULL THEN [source].[LastChangedAt] ELSE [target].[LastChangedAt] END,
                    [TamperedAt] = COALESCE([target].[TamperedAt], [source].[TamperedAt])
     WHEN NOT MATCHED BY TARGET THEN
-        INSERT ([DocumentVersionId], [LastChangeLogId], [TamperedAt])
-        VALUES ([source].[DocumentVersionId], [source].[LastChangeLogId], [source].[TamperedAt]);
+        INSERT ([DocumentVersionId], [LastChangeLogId], [ContentChangeLogId], [LastChangedAt], [TamperedAt])
+        VALUES ([source].[DocumentVersionId], [source].[LastChangeLogId], [source].[ContentChangeLogId], [source].[LastChangedAt], [source].[TamperedAt]);
 END;

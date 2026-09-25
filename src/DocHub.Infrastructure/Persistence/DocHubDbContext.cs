@@ -37,6 +37,8 @@ public sealed class DocHubDbContext(DbContextOptions<DocHubDbContext> options) :
 
     public DbSet<ReconciliationFinding> ReconciliationFindings => Set<ReconciliationFinding>();
 
+    public DbSet<VersionContentHash> VersionContentHashes => Set<VersionContentHash>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);

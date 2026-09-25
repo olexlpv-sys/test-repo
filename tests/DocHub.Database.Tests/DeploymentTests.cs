@@ -10,7 +10,7 @@ public sealed class DeploymentTests(SqlServerContainerFixture server)
     [
         "app.Comment", "app.ContentStyle", "app.ContentStyleUsage", "app.Document", "app.DocumentNode",
         "app.DocumentPermission", "app.DocumentVersion", "app.Folder", "app.NodeContent", "app.NodeType",
-        "app.User", "app.VersionSignature", "app.VersionStamp",
+        "app.User", "app.VersionContentHash", "app.VersionSignature", "app.VersionStamp",
         "audit.ChangeLog", "audit.ReconciliationBaseline", "audit.ReconciliationFinding",
         // History tables of the temporal + ledger tables (T21).
         "history.Comment", "history.ContentStyle", "history.Document", "history.DocumentNode", "history.DocumentPermission",

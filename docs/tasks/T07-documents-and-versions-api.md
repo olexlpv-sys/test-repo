@@ -73,6 +73,14 @@ Derived document status for lists: `Deleted` if deleted; else `Draft` if a draft
 8. **Caching** (NFR-L9): version reads return `ETag` = `VersionStamp.LastChangeLogId` (advanced also by status and signature changes, T03 §2b) with `Cache-Control: private, no-cache`, `Vary: X-User-Id`, honoring `If-None-Match` → `304`; `EnsureCanView` runs before any cache hit.
 9. **Data access** ([FR-D1/D2](../requirements/11-data-access.md)): all CRUD through EF Core; the list endpoint through `app.usp_ListDocuments`, the deep copy through `app.usp_CopyVersionToDraft`. Both procedures live in the DB project with DB tests.
 
+## Implementation notes (Q07)
+- **Signature progress in lists:** the list procedure can't compute the canonical hash, so the API caches it in `app.VersionContentHash`, keyed by the new `VersionStamp.ContentChangeLogId` (advanced by the audit triggers for node/content changes only). The procedure counts valid signatures from a fresh cache entry and returns `NULL` when it is stale; the API then recomputes. Finalization never uses the cache.
+- **Locking:** sign, withdraw, discard and new draft take the app lock `document:{id}` (transaction-owned, 10 s timeout) inside the retrying execution strategy; concurrent last signatures finalize once.
+- **Order of checks:** view (`404`) → document active (`409 document-deleted`) → version editable (`409 version-not-editable`) → no approvers (`409 no-approvers`, before `403`, so the reason is visible) → permission (`403`).
+- **Unreachable codes:** `folder-missing` (a folder with documents can't be deleted, FK + FR-F4) and `no-signed-version` (a document always has a draft or a signed version; a new draft request on a document with a draft answers `draft-already-exists`) are implemented but have no test path.
+- `usp_CopyVersionToDraft` copies level by level (parents known on insert), so the copy writes one audit row per node/content.
+- Tagged performance tests allow 1.5 × the target on the current environment (decisions log Q19) and run alone (`Performance` collection).
+
 ## Acceptance criteria
 - [ ] Create → Draft exists, no version number; list shows status `Draft`.
 - [ ] With approvers carol and dave: carol signs → still Draft (1 of 2); dave signs → `v1`. New draft → copy with identical tree/content and same `LogicalNodeId`s; both sign → `v2`.

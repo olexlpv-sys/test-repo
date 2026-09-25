@@ -16,6 +16,8 @@ internal sealed partial class ExceptionToProblemHandler(IProblemDetailsService p
     private const int UniqueConstraintViolation = 2627;
     private const int ConstraintViolation = 547;
     private const int FolderCycle = 50040; // TR_Folder_NoCycle
+    private const int LockTimeoutFolders = 50041;
+    private const int LockTimeoutDocument = 50042;
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
@@ -49,6 +51,8 @@ internal sealed partial class ExceptionToProblemHandler(IProblemDetailsService p
             (StatusCodes.Status409Conflict, ErrorCodes.Conflict, "Conflict", "The change conflicts with related data."),
         DbUpdateException { InnerException: SqlException { Number: FolderCycle } } =>
             (StatusCodes.Status409Conflict, ErrorCodes.InvalidMove, "Invalid move", "A folder can't be moved into itself or into one of its sub-folders."),
+        SqlException { Number: LockTimeoutFolders or LockTimeoutDocument } or DbUpdateException { InnerException: SqlException { Number: LockTimeoutFolders or LockTimeoutDocument } } =>
+            (StatusCodes.Status409Conflict, ErrorCodes.Conflict, "Busy", "The item is being changed by another request; try again."),
         BadHttpRequestException { StatusCode: StatusCodes.Status413PayloadTooLarge } =>
             (StatusCodes.Status413PayloadTooLarge, ErrorCodes.PayloadTooLarge, "Payload too large", "The request body is too large."),
         BadHttpRequestException { StatusCode: StatusCodes.Status415UnsupportedMediaType } =>

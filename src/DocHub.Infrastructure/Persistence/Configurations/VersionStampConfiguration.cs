@@ -13,5 +13,6 @@ internal sealed class VersionStampConfiguration : IEntityTypeConfiguration<Versi
         builder.HasKey(x => x.DocumentVersionId);
         builder.Property(x => x.DocumentVersionId).ValueGeneratedNever();
         builder.Property(x => x.TamperedAt).HasColumnType("datetime2(7)");
+        builder.Property(x => x.LastChangedAt).HasColumnType("datetime2(7)");
     }
 }

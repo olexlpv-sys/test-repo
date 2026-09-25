@@ -45,6 +45,7 @@ var tables = new[]
         DocumentVersionId = "{r}.[DocumentVersionId]",
         LogicalNodeId = "{r}.[LogicalNodeId]",
         AdvancesVersionStamp = true,
+        ChangesContent = true,
         TamperCondition = SignedVersion,
     },
     // Derived columns (ContentHtml, PlainText, ContentHash) are re-rendered by the API. An update that changes only them is
@@ -57,6 +58,7 @@ var tables = new[]
         DocumentVersionId = "{r}.[DocumentVersionId]",
         LogicalNodeId = "{r}.[LogicalNodeId]",
         AdvancesVersionStamp = true,
+        ChangesContent = true,
         TamperCondition = SignedVersion,
         FlagsDerivedStale = true,
     },
@@ -219,7 +221,9 @@ static string GenerateTrigger(AuditedTable t)
         sb.AppendLine("    -- for rows that move between versions — and record the first tampering with a Signed version (TamperedAt = ChangedAt of that log row).");
         sb.AppendLine("    MERGE [app].[VersionStamp] WITH (HOLDLOCK) AS [target]");
         sb.AppendLine("    USING (");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"        SELECT [x].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], {tamper} AS [TamperedAt]");
+        var content = t.ChangesContent ? "MAX([l].[Id])" : "CAST(NULL AS BIGINT)";
+        sb.AppendLine(CultureInfo.InvariantCulture, $"        SELECT [x].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], {content} AS [ContentChangeLogId], MAX([l].[ChangedAt]) AS [LastChangedAt],");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"               {tamper} AS [TamperedAt]");
         sb.AppendLine("        FROM @Logged AS [l]");
         sb.AppendLine(CultureInfo.InvariantCulture, $"        LEFT JOIN inserted AS [i] ON [i].[{key}] = [l].[EntityId]");
         sb.AppendLine(CultureInfo.InvariantCulture, $"        LEFT JOIN deleted AS [d] ON [d].[{key}] = [l].[EntityId]");
@@ -230,10 +234,12 @@ static string GenerateTrigger(AuditedTable t)
         sb.AppendLine("    ON [target].[DocumentVersionId] = [source].[DocumentVersionId]");
         sb.AppendLine("    WHEN MATCHED THEN");
         sb.AppendLine("        UPDATE SET [LastChangeLogId] = CASE WHEN [source].[LastChangeLogId] > [target].[LastChangeLogId] THEN [source].[LastChangeLogId] ELSE [target].[LastChangeLogId] END,");
+        sb.AppendLine("                   [ContentChangeLogId] = CASE WHEN [source].[ContentChangeLogId] > [target].[ContentChangeLogId] OR [target].[ContentChangeLogId] IS NULL THEN COALESCE([source].[ContentChangeLogId], [target].[ContentChangeLogId]) ELSE [target].[ContentChangeLogId] END,");
+        sb.AppendLine("                   [LastChangedAt] = CASE WHEN [source].[LastChangedAt] > [target].[LastChangedAt] OR [target].[LastChangedAt] IS NULL THEN [source].[LastChangedAt] ELSE [target].[LastChangedAt] END,");
         sb.AppendLine("                   [TamperedAt] = COALESCE([target].[TamperedAt], [source].[TamperedAt])");
         sb.AppendLine("    WHEN NOT MATCHED BY TARGET THEN");
-        sb.AppendLine("        INSERT ([DocumentVersionId], [LastChangeLogId], [TamperedAt])");
-        sb.AppendLine("        VALUES ([source].[DocumentVersionId], [source].[LastChangeLogId], [source].[TamperedAt]);");
+        sb.AppendLine("        INSERT ([DocumentVersionId], [LastChangeLogId], [ContentChangeLogId], [LastChangedAt], [TamperedAt])");
+        sb.AppendLine("        VALUES ([source].[DocumentVersionId], [source].[LastChangeLogId], [source].[ContentChangeLogId], [source].[LastChangedAt], [source].[TamperedAt]);");
     }
 
     sb.AppendLine("END;");
@@ -854,6 +860,9 @@ internal sealed record AuditedTable(string Name, string KeyColumn, AuditedColumn
     public string? LogicalNodeId { get; init; }
 
     public bool AdvancesVersionStamp { get; init; }
+
+    /// <summary>Changes the version's content hash (nodes and their content): advances VersionStamp.ContentChangeLogId.</summary>
+    public bool ChangesContent { get; init; }
 
     public bool FlagsDerivedStale { get; init; }
 }

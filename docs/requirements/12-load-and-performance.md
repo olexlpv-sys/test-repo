@@ -24,7 +24,7 @@
 - NFR-L6 The web UI shows the main window and an opened document (first node content) within 3 s on a normal office connection at the NFR-L3 load.
 
 ## Current environment profile (decisions log Q19)
-- NFR-L4a The current development/test environment is small (4 vCPU, shared by the SQL Server test containers). Until a production-sized environment exists, load and concurrency checks there use **2 concurrent actors** and a response limit of **10 s** per request (p99), and automated test runs use at most **2 parallel test workers**. NFR-L3/NFR-L4 stay the production targets; T19 reports both profiles and runs the full profile when the environment allows it.
+- NFR-L4a The current development/test environment is small (4 vCPU, shared by the SQL Server test containers). Until a production-sized environment exists, load and concurrency checks there use **2 concurrent actors** and a response limit of **10 s** per request (p99), and automated test runs use at most **2 parallel test workers**, and tagged single-request performance tests allow **1.5 ×** the NFR target (`DOCHUB_PERF_FACTOR`, `1.0` on a production-sized environment). NFR-L3/NFR-L4 stay the production targets; T19 reports both profiles and runs the full profile when the environment allows it.
 
 ## Consequences for the design (binding)
 - NFR-L7 *(withdrawn — full-text search is out of scope, Q13.)*

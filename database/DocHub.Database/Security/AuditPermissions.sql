@@ -22,3 +22,6 @@ GO
 GRANT VIEW DEFINITION ON SCHEMA::[app] TO [ledger_reader];
 GO
 GRANT VIEW DEFINITION ON SCHEMA::[audit] TO [ledger_reader];
+GO
+-- The content-hash cache is written only by the API (T07); scripts change content and the API recomputes the hash.
+DENY INSERT, UPDATE, DELETE ON OBJECT::[app].[VersionContentHash] TO [support_writer];

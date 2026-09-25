@@ -18,5 +18,13 @@ public static class ErrorCodes
     public const string RequestFailed = "request-failed";
     public const string InUse = "in-use";
     public const string InvalidMove = "invalid-move";
+    public const string DocumentDeleted = "document-deleted";
+    public const string VersionNotEditable = "version-not-editable";
+    public const string DraftAlreadyExists = "draft-already-exists";
+    public const string NoSignedVersion = "no-signed-version";
+    public const string OnlyVersion = "only-version";
+    public const string NoApprovers = "no-approvers";
+    public const string NotDeleted = "not-deleted";
+    public const string FolderMissing = "folder-missing";
     public const string BuiltInStyle = "built-in-style";
 }

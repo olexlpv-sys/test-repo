@@ -52,6 +52,128 @@
         }
       }
     },
+    "/api/folders/{folderId}/documents": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Documents of a folder (usp_ListDocuments): filter by title (case/accent-insensitive substring), status, sort, page; deleted ones only for their owner and admins.",
+        "operationId": "ListDocuments",
+        "parameters": [
+          {
+            "name": "folderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Search",
+            "in": "query",
+            "schema": {
+              "maxLength": 300,
+              "minLength": 0,
+              "type": "string"
+            }
+          },
+          {
+            "name": "Status",
+            "in": "query",
+            "schema": {
+              "pattern": "^(Draft|Signed|Deleted)$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "SortBy",
+            "in": "query",
+            "schema": {
+              "pattern": "^(title|status|modifiedAt|createdAt|owner|latestSignedVersion)$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "SortDir",
+            "in": "query",
+            "schema": {
+              "pattern": "^(asc|desc)$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "IncludeDeleted",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "IncludeSubfolders",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "maximum": 1000000,
+              "minimum": 1,
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "maximum": 200,
+              "minimum": 1,
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfDocumentListItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/audit/reconcile": {
       "post": {
         "tags": [
@@ -873,6 +995,477 @@
           }
         }
       }
+    },
+    "/api/documents": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Creates a document (owner = caller) with an empty draft, in one transaction.",
+        "operationId": "CreateDocument",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedDocument"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{id}": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Document details with its versions and my roles (deleted: owner/admin only, else 404).",
+        "operationId": "GetDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Owner: renames the document (document-level title; signatures are not affected).",
+        "operationId": "RenameDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Owner: soft-deletes the document (?rowVersion=base64); versions, draft and signatures stay as they are.",
+        "operationId": "DeleteDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "rowVersion",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/documents/{id}/move": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Owner or admin: moves the document to another folder (admins also deleted documents).",
+        "operationId": "MoveDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{id}/restore": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Owner or admin: restores a deleted document, optionally into another folder.",
+        "operationId": "RestoreDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RestoreDocument"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{id}/drafts": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Owner: new draft = deep copy of the latest signed version (usp_CopyVersionToDraft).",
+        "operationId": "CreateDraft",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionHeader"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/versions/{versionId}": {
+      "get": {
+        "tags": [
+          "Versions"
+        ],
+        "summary": "Version header; ETag = version stamp (If-None-Match → 304).",
+        "operationId": "GetVersion",
+        "parameters": [
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionHeader"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Versions"
+        ],
+        "summary": "Owner: discards the draft (?rowVersion=base64); 409 only-version when there is no signed version.",
+        "operationId": "DiscardDraft",
+        "parameters": [
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "rowVersion",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/versions/{versionId}/signatures": {
+      "get": {
+        "tags": [
+          "Versions"
+        ],
+        "summary": "Required approvers, signatures (isValid = bound to the current content), pending approvers.",
+        "operationId": "GetSignatures",
+        "parameters": [
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignatureStatus"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Versions"
+        ],
+        "summary": "Approver: signs the draft with its current content hash; the last required signature finalizes it (vN).",
+        "operationId": "SignVersion",
+        "parameters": [
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SignRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SigningResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/versions/{versionId}/signatures/mine": {
+      "delete": {
+        "tags": [
+          "Versions"
+        ],
+        "summary": "Approver: withdraws my signature from the draft.",
+        "operationId": "WithdrawSignature",
+        "parameters": [
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SigningResult"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -992,6 +1585,55 @@
           }
         }
       },
+      "CreatedDocument": {
+        "required": [
+          "id",
+          "draftVersionId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "draftVersionId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "CreateDocument": {
+        "required": [
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "folderId": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "CreateFolder": {
         "required": [
           "name"
@@ -1053,6 +1695,156 @@
               "string"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "DocumentDetails": {
+        "required": [
+          "id",
+          "rowVersion",
+          "folderId",
+          "title",
+          "status",
+          "owner",
+          "createdAt",
+          "deletedAt",
+          "versions",
+          "myRoles"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "rowVersion": {
+            "type": "string",
+            "format": "byte"
+          },
+          "folderId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deletedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VersionHeader"
+            }
+          },
+          "myRoles": {
+            "$ref": "#/components/schemas/MyRoles"
+          }
+        }
+      },
+      "DocumentListItem": {
+        "required": [
+          "id",
+          "rowVersion",
+          "folderId",
+          "title",
+          "status",
+          "latestSignedVersion",
+          "hasDraft",
+          "signatureProgress",
+          "owner",
+          "myRoles",
+          "createdAt",
+          "modifiedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "rowVersion": {
+            "type": "string",
+            "format": "byte"
+          },
+          "folderId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "latestSignedVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "hasDraft": {
+            "type": "boolean"
+          },
+          "signatureProgress": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SignatureProgress"
+              }
+            ]
+          },
+          "owner": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "myRoles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -1353,6 +2145,31 @@
           }
         }
       },
+      "MoveDocument": {
+        "required": [
+          "rowVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "folderId": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "rowVersion": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "byte"
+          }
+        }
+      },
       "MoveFolder": {
         "required": [
           "rowVersion"
@@ -1385,6 +2202,37 @@
               "string"
             ],
             "format": "byte"
+          }
+        }
+      },
+      "MyRoles": {
+        "required": [
+          "isOwner",
+          "isAdmin",
+          "isEditor",
+          "isApprover",
+          "editorNodeScopes"
+        ],
+        "type": "object",
+        "properties": {
+          "isOwner": {
+            "type": "boolean"
+          },
+          "isAdmin": {
+            "type": "boolean"
+          },
+          "isEditor": {
+            "type": "boolean"
+          },
+          "isApprover": {
+            "type": "boolean"
+          },
+          "editorNodeScopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         }
       },
@@ -1437,6 +2285,47 @@
             "format": "byte"
           },
           "usageCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfDocumentListItem": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "totalCount"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentListItem"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "integer",
@@ -1563,6 +2452,28 @@
           }
         }
       },
+      "RenameDocument": {
+        "required": [
+          "title",
+          "rowVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rowVersion": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "byte"
+          }
+        }
+      },
       "RenameFolder": {
         "required": [
           "name",
@@ -1582,6 +2493,132 @@
               "string"
             ],
             "format": "byte"
+          }
+        }
+      },
+      "RestoreDocument": {
+        "type": "object",
+        "properties": {
+          "folderId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "SignatureInfo": {
+        "required": [
+          "user",
+          "signedAt",
+          "isValid",
+          "comment"
+        ],
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "signedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isValid": {
+            "type": "boolean"
+          },
+          "comment": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SignatureProgress": {
+        "required": [
+          "signed",
+          "required"
+        ],
+        "type": "object",
+        "properties": {
+          "signed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "required": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "SignatureStatus": {
+        "required": [
+          "requiredApprovers",
+          "signatures",
+          "pendingApprovers",
+          "isComplete"
+        ],
+        "type": "object",
+        "properties": {
+          "requiredApprovers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserRef"
+            }
+          },
+          "signatures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SignatureInfo"
+            }
+          },
+          "pendingApprovers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserRef"
+            }
+          },
+          "isComplete": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SigningResult": {
+        "required": [
+          "signatures",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "signatures": {
+            "$ref": "#/components/schemas/SignatureStatus"
+          },
+          "version": {
+            "$ref": "#/components/schemas/VersionHeader"
+          }
+        }
+      },
+      "SignRequest": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "maxLength": 1000,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -1695,6 +2732,26 @@
           }
         }
       },
+      "UserRef": {
+        "required": [
+          "id",
+          "displayName"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "displayName": {
+            "type": "string"
+          }
+        }
+      },
       "UserResponse": {
         "required": [
           "id",
@@ -1733,6 +2790,103 @@
             "type": "boolean"
           }
         }
+      },
+      "VersionHeader": {
+        "required": [
+          "id",
+          "documentId",
+          "rowVersion",
+          "status",
+          "versionNumber",
+          "label",
+          "createdAt",
+          "createdBy",
+          "signedAt",
+          "signedBy",
+          "basedOnVersionId",
+          "isCurrent",
+          "modifiedAfterSigning"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "documentId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "rowVersion": {
+            "type": "string",
+            "format": "byte"
+          },
+          "status": {
+            "$ref": "#/components/schemas/VersionStatus"
+          },
+          "versionNumber": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "label": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "signedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "signedBy": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserRef"
+            }
+          },
+          "basedOnVersionId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isCurrent": {
+            "type": "boolean"
+          },
+          "modifiedAfterSigning": {
+            "type": "boolean"
+          }
+        }
+      },
+      "VersionStatus": {
+        "enum": [
+          "Draft",
+          "Signed",
+          "Deleted"
+        ]
       }
     },
     "securitySchemes": {
@@ -1757,6 +2911,9 @@
       "name": "Users"
     },
     {
+      "name": "Documents"
+    },
+    {
       "name": "Admin"
     },
     {
@@ -1767,6 +2924,9 @@
     },
     {
       "name": "Folders"
+    },
+    {
+      "name": "Versions"
     }
   ]
 }

@@ -661,6 +661,8 @@ BEGIN
         (N'app', N'VersionStamp', N'DocumentVersionId'),
         (N'app', N'VersionStamp', N'LastChangeLogId'),
         (N'app', N'VersionStamp', N'TamperedAt'),
+        (N'app', N'VersionStamp', N'ContentChangeLogId'),
+        (N'app', N'VersionStamp', N'LastChangedAt'),
         (N'app', N'VersionStamp', N'ledger_start_transaction_id'),
         (N'app', N'VersionStamp', N'ledger_start_sequence_number'),
         (N'app', N'VersionStamp', N'ledger_end_transaction_id'),

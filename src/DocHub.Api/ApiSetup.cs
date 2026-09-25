@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using DocHub.Api.Audit;
 using DocHub.Api.Auth;
+using DocHub.Api.Documents;
 using DocHub.Api.Endpoints;
 using DocHub.Api.Errors;
 using DocHub.Api.OpenApi;
@@ -60,6 +61,14 @@ internal static class ApiSetup
         services.AddSingleton<IEndpointModule, NodeTypeEndpoints>();
         services.AddSingleton<IEndpointModule, ContentStyleEndpoints>();
         services.AddSingleton<IEndpointModule, FolderEndpoints>();
+        services.AddSingleton<IEndpointModule, DocumentEndpoints>();
+        services.AddSingleton<IEndpointModule, VersionEndpoints>();
+
+        // Documents and versions (T07): the authorization seam, guards, signing and read models.
+        services.AddScoped<IDocumentAuthorization, DocumentAuthorization>();
+        services.AddScoped<IVersionGuard, VersionGuard>();
+        services.AddScoped<SigningService>();
+        services.AddScoped<DocumentViews>();
 
         // Style catalog schema (docs/content-format.md §2); the font list is configurable.
         services.AddSingleton(new StyleProperties(configuration.GetSection("Content:FontFamilies").Get<string[]>() is { Length: > 0 } fonts ? fonts : StyleProperties.DefaultFontFamilies));

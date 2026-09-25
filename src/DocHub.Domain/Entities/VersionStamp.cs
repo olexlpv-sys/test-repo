@@ -8,4 +8,9 @@ public sealed class VersionStamp
     public long LastChangeLogId { get; set; }
 
     public DateTime? TamperedAt { get; set; }
+
+    /// <summary>ChangeLog id of the latest node/content change (keys the content-hash cache).</summary>
+    public long? ContentChangeLogId { get; set; }
+
+    public DateTime? LastChangedAt { get; set; }
 }

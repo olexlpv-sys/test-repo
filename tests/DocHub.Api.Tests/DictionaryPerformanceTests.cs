@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using DocHub.Api.Tests.Infrastructure;
+using DocHub.Testing;
 using DocHub.Testing.Database;
 
 namespace DocHub.Api.Tests;
@@ -12,6 +13,7 @@ namespace DocHub.Api.Tests;
 /// environment's profile (decisions log Q19); set <c>DOCHUB_PERF_NODES=15000000</c> for the NFR-L2 volume (T19 runs it).
 /// </summary>
 [Trait("Category", "Performance")]
+[Collection(PerformanceTestGroup.Name)]
 public sealed class DictionaryPerformanceTests(DictionaryPerformanceTests.Data data) : IClassFixture<DictionaryPerformanceTests.Data>
 {
     [Fact]
@@ -21,7 +23,7 @@ public sealed class DictionaryPerformanceTests(DictionaryPerformanceTests.Data d
 
         Assert.InRange(body.GetProperty("items").GetArrayLength(), 1, 20);
         Assert.True(body.GetProperty("totalCount").GetInt32() > 1000, "1 in 50 generated users match the prefix");
-        Assert.True(elapsed < TimeSpan.FromMilliseconds(100), $"took {elapsed.TotalMilliseconds:F0} ms");
+        Assert.True(elapsed < PerformanceBudget.For(TimeSpan.FromMilliseconds(100)), $"took {elapsed.TotalMilliseconds:F0} ms");
     }
 
     [Fact]
@@ -32,8 +34,8 @@ public sealed class DictionaryPerformanceTests(DictionaryPerformanceTests.Data d
 
         Assert.Contains(typeBody.EnumerateArray(), t => t.GetProperty("usageCount").GetInt32() >= data.Nodes / 2);
         Assert.Contains(styleBody.EnumerateArray(), s => s.GetProperty("usageCount").GetInt32() == data.Nodes);
-        Assert.True(types < TimeSpan.FromSeconds(1), $"node types took {types.TotalMilliseconds:F0} ms");
-        Assert.True(styles < TimeSpan.FromSeconds(1), $"styles took {styles.TotalMilliseconds:F0} ms");
+        Assert.True(types < PerformanceBudget.For(TimeSpan.FromSeconds(1)), $"node types took {types.TotalMilliseconds:F0} ms");
+        Assert.True(styles < PerformanceBudget.For(TimeSpan.FromSeconds(1)), $"styles took {styles.TotalMilliseconds:F0} ms");
     }
 
     /// <summary>Three warm-up requests (plan compilation, statistics after the bulk load, JIT), then the median of five.</summary>

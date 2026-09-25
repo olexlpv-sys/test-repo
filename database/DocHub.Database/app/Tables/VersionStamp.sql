@@ -7,6 +7,10 @@ CREATE TABLE [app].[VersionStamp]
     [LastChangeLogId]   BIGINT        NOT NULL,
     -- First change to nodes/content of a Signed version after signing (FR-H5).
     [TamperedAt]        DATETIME2 (7) NULL,
+    -- audit.ChangeLog.Id of the latest change to the version's nodes/content (keys the content-hash cache, T07).
+    [ContentChangeLogId] BIGINT       NULL,
+    -- Time of the latest change to the version (document lists, T07).
+    [LastChangedAt]     DATETIME2 (7) NULL,
     CONSTRAINT [PK_VersionStamp] PRIMARY KEY CLUSTERED ([DocumentVersionId]),
     CONSTRAINT [FK_VersionStamp_Version] FOREIGN KEY ([DocumentVersionId]) REFERENCES [app].[DocumentVersion] ([Id]) ON DELETE CASCADE
 )
