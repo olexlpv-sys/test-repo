@@ -20,7 +20,7 @@ internal static class ApiClient
         var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
         var text = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         var json = text.Length > 0 && response.Content.Headers.ContentType?.MediaType?.Contains("json", StringComparison.Ordinal) == true
-            ? JsonDocument.Parse(text).RootElement.Clone()
+            ? JsonDocument.Parse(text, new JsonDocumentOptions { MaxDepth = 256 }).RootElement.Clone()
             : default;
         return (response.StatusCode, json, response);
     }

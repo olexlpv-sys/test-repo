@@ -48,9 +48,12 @@ BEGIN
     [parentLevel] AS (
         SELECT [StartId], MAX([Level]) AS [Level] FROM [up] GROUP BY [StartId]),
     [down] AS (
-        SELECT [i].[Id] AS [StartId], [i].[Id], 0 AS [Height] FROM inserted AS [i] WHERE @IsUpdate = 1
+        SELECT [i].[Id] AS [StartId], [i].[Id], [i].[DocumentVersionId], 0 AS [Height] FROM inserted AS [i] WHERE @IsUpdate = 1
         UNION ALL
-        SELECT [d].[StartId], [n].[Id], [d].[Height] + 1 FROM [app].[DocumentNode] AS [n] JOIN [down] AS [d] ON [n].[ParentNodeId] = [d].[Id] WHERE [d].[Height] <= 100),
+        -- Children are in the parent's version (composite FK): seek IX_DocumentNode_Version_Parent_Sort.
+        SELECT [d].[StartId], [n].[Id], [n].[DocumentVersionId], [d].[Height] + 1
+        FROM [app].[DocumentNode] AS [n] JOIN [down] AS [d] ON [n].[DocumentVersionId] = [d].[DocumentVersionId] AND [n].[ParentNodeId] = [d].[Id]
+        WHERE [d].[Height] <= 100),
     [height] AS (
         SELECT [StartId], MAX([Height]) AS [Height] FROM [down] GROUP BY [StartId])
     SELECT @TooDeep = CASE WHEN EXISTS (

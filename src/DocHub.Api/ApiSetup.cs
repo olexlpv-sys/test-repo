@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using DocHub.Api.Audit;
 using DocHub.Api.Auth;
+using DocHub.Api.Common;
 using DocHub.Api.Documents;
 using DocHub.Api.Endpoints;
 using DocHub.Api.Errors;
@@ -78,7 +79,8 @@ internal static class ApiSetup
         services.AddScoped<NodeRules>();
 
         // Signed-version trees and contents (NFR-L9).
-        services.AddHybridCache();
+        // Values are serialized (also for the in-memory copy) with the API's depth limit: trees are up to 100 levels deep.
+        services.AddHybridCache().AddSerializerFactory(new DeepJsonCacheSerializerFactory());
 
         // Style catalog schema (docs/content-format.md §2); the font list is configurable.
         services.AddSingleton(new StyleProperties(configuration.GetSection("Content:FontFamilies").Get<string[]>() is { Length: > 0 } fonts ? fonts : StyleProperties.DefaultFontFamilies));

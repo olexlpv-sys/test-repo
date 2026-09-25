@@ -71,6 +71,27 @@ public sealed class NodeTreeTests(DocHubApiFactory factory) : IClassFixture<DocH
     }
 
     [Fact]
+    public async Task A_100_level_tree_is_served_when_signed_and_cached()
+    {
+        var (documentId, draft) = await _arrange.CreateAsync();
+        int? parent = null;
+        for (var level = 1; level <= 100; level++)
+        {
+            parent = await AddAsync(draft, parent, $"Level {level}");
+        }
+
+        await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Post, $"/api/versions/{draft}/nodes", new { parentNodeId = parent, nodeTypeId = 1, title = "Too deep" }, HttpStatusCode.BadRequest);
+        await _arrange.GrantAsync(documentId, TestUsers.Carol);
+        await _arrange.SignAsync(draft, TestUsers.Carol);
+
+        // Twice: the second read comes from the cache.
+        for (var i = 0; i < 2; i++)
+        {
+            Assert.Equal(100, Flatten(await TreeAsync(draft)).Max(n => n.GetProperty("number").GetString()!.Split('.').Length));
+        }
+    }
+
+    [Fact]
     public async Task Reorder_and_move_update_the_numbering_and_cycles_are_rejected()
     {
         var (_, draft) = await _arrange.CreateAsync();

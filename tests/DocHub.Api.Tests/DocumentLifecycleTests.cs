@@ -480,6 +480,48 @@ public sealed class DocumentLifecycleTests(DocHubApiFactory factory) : IClassFix
         }
     }
 
+    [Fact]
+    public async Task New_drafts_and_discards_racing_a_delete_never_change_the_deleted_document()
+    {
+        for (var round = 0; round < 10; round++)
+        {
+            var (documentId, v1, _) = await _arrange.SignedAsync();
+            int? draft = round % 2 == 0 ? null
+                : (await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Post, $"/api/documents/{documentId}/drafts", null, HttpStatusCode.Created)).GetProperty("id").GetInt32();
+            var draftRowVersion = draft is null ? null : Uri.EscapeDataString((await _arrange.VersionAsync(draft.Value)).GetProperty("rowVersion").GetString()!);
+            var rowVersion = Uri.EscapeDataString(await _arrange.RowVersionAsync(documentId));
+            long baseline;
+            await using (var dbo = await SqlSession.OpenAsync(factory.AdminConnectionString))
+            {
+                baseline = await dbo.ScalarAsync<long>("SELECT MAX(Id) FROM audit.ChangeLog;");
+            }
+
+            var results = await Task.WhenAll(
+                draft is null
+                    ? ApiClient.SendAsync(factory, TestUsers.Alice, HttpMethod.Post, $"/api/documents/{documentId}/drafts", null)
+                    : ApiClient.SendAsync(factory, TestUsers.Alice, HttpMethod.Delete, $"/api/versions/{draft}?rowVersion={draftRowVersion}"),
+                ApiClient.SendAsync(factory, TestUsers.Alice, HttpMethod.Delete, $"/api/documents/{documentId}?rowVersion={rowVersion}"));
+
+            Assert.Equal(HttpStatusCode.NoContent, results[1].Status);
+            Assert.Contains(results[0].Status, new[] { draft is null ? HttpStatusCode.Created : HttpStatusCode.NoContent, HttpStatusCode.Conflict });
+            await using (var dbo = await SqlSession.OpenAsync(factory.AdminConnectionString))
+            {
+                // Every version change of the lost race happened before the deletion, none after it.
+                var deletedAt = await dbo.ScalarAsync<long>(
+                    "SELECT MIN(Id) FROM audit.ChangeLog WHERE Id > @b AND TableName = N'app.Document' AND EntityId = @d AND ChangedColumns LIKE N'%DeletedAt%';",
+                    ("@b", baseline), ("@d", documentId));
+                var lastOther = await dbo.ScalarAsync<object>(
+                    "SELECT MAX(Id) FROM audit.ChangeLog WHERE Id > @b AND DocumentId = @d AND TableName <> N'app.Document';", ("@b", baseline), ("@d", documentId));
+                Assert.True(lastOther is DBNull || (long)lastOther < deletedAt, $"version changes after the deletion (v1 {v1})");
+            }
+
+            foreach (var r in results)
+            {
+                r.Response.Dispose();
+            }
+        }
+    }
+
     private async Task<int> ListSignedAsync(int documentId)
     {
         var list = await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, "/api/folders/1/documents?pageSize=200", null, HttpStatusCode.OK);

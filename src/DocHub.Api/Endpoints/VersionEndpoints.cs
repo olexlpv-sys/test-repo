@@ -105,11 +105,8 @@ internal sealed class VersionEndpoints : IEndpointModule
                 await db.InTransactionAsync(async () =>
                 {
                     await db.LockAsync(SigningService.LockResource(documentId), ct);
-                    var draft = await db.DocumentVersions.SingleAsync(v => v.Id == versionId, ct);
-                    if (draft.Status != VersionStatus.Draft)
-                    {
-                        throw DomainException.Conflict(ErrorCodes.VersionNotEditable, "Only draft versions can be discarded.");
-                    }
+                    // Re-checked under the lock: a concurrent sign or document delete may have landed first.
+                    var (draft, _) = await guard.EnsureEditableAsync(versionId, ct);
 
                     var latestSigned = await db.DocumentVersions.Where(v => v.DocumentId == documentId && v.Status == VersionStatus.Signed)
                         .OrderByDescending(v => v.VersionNumber).FirstOrDefaultAsync(ct)

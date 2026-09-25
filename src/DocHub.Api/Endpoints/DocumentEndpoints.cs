@@ -215,6 +215,7 @@ internal sealed class DocumentEndpoints : IEndpointModule
                 var newVersionId = await db.InTransactionAsync(async () =>
                 {
                     await db.LockAsync(SigningService.LockResource(id), ct);
+                    await guard.EnsureDocumentActiveAsync(id, ct); // a concurrent delete may have landed first
                     if (await db.DocumentVersions.AnyAsync(v => v.DocumentId == id && v.Status == VersionStatus.Draft, ct))
                     {
                         throw DomainException.Conflict(ErrorCodes.DraftAlreadyExists, "The document already has a draft.");

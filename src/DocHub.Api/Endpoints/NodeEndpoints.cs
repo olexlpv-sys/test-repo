@@ -170,7 +170,7 @@ internal sealed class NodeEndpoints : IEndpointModule
                         }
                     }
 
-                    var node = await db.DocumentNodes.SingleAsync(n => n.Id == nodeId, ct);
+                    var node = await db.DocumentNodes.SingleOrDefaultAsync(n => n.Id == nodeId, ct) ?? throw DomainException.NotFound("Node", nodeId);
                     db.Entry(node).Property(n => n.RowVersion).OriginalValue = request.RowVersion!;
                     node.SortOrder = await PlaceAsync(db, versionId, request.NewParentNodeId, nodeId, request.Position, ct);
                     node.ParentNodeId = request.NewParentNodeId;
@@ -327,7 +327,8 @@ public sealed class NodeRules(DocHubDbContext db, IDocumentAuthorization authori
         ArgumentNullException.ThrowIfNull(change);
         return db.InTransactionAsync(async () =>
         {
-            var documentId = await db.DocumentVersions.AsNoTracking().Where(v => v.Id == versionId).Select(v => v.DocumentId).SingleAsync(cancellationToken);
+            var documentId = await db.DocumentVersions.AsNoTracking().Where(v => v.Id == versionId).Select(v => (int?)v.DocumentId).SingleOrDefaultAsync(cancellationToken)
+                ?? throw DomainException.NotFound("Version", versionId);
             await db.LockAsync(SigningService.LockResource(documentId), cancellationToken);
             await guard.EnsureEditableAsync(versionId, cancellationToken);
             return await change();
