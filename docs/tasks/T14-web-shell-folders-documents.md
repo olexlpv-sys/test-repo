@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Depends on** | T06, T07 (can start against the OpenAPI contract / mocks after T04) |
+| **Depends on** | T05, T06, T07 (can start against the OpenAPI contract / mocks after T04) |
 | **Blocks** | T15, T16, T17 |
 | **Size** | M (2–3 days) |
 | **Requirements** | FR-UI1, FR-UI4, FR-F5, FR-V8 |

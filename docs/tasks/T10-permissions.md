@@ -6,8 +6,8 @@
 | **Blocks** | T13 (full rules), T16 (permissions dialog) |
 | **Can run in parallel with** | T08, T09 (they call `IDocumentAuthorization`) |
 | **Size** | M (2 days) |
-| **Requirements** | FR-P1 … FR-P6, FR-V6 |
-| **Read first** (nothing else) | [06-permissions](../requirements/06-permissions.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) (FR-V6 only) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
+| **Requirements** | FR-P1 … FR-P6, FR-V6, FR-D2 |
+| **Read first** (nothing else) | [06-permissions](../requirements/06-permissions.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) (FR-V6 only) · [11-data-access](../requirements/11-data-access.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 
 ## Goal
 Manage document roles and enforce them in one place — the full implementation of `IDocumentAuthorization` introduced in T07.
@@ -39,12 +39,13 @@ Principle: **the Owner defines the structure, Editors edit text, Approvers revie
 | GET | `/api/documents/{id}/permissions` | any | `{ owner {id,displayName}, grants: [{ id, user, role, logicalNodeId?, nodeTitle?, grantedAt, grantedBy }] }` — `nodeTitle` resolved from the draft or latest version |
 | POST | `/api/documents/{id}/permissions` | owner | `{ userId, role: "Editor"|"Approver", logicalNodeId? }` → `201` |
 | DELETE | `/api/documents/{id}/permissions/{grantId}` | owner | `204` |
-| POST | `/api/documents/{id}/transfer-ownership` | owner | *(optional)* `{ userId }` |
+| POST | `/api/documents/{id}/transfer-ownership` | owner | *(optional)* `{ userId }` — `400 target-has-role` if the target holds any grant on the document (owner can never be an approver) |
 | GET | `/api/documents/{id}/my-permissions` | any | effective rights for UI: `{ isOwner, canEditStructure, canEditAllContent, editableLogicalNodeIds: [...], canComment, canResolve, canSign, canManage }` |
 
 ## Rules
 - `logicalNodeId` only with role `Editor` (`400` otherwise); it must exist in the current draft or the latest signed version.
-- Granting the owner a role → `400`. Duplicate grant → `409`.
+- Granting the owner a role → `400 owner-cannot-have-role`. Duplicate grant → `409 duplicate-grant`. Grant/revoke on a deleted document → `409 document-deleted` (T07 rule 1).
+- **Data access** ([FR-D2](../requirements/11-data-access.md)): `IDocumentAuthorization` is implemented on top of **`app.usp_CheckPermission`** (single action) and **`app.usp_GetEffectivePermissions`** (all rights + `EditableLogicalNodeIds` for `my-permissions` and T07 `myRoles`); results cached per request. Grant CRUD itself goes through EF Core. Both procedures have DB tests covering the full matrix.
 - `CanEditStructure(doc)`: owner only. `CanSign(doc)`: has an Approver grant. `CanEditContent(doc, L)`: owner, or a document-level Editor grant, or a node grant on `L` or on any **ancestor** of `L` in the version being edited. Ancestor resolution uses the in-memory tree or a recursive CTE; cache per request.
 - If a granted node was deleted in the draft, the grant stays (it may exist again in older versions) but has no effect; UI shows it as "node not in current draft".
 - `GET /api/documents/{id}` (T07) returns `myRoles` using the same service.
@@ -55,4 +56,5 @@ Principle: **the Owner defines the structure, Editors edit text, Approvers revie
 - [ ] Node-scoped editor on "Chapter 2" can edit the text of "Chapter 2 / Section 1 / Subsection 2", cannot edit the text of "Chapter 1", and gets `403` on any structural operation (including inside "Chapter 2").
 - [ ] Only an approver can sign; owner, editors → `403`. Granting a role to the owner → `400`.
 - [ ] Grants survive creating a new draft (same `LogicalNodeId`).
+- [ ] Permission check < 10 ms and effective permissions < 50 ms on the NFR-6 data set (tagged perf test).
 - [ ] Non-owner grant/revoke → `403`. Every grant/revoke is visible in `audit.ChangeLog`.

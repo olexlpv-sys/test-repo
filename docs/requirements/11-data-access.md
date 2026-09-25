@@ -1,0 +1,17 @@
+# Data access
+
+> Part of the [requirements set](README.md). IDs are stable — tasks and tests reference them.
+
+- FR-D1 **All CRUD operations** (create, read-by-id, update, delete of every entity) go through **Entity Framework Core**. No hand-written SQL for plain CRUD.
+- FR-D2 **Performance-critical read paths are stored procedures**, called from the API through EF Core (`Database.SqlQuery<T>` / `FromSql`, parameterized):
+  | Procedure | Purpose | Used by |
+  |---|---|---|
+  | `app.usp_GetEffectivePermissions @DocumentId, @UserId, @DocumentVersionId` | effective rights of a user on a document: `IsOwner, IsAdmin, CanEditStructure, CanEditAllContent, CanComment, CanResolve, CanSign, CanManage` + result set of `EditableLogicalNodeIds` (node grants expanded to descendants in the given version) | `IDocumentAuthorization` (T10), `my-permissions` endpoint |
+  | `app.usp_CheckPermission @DocumentId, @UserId, @Action, @LogicalNodeId = NULL` → `bit` | single fast check for one action on one node (ancestor walk via recursive CTE) | every mutating endpoint via `IDocumentAuthorization` |
+  | `app.usp_ListDocuments @FolderId, @UserId, @IncludeDeleted, @IncludeSubfolders, @Search, @Status, @SortBy, @SortDir, @Page, @PageSize` | document list of a folder: title, derived status, latest signed version, draft flag, signature progress, owner, modified-at, the caller's roles; total count in a second result set | document list endpoint (T07), main window (T14) |
+  | `app.usp_SearchDocuments @UserId, @Query, @FolderId = NULL, @IncludeSubfolders, @Scope (Title/Content/All), @VersionScope (Current/AllSigned), @Page, @PageSize` | search across documents by title and node text; returns documents with matching nodes and text snippets | search (T18) |
+  | `app.usp_SearchInDocument @DocumentVersionId, @Query` | find matching nodes (title or text) inside one version with snippets | "Find in document" (T18) |
+- FR-D3 **[A]** Other set-based bulk operations may also be stored procedures when EF would be row-by-row: deep copy of a version into a new draft (`app.usp_CopyVersionToDraft`), subtree delete (`app.usp_DeleteSubtree`). Everything else stays EF.
+- FR-D4 The **SQL Database Project owns every database object** — schemas, tables, indexes, constraints, views, functions, stored procedures, triggers, security (roles, permissions), full-text catalog/indexes, reference/seed data — and is the **only deployment mechanism** (DACPAC via `SqlPackage`, locally, in tests and in CI/CD). No EF migrations, no ad-hoc DDL scripts. Drift between a target database and the DACPAC is detectable (`SqlPackage /Action:DeployReport` in CI).
+- FR-D5 Stored procedures have **DB-level tests** (T02 test project) for correctness, and API integration tests prove the API uses them (results match EF-based expectations). Performance targets: permission check < 10 ms, document list page < 100 ms, search < 500 ms on the NFR-6 data set.
+- FR-D6 **[A]** Search matches case- and accent-insensitive substrings (`LIKE` with the database collation) in `Document.Title`, `DocumentNode.Title` and `NodeContent.PlainText`. Azure SQL full-text indexing may replace `LIKE` later without changing the procedure contract.

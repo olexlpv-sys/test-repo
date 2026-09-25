@@ -5,8 +5,8 @@
 | **Depends on** | T01 (test projects) |
 | **Blocks** | T03, T04 |
 | **Size** | M (2–3 days) |
-| **Requirements** | FR-F*, FR-T*, FR-N*, FR-V*, FR-P*, FR-CM*, FR-H2, NFR-1, NFR-4 |
-| **Read first** (nothing else) | [01-folders](../requirements/01-folders.md) · [02-document-tree](../requirements/02-document-tree.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) · [06-permissions](../requirements/06-permissions.md) · [07-comments](../requirements/07-comments.md) · [04-change-tracking](../requirements/04-change-tracking.md) · [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
+| **Requirements** | FR-D4, FR-F*, FR-T*, FR-N*, FR-V*, FR-P*, FR-CM*, FR-H2, NFR-1, NFR-4 |
+| **Read first** (nothing else) | [01-folders](../requirements/01-folders.md) · [02-document-tree](../requirements/02-document-tree.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) · [06-permissions](../requirements/06-permissions.md) · [07-comments](../requirements/07-comments.md) · [04-change-tracking](../requirements/04-change-tracking.md) · [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [11-data-access](../requirements/11-data-access.md) · [process](../process.md) |
 
 ## Goal
 Create the SQL Database Project (source of truth for the schema — see [ADR-01](../architecture.md)) with all core tables, constraints, indexes and seed data.
@@ -15,10 +15,10 @@ Create the SQL Database Project (source of truth for the schema — see [ADR-01]
 
 ### 1. Project
 - `database/DocHub.Database.slnx` + `database/DocHub.Database/DocHub.Database.sqlproj` (SDK `Microsoft.Build.Sql`, `DSP = Microsoft.Data.Tools.Schema.Sql.SqlAzureV12DatabaseSchemaProvider`).
-- Folder layout: `Schemas/`, `app/Tables/`, `audit/Tables/` (created in T03), `Security/`, `Scripts/PostDeployment/`.
+- Folder layout: `Schemas/`, `app/Tables/`, `app/Views/`, `app/Functions/`, `app/StoredProcedures/`, `audit/…` (T03), `Security/` (roles `app_api`, `support_writer`, `readonly`), `Scripts/PostDeployment/`. The project is the **only** place DB objects live and the only deployment path (FR-D4); later tasks add their procedures here.
 - Schemas: `app` (domain), `audit` (change log — T03).
 - `database/README.md`: how to build (`dotnet build`) and publish locally (`SqlPackage /Action:Publish /SourceFile:… /TargetConnectionString:…`), incl. installing `microsoft.sqlpackage` as a dotnet tool (add `.config/dotnet-tools.json`).
-- CI: add a job that builds the DACPAC and publishes it as a build artifact.
+- CI: add a job that builds the DACPAC, publishes it as a build artifact, deploys it to a SQL container and runs `SqlPackage /Action:DeployReport` to prove there is no drift after deployment.
 
 ### 2. Tables
 

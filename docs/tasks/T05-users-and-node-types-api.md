@@ -33,7 +33,7 @@ Expose the seeded users and the admin-editable dictionaries: node types and the 
 |---|---|---|---|
 | GET | `/api/content-styles?kind=&includeInactive=false` | any | used by the editor's style dropdown |
 | GET | `/api/content-styles/stylesheet.css` | anonymous | CSS generated from the catalog (`.ds-style-Heading1 { … }`), cached with ETag |
-| POST / PUT / DELETE | `/api/content-styles[/{id}]` | admin | `PropertiesJson` validated against the style property schema; built-in styles cannot be deleted; a style used in any content cannot be deleted (`409 in-use`, check via `ContentJson` `LIKE '%"styleId":"X"%'` or a usage table) — deactivate instead |
+| POST / PUT / DELETE | `/api/content-styles[/{id}]` | admin | PUT and DELETE carry `rowVersion`; `PropertiesJson` validated against the style property schema; built-in styles cannot be deleted; a style used in any content cannot be deleted (`409 in-use`, check via `ContentJson` `LIKE '%"styleId":"X"%'` or a usage table) — deactivate instead |
 
 ## Rules
 - `code`: required, `^[A-Z][A-Z0-9_]{1,49}$`, unique (`409` on duplicate). `name`: required, ≤ 100 chars.

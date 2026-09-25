@@ -19,7 +19,7 @@ CRUD for the hierarchical virtual-folder structure that documents are attached t
 | POST | `/api/folders` | `{ parentFolderId?, name }` → `201`; appended as last sibling |
 | PUT | `/api/folders/{id}` | rename: `{ name, rowVersion }` |
 | POST | `/api/folders/{id}/move` | `{ newParentFolderId?, position?, rowVersion }` — re-parent and/or reorder; `position` = 0-based index among new siblings, default last |
-| DELETE | `/api/folders/{id}` | `409 in-use` if it has sub-folders or non-deleted documents |
+| DELETE | `/api/folders/{id}?rowVersion=…` | `409 in-use` if it has sub-folders or **any** documents (deleted ones included — an admin moves them elsewhere first, T07) |
 
 ## Rules
 - Name: trimmed, 1–200 chars, no `/ \`, unique among siblings (case-insensitive — collation) → `409` on duplicate.
@@ -35,6 +35,6 @@ CRUD for the hierarchical virtual-folder structure that documents are attached t
 - [ ] Create a 5-level folder hierarchy via API; `GET /tree` returns it nested and ordered.
 - [ ] Rename with stale `rowVersion` → `409 concurrency-conflict`.
 - [ ] Move into own descendant → `409 invalid-move`; valid move changes the tree.
-- [ ] Delete non-empty folder → `409 in-use`; delete empty folder → `204`.
+- [ ] Delete a folder with sub-folders, documents or only deleted documents → `409 in-use`; after admin moves the deleted documents out → `204`.
 - [ ] Duplicate sibling name → `409`; same name under different parents is allowed.
 - [ ] Non-admin create/rename/move/delete → `403`; non-admin `GET /tree` → `200`.

@@ -6,10 +6,11 @@ Goal: **maximum quality** — every acceptance criterion and every REQ ID is pro
 
 | Level | Project / tool | What | Runs |
 |---|---|---|---|
-| DB | `tests/DocHub.Database.Tests` — xUnit + Testcontainers.MsSql, DACPAC deployed | constraints, filtered unique indexes, composite FKs, audit triggers (App vs Script, multi-row, no-op updates, cascades), `usp_SetSupportContext`, append-only audit, seed idempotency (deploy twice) | every PR |
+| DB | `tests/DocHub.Database.Tests` — xUnit + Testcontainers.MsSql, DACPAC deployed | every stored procedure (results, edge cases, parameters), constraints, filtered unique indexes, composite FKs, audit triggers (App vs Script, multi-row, no-op updates, cascades), `usp_SetSupportContext`, append-only audit, seed idempotency (deploy twice) | every PR |
 | Unit | `tests/DocHub.Domain.Tests` — xUnit + FsCheck | domain rules, sibling ordering, tree ops, canonical hash, content schema validator/canonicalizer, diff engine, role matrix; **property-based** tests: canonicalization is idempotent, hash is stable under key order, move never creates cycles | every PR |
 | API integration | `tests/DocHub.Api.Tests` — `WebApplicationFactory` + real SQL container + Respawn | every endpoint: happy path, validation `400`, `401`, `403` for each role, `404`, `409` (editability, concurrency, conflicts), audit row assertion for every write | every PR |
 | Authorization matrix | part of API integration | table-driven: *every mutating endpoint × every role (owner, doc editor, node editor, approver, other, admin)* → expected status | every PR |
+| SP ↔ EF equivalence | API integration | each stored procedure's output equals an EF-built reference query on generated data (list, search, permissions) | every PR |
 | Contract | Verify snapshot of `/openapi/v1.json` | unintended API changes fail; SPA TS client regenerated from the snapshot | every PR |
 | Frontend unit/component | Vitest + Testing Library + MSW | components, hooks, permission-dependent rendering, autosave/conflict logic, editor extensions (JSON in → JSON out) | every PR |
 | E2E | Playwright against the full stack (`docker compose`: SQL + API + SPA) | milestone scenarios from the execution plan, incl. test-mode user switching (owner → approver 1 → approver 2), support-script change visible in history | every PR (smoke) + nightly (full) |

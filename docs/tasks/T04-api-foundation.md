@@ -5,8 +5,8 @@
 | **Depends on** | T01, T02, T03 |
 | **Blocks** | T05–T13 |
 | **Size** | M (2–3 days) |
-| **Requirements** | FR-H2, NFR-2, NFR-3, NFR-4, NFR-7 |
-| **Read first** (nothing else) | [04-change-tracking](../requirements/04-change-tracking.md) · [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
+| **Requirements** | FR-H2, NFR-2, NFR-3, NFR-4, NFR-7, FR-D1, FR-D2 |
+| **Read first** (nothing else) | [04-change-tracking](../requirements/04-change-tracking.md) · [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [11-data-access](../requirements/11-data-access.md) · [process](../process.md) |
 
 ## Goal
 Cross-cutting plumbing every feature task relies on, so feature tasks only add endpoints and rules.
@@ -19,6 +19,7 @@ Cross-cutting plumbing every feature task relies on, so feature tasks only add e
 - Tables with triggers: configure `ToTable(t => t.HasTrigger("…"))` (required by EF Core so it does not use `OUTPUT` without `INTO`).
 - **No migrations.** A test asserts the model matches the DACPAC (see §5).
 - `EnableRetryOnFailure` for Azure SQL transient errors.
+- **Stored-procedure layer** (ADR-09): `IDbProcedures` in Infrastructure — typed methods, parameterized calls on the DbContext connection (session context applies), multi-result-set reader helper, and one sample procedure `app.usp_Ping` with a DB test + integration test to establish the pattern. CRUD stays EF-only (FR-D1).
 
 ### 2. Current user — **Test mode** ([ADR-06](../architecture.md))
 - `TestModeAuthenticationHandler` (active when `Auth:Mode = Test`): reads `X-User-Id`, loads the user (cached), rejects missing/unknown/inactive users with `401`.

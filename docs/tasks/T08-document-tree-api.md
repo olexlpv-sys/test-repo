@@ -5,8 +5,8 @@
 | **Depends on** | T05, T07 |
 | **Blocks** | T09, T11, T12, T15 |
 | **Size** | M (2–3 days) |
-| **Requirements** | FR-T1 … FR-T3, FR-T5, FR-V4, NFR-6 |
-| **Read first** (nothing else) | [02-document-tree](../requirements/02-document-tree.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) · [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
+| **Requirements** | FR-T1 … FR-T3, FR-T5, FR-V4, NFR-6, FR-D3 |
+| **Read first** (nothing else) | [02-document-tree](../requirements/02-document-tree.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) · [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [11-data-access](../requirements/11-data-access.md) · [process](../process.md) |
 
 ## Goal
 Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary titles, typed nodes, ordering and moving.
@@ -21,7 +21,7 @@ Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary 
 | PATCH | `/api/nodes/{nodeId}` | `{ title?, nodeTypeId?, rowVersion }` |
 | POST | `/api/nodes/{nodeId}/move` | `{ newParentNodeId?, position, rowVersion }` — re-parent and/or reorder within the same version |
 | DELETE | `/api/nodes/{nodeId}?rowVersion=…` | deletes node **with its whole subtree** and contents; response `{ deletedCount }` |
-| POST | `/api/versions/{versionId}/nodes/bulk` | *(optional, nice to have)* create a whole subtree in one call: nested `[{ nodeTypeId, title, contentHtml?, children }]` — useful for templates, seeding and tests |
+| POST | `/api/versions/{versionId}/nodes/bulk` | *(optional, nice to have)* create a whole subtree in one call: nested `[{ nodeTypeId, title, contentJson?, children }]` — `contentJson` validated/canonicalized exactly like T09 (never HTML) — useful for templates, seeding and tests |
 
 ## Rules
 - Every mutating call (create, rename, change type, move, delete, bulk): `IVersionGuard.EnsureEditable` (T07) → `409 version-not-editable`, then `IDocumentAuthorization.CanEditStructure(docId)` (owner only) → `403`.
@@ -30,7 +30,7 @@ Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary 
 - Move under itself/descendant → `409 invalid-move`.
 - Sort order with gaps; renumber siblings when a gap is exhausted — encapsulate in a `SiblingOrdering` helper (unit tested in `DocHub.Domain.Tests`), reused by folders (T06).
 - `number` is computed on read (1-based position path), not stored.
-- Deleting a subtree: single statement via recursive CTE collecting ids, delete children-first (or `ON DELETE` by depth ordering) inside a transaction. Triggers from T03 must log every deleted node and content row.
+- Deleting a subtree: stored procedure **`app.usp_DeleteSubtree @NodeId`** (FR-D3) — recursive CTE collecting ids, delete children-first inside a transaction. All other node CRUD via EF Core (FR-D1). Triggers from T03 must log every deleted node and content row.
 - Each mutation updates `ModifiedAt/ModifiedByUserId` of the node.
 
 ## Performance

@@ -18,6 +18,7 @@ Read `audit.ChangeLog` (written by triggers — T03) and present a human-readabl
 | GET | `/api/documents/{id}/nodes/{logicalNodeId}/history?page&pageSize` | history of one node **across all versions**, newest first |
 | GET | `/api/history/entries/{entryId}/diff` | diff between `OldValues` and `NewValues` of a content entry |
 | GET | `/api/documents/{id}/history?versionId?&from?&to?&userId?&source?&page&pageSize` | document-wide activity feed (nodes, content, versions, permissions, comments) |
+| GET | `/api/admin/audit?table&operation&source&userId&dbLogin&ticket&from&to&page&pageSize` | **admin only**: raw `audit.ChangeLog` rows (all tables incl. folders, node types, styles, users) for the Admin tab (FR-UI3) |
 
 ### History entry shape
 ```json
@@ -40,7 +41,7 @@ For `source = "Script"`, `user` is `null` (or the acting user from `usp_SetSuppo
 
 ## Rules
 1. **Grouping**: rows with the same `CorrelationId` + entity are merged into one entry (e.g. node title + node type changed in one request).
-2. **Draft copies**: inserting nodes/content during "new draft" (T07) must not flood the history — collapse all `I` rows of one copy operation into a single `CopiedToNewDraft` entry per node (detect via `CorrelationId` of the draft creation, or have T07 set session context key `Operation = 'CopyVersion'` — preferred; add the key to the T03 contract).
+2. **Draft copies**: inserting nodes/content during "new draft" (T07) must not flood the history — collapse all `I` rows of one copy operation into a single `CopiedToNewDraft` entry per node (detect via `CorrelationId` of the draft creation, or T07 sets session context key `OperationContext = 'CopyVersion'`, stored in `audit.ChangeLog.OperationContext` — use it).
 3. `NodeMoved`: `ParentNodeId` or `SortOrder` changed — resolve old/new parent titles for display.
 4. **Content diff** (`/diff`): take `OldValues.ContentJson` and `NewValues.ContentJson`, build block trees, word-level diff, and report **formatting-only** changes separately (e.g. `{"op":"format","text":"Scope","changes":["bold added","fontSize 11pt→14pt"]}`, paragraph `styleId Normal→Heading2`); response:
    ```json
@@ -67,4 +68,5 @@ Unit tests with fixtures in `tests/DocHub.Domain.Tests/DiffFixtures/`. Whoever s
 - [ ] A direct SQL update (no session context) appears with `source = Script` and `dbLogin`; with `usp_SetSupportContext` it shows `ticket` and `reason`.
 - [ ] Script edit of a Signed version appears with `afterSigning = true`.
 - [ ] Diff of a table where one cell changed marks only that cell.
+- [ ] `GET /api/admin/audit` filters by `source=Script` and `ticket`; non-admin → `403`.
 - [ ] Making a word bold (no text change) is reported as a formatting change, not as delete+insert.

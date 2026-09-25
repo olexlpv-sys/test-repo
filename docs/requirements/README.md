@@ -14,7 +14,8 @@ Items marked **[A]** are assumptions — confirm or correct them in the [decisio
 | [07-comments.md](07-comments.md) | Comments | FR-CM* |
 | [08-web-ui.md](08-web-ui.md) | Web UI incl. test mode | FR-UI* |
 | [09-non-functional.md](09-non-functional.md) | Performance, security, quality | NFR-* |
-| [10-decisions-log.md](10-decisions-log.md) | Product decisions, open questions | Q* |
+| [10-decisions-log.md](10-decisions-log.md) | Product decisions, open questions, spec assumptions | Q*, A-* |
+| [11-data-access.md](11-data-access.md) | EF Core for CRUD, stored procedures for permissions/lists/search, DB project owns all objects | FR-D* |
 
 Related specs: [content-format.md](../content-format.md) (rich-text format), [architecture.md](../architecture.md).
 
@@ -32,5 +33,5 @@ Related specs: [content-format.md](../content-format.md) (rich-text format), [ar
 
 ## Out of scope (first release)
 
-Real authentication (Entra ID), Word import/export (designed for, see ../content-format.md §3), full-text search, attachments/images upload,
+Real authentication (Entra ID), Word import/export (designed for, see ../content-format.md §3), linguistic full-text search (substring search is in scope — FR-D6), attachments/images upload,
 notifications, approval workflow (multi-step), real-time collaborative editing, Azure infrastructure-as-code.

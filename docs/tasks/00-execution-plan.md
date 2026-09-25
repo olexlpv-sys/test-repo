@@ -19,12 +19,14 @@ Source requirements: [requirements/](../requirements/README.md) · Decisions: [a
 | [T11](T11-change-history-api.md) | Change history API + diff engine | T03, T09 | M · 2–3 d | M2 Advanced API |
 | [T12](T12-version-comparison-api.md) | Version comparison API | T09 (+ diff engine) | M · 2 d | M2 Advanced API |
 | [T13](T13-comments-api.md) | Comments API | T07, T10 | S–M · 1.5 d | M2 Advanced API |
-| [T14](T14-web-shell-folders-documents.md) | Web: shell, folder tree, document list | T06, T07 | M · 2–3 d | M3 Web UI |
-| [T15](T15-web-document-editor.md) | Web: document form (tree, Word-like editor, history, signing) | T08, T09, T11, T14 | XL · 6–7 d | M3 Web UI |
+| [T14](T14-web-shell-folders-documents.md) | Web: shell, folder tree, document list | T05, T06, T07 | M · 2–3 d | M3 Web UI |
+| [T15](T15-web-document-editor.md) | Web: document form (tree, Word-like editor, history, signing) | T08, T09, T10, T11, T14 | XL · 6–7 d | M3 Web UI |
 | [T16](T16-web-compare-comments-permissions.md) | Web: compare, comments, permissions | T10, T12, T13, T15 | M–L · 3–4 d | M3 Web UI |
-| [T17](T17-web-admin-tab.md) | Web: Admin tab (folders, node types, styles, users) | T05, T14 | M · 2–2.5 d | M3 Web UI |
+| [T17](T17-web-admin-tab.md) | Web: Admin tab (folders, node types, styles, users, audit) | T05, T11, T14 | M · 2–2.5 d | M3 Web UI |
 
-**Total effort ≈ 42–48 developer-days.**
+| [T18](T18-search.md) | Search: stored procedures, API, UI | T07, T09, T14, T15 | M · 2–2.5 d | M3 Web UI |
+
+**Total effort ≈ 45–51 developer-days.**
 
 ## 2. Dependency graph
 
@@ -61,6 +63,11 @@ flowchart TD
   T13 --> T16
   T15 --> T16
   T05 --> T17[T17 Web admin]
+  T11 --> T17
+  T05 --> T14
+  T10 --> T15
+  T09 --> T18[T18 Search]
+  T15 --> T18
   T14 --> T17
 
   classDef crit fill:#fde2e1,stroke:#c0392b,color:#000;

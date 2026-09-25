@@ -14,11 +14,11 @@ Comments on the document as a whole or on a specific node, with one level of rep
 ## API
 | Method | Route | Notes |
 |---|---|---|
-| GET | `/api/versions/{versionId}/comments?logicalNodeId?&scope=all|document|node&includeResolved=true` | threads: `[{ id, logicalNodeId?, nodeTitle?, author, body, createdAt, editedAt, resolvedAt, resolvedBy, rowVersion, replies: [...] }]` |
+| GET | `/api/versions/{versionId}/comments?logicalNodeId?&scope=all|document|node&includeResolved=true&includePreviousVersions=false` | threads: `[{ id, logicalNodeId?, nodeTitle?, author, body, createdAt, editedAt, resolvedAt, resolvedBy, rowVersion, replies: [...] }]` |
 | GET | `/api/documents/{id}/comments/counts?versionId=` | `{ document: 2, nodes: { "<logicalNodeId>": 3, … } }` — for badges in the tree |
 | POST | `/api/versions/{versionId}/comments` | `{ logicalNodeId?, parentCommentId?, body }` → `201` |
 | PUT | `/api/comments/{id}` | `{ body, rowVersion }` — author only |
-| DELETE | `/api/comments/{id}` | author or owner; soft delete (`body` shown as "deleted" if it has replies) |
+| DELETE | `/api/comments/{id}?rowVersion=…` | author or owner; soft delete (`body` shown as "deleted" if it has replies) |
 | POST | `/api/comments/{id}/resolve` / `/reopen` | top-level comments only; owner or approver |
 
 ## Rules
@@ -35,3 +35,5 @@ Comments on the document as a whole or on a specific node, with one level of rep
 - [ ] Only the author edits; owner can delete any; only owner/approver resolve.
 - [ ] Commenting on a signed version works; on a discarded draft → `409`.
 - [ ] Counts endpoint matches the list.
+- [ ] On a v2 draft, `includePreviousVersions=true` also returns v1 comments of the same node, flagged `versionLabel = "v1"`; default excludes them.
+- [ ] Comment on a deleted document → `409 document-deleted`.

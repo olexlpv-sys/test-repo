@@ -8,7 +8,16 @@ Every answer from the product owner is recorded here; the affected requirement f
 
 | # | Question | Current assumption |
 |---|---|---|
-_No open questions at the moment._
+| Q13 | Search: substring (`LIKE`) over titles and node text, or linguistic full-text search (stemming, ranking)? | Substring, case/accent-insensitive (FR-D6); full-text can replace it later behind the same procedure contract |
+
+## Assumptions made by the spec (confirm or override)
+| # | Assumption |
+|---|---|
+| A-1 | The document title can be changed only while a draft exists (the title is versioned together with the draft's content). |
+| A-2 | A draft can be discarded only when a signed version exists; a never-signed document is deleted instead of discarded. |
+| A-3 | Editing a draft makes earlier approver signatures outdated; approvers must sign again. |
+| A-4 | Admins may move deleted documents (to be able to empty and delete folders). |
+
 
 ## Resolved
 

@@ -22,7 +22,7 @@ The canonical format is **TipTap/ProseMirror JSON validated against DocHub Conte
 
 ## Rules
 1. `IVersionGuard.EnsureEditable` → `409`, then `IDocumentAuthorization.CanEditContent(docId, logicalNodeId)` → `403` (owner, document-level editor, or node-level editor on this node or an ancestor — T10).
-2. **Validation** (`ContentSchemaValidator` in `DocHub.Domain`): node/mark types, attribute whitelists and ranges, `styleId` exists in `app.ContentStyle`, link schemes, depth ≤ 20, size ≤ 2 MB. Unknown `wordExt` attributes are accepted as opaque JSON objects (≤ 16 KB each).
+2. **Validation** (`ContentSchemaValidator` in `DocHub.Domain`): node/mark types, attribute whitelists and ranges, `styleId` exists in `app.ContentStyle` (active **or inactive** — content that already uses a deactivated style stays saveable; the editor only *offers* active styles), link schemes, depth ≤ 20, size ≤ 2 MB. Unknown `wordExt` attributes are accepted as opaque JSON objects (≤ 16 KB each).
 3. **Canonicalization** before save: sorted keys, default-valued attributes removed, empty trailing paragraphs removed, adjacent text nodes with equal marks merged. Empty content = `{"type":"doc","content":[]}`.
 4. **Derived columns** (computed server-side on save):
    - `ContentHtml` — rendered by `ContentHtmlRenderer` (JSON → HTML; text always HTML-encoded; styles as CSS classes `ds-style-{styleId}`, direct formatting as inline style from whitelisted values only).
@@ -30,7 +30,8 @@ The canonical format is **TipTap/ProseMirror JSON validated against DocHub Conte
    - `ContentHash` — SHA-256 of canonical JSON.
 5. Same `ContentHash` as stored → no DB update (no audit noise), return `200` with current state.
 6. The UI autosaves (debounced) — `PUT` is a single `UPDATE … WHERE NodeId = @id AND RowVersion = @rv`.
-7. `GET /api/content-styles/stylesheet.css` (T05) is what the renderer's CSS classes refer to.
+7. `GET /api/content-styles/stylesheet.css` (T05) is what the renderer's CSS classes refer to (it includes inactive styles).
+8. **Script edits**: support scripts edit `ContentJson` only. On read, if `ContentHash` ≠ SHA-256(canonical `ContentJson`), the API renders `ContentHtml`/`PlainText` on the fly (never serves stale derived data) and marks the node `derivedStale` so the admin endpoint `POST /api/admin/content/rebuild-derived` (admin only) can persist them.
 
 ## DB changes (in T02)
 `app.NodeContent`: `ContentJson nvarchar(max)` (`ISJSON` check) + `SchemaVersion tinyint` are the source of truth; `ContentHtml`, `PlainText`, `ContentHash` are derived.
@@ -42,3 +43,5 @@ The canonical format is **TipTap/ProseMirror JSON validated against DocHub Conte
 - [ ] Saving identical content twice creates **one** audit row.
 - [ ] Signed version → `409 version-not-editable`; no content permission → `403`; stale `rowVersion` → `409 concurrency-conflict`.
 - [ ] `PlainText` of a 2×2 table is `a\tb\nc\td`.
+- [ ] Content using a deactivated style can still be saved.
+- [ ] After a direct SQL update of `ContentJson`, `GET …/content?format=html` returns HTML of the new JSON; `rebuild-derived` persists it.

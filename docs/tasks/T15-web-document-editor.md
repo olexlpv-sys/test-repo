@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Depends on** | T08, T09, T11, T14 |
+| **Depends on** | T08, T09, T10, T11, T14 |
 | **Blocks** | T16 |
 | **Size** | XL (6–7 days) |
 | **Requirements** | FR-UI2, FR-UI5, FR-T*, FR-V*, FR-H4 |
