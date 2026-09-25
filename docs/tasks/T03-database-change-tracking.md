@@ -6,6 +6,7 @@
 | **Blocks** | T04 (session context interceptor), T11 |
 | **Size** | M (2 days) |
 | **Requirements** | FR-H1, FR-H3, FR-H5 |
+| **Read first** (nothing else) | [04-change-tracking](../requirements/04-change-tracking.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 
 ## Goal
 Every data change — made by the API **or by a support script** — is recorded in `audit.ChangeLog` by the database itself, with who/when/what. See [ADR-04](../architecture.md).
@@ -40,8 +41,8 @@ The table is **append-only**: `DENY UPDATE, DELETE ON audit.ChangeLog TO public`
 
 ### 2. Triggers
 `AFTER INSERT, UPDATE, DELETE` trigger per tracked table:
-`app.Folder`, `app.NodeType`, `app.Document`, `app.DocumentVersion`, `app.DocumentNode`, `app.NodeContent`, `app.DocumentPermission`, `app.Comment`
-(`app.[User]` too — it's seed data, but support may edit it).
+`app.Folder`, `app.NodeType`, `app.ContentStyle`, `app.Document`, `app.DocumentVersion`, `app.VersionSignature`, `app.DocumentNode`, `app.NodeContent`, `app.DocumentPermission`, `app.Comment`
+(`app.[User]` too — it's seed data, but support may edit it). For `app.NodeContent` log `ContentJson` and omit the derived columns (`ContentHtml`, `PlainText`) to halve the log volume.
 
 Requirements for triggers:
 - **Set-based**, multi-row safe (a script updating 1 000 rows must write 1 000 log rows in one statement). Use `FULL OUTER JOIN inserted/deleted ON Id` and per-row `(SELECT … FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)`.
@@ -74,7 +75,7 @@ Signed content is immutable for the API (enforced in code, T07/T09). The DB does
 ## Out of scope
 API for reading the log (T11). Retention/archiving of the log.
 
-## Acceptance criteria (SQL test script `database/tests/audit.sql`)
+## Acceptance criteria (automated in `tests/DocHub.Database.Tests`, run in CI)
 - [ ] With `sp_set_session_context 'UserId', 2` an `UPDATE` on `app.NodeContent` writes one row: `Source='App'`, `UserId=2`, `OldValues`/`NewValues` contain old/new `ContentHtml`, `ChangedColumns` lists only changed columns.
 - [ ] Without session context the same update writes `Source='Script'`, `UserId=NULL`, `DbLogin=ORIGINAL_LOGIN()`.
 - [ ] After `audit.usp_SetSupportContext` the row carries `Ticket` and `Reason`.

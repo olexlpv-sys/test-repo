@@ -6,6 +6,7 @@
 | **Blocks** | T16 (compare view) |
 | **Size** | M (2 days) |
 | **Requirements** | FR-C1, FR-C2 |
+| **Read first** (nothing else) | [05-version-comparison](../requirements/05-version-comparison.md) · [content-format](../content-format.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 
 ## Goal
 Compare two versions of the same document — any pair of signed versions, or a signed version vs the current draft — at structure and content level.

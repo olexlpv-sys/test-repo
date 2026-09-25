@@ -6,6 +6,7 @@
 | **Blocks** | T09, T11, T12, T15 |
 | **Size** | M (2–3 days) |
 | **Requirements** | FR-T1 … FR-T3, FR-T5, FR-V4, NFR-6 |
+| **Read first** (nothing else) | [02-document-tree](../requirements/02-document-tree.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) · [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 
 ## Goal
 Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary titles, typed nodes, ordering and moving.
@@ -37,7 +38,7 @@ Build and edit the node tree of a **draft** version: arbitrary depth, arbitrary 
 - NFR-6: tree of 2 000 nodes / depth 15 loads in < 500 ms — add a test with generated data.
 
 ## Acceptance criteria
-- [ ] Build via API the example tree from requirements FR-T1 and a random 15-level tree; `GET /tree` returns correct nesting, order and numbering.
+- [ ] Build via API the example tree from [FR-T1](../requirements/02-document-tree.md) and a random 15-level tree; `GET /tree` returns correct nesting, order and numbering.
 - [ ] Reorder siblings and move a subtree to another parent; numbering updates accordingly.
 - [ ] Move into own descendant → `409 invalid-move`.
 - [ ] Any mutation on a Signed version → `409 version-not-editable`.

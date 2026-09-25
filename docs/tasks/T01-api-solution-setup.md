@@ -6,6 +6,7 @@
 | **Blocks** | T04 and all API tasks |
 | **Size** | S (0.5–1 day) |
 | **Requirements** | NFR-1, NFR-2 |
+| **Read first** (nothing else) | [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 
 ## Goal
 Create an empty but runnable .NET 10 API solution with project structure, shared build settings, test projects and CI build.
@@ -20,6 +21,8 @@ Create an empty but runnable .NET 10 API solution with project structure, shared
    | `src/DocHub.Infrastructure` | `classlib` | Domain |
    | `tests/DocHub.Domain.Tests` | `xunit` | Domain |
    | `tests/DocHub.Api.Tests` | `xunit` | Api (uses `Microsoft.AspNetCore.Mvc.Testing`) |
+   | `tests/DocHub.Testing` | `classlib` | shared test infrastructure: SQL Server Testcontainers fixture, DACPAC deploy, builders (filled by T02/T04) |
+   | `tests/DocHub.Database.Tests` | `xunit` | DocHub.Testing (DB-level tests, T02/T03) |
 2. `global.json` pinning the .NET 10 SDK (`rollForward: latestFeature`).
 3. `Directory.Build.props`: `net10.0`, `Nullable=enable`, `ImplicitUsings=enable`, `TreatWarningsAsErrors=true`, `AnalysisLevel=latest-recommended`.
 4. `Directory.Packages.props` — **Central Package Management** for all NuGet versions.

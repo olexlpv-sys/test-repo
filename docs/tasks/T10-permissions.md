@@ -6,7 +6,8 @@
 | **Blocks** | T13 (full rules), T16 (permissions dialog) |
 | **Can run in parallel with** | T08, T09 (they call `IDocumentAuthorization`) |
 | **Size** | M (2 days) |
-| **Requirements** | FR-P1 … FR-P5 |
+| **Requirements** | FR-P1 … FR-P6, FR-V6 |
+| **Read first** (nothing else) | [06-permissions](../requirements/06-permissions.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) (FR-V6 only) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 
 ## Goal
 Manage document roles and enforce them in one place — the full implementation of `IDocumentAuthorization` introduced in T07.
@@ -23,13 +24,14 @@ Principle: **the Owner defines the structure, Editors edit text, Approvers revie
 | Edit **text** of N and of its descendants | ✔ | ✔ | ✔ | – | – |
 | Comment (document or node) | ✔ | ✔ | ✔ | ✔ | – |
 | Resolve / reopen comments | ✔ | – | – | ✔ | – |
-| **Sign** the draft (→ vN) | – | – | – | ✔ | – |
+| **Sign** the draft — version is finalized when **all** approvers signed | – | – | – | ✔ | – |
 | New draft, discard draft, delete/move document | ✔ | – | – | – | – |
 | Grant/revoke roles | ✔ | – | – | – | – |
+| Restore deleted document | ✔ | – | – | – | admin |
 
-- The owner **cannot** be granted a role and therefore cannot sign their own document (four-eyes principle, Q11). A document without an Approver cannot be signed — the UI tells the owner to add one.
-- With several approvers, a signature from **any one** of them is enough (Q10).
-- Admins (`User.IsAdmin`) get no document rights by default (**assumption**).
+- The owner **cannot** be granted a role and therefore cannot sign their own document (Q11). A document without an Approver cannot be signed — the UI tells the owner to add one. For manual testing use the test-mode "Acting as" dropdown (T14) to switch between owner and approvers.
+- With several approvers **all of them must sign** (Q10). Adding an approver to a draft that is being signed makes it wait for the new approver too; revoking an approver re-runs the finalization check (T07 rule 2).
+- Admins (`User.IsAdmin`) manage folders, node types and content styles and can restore deleted documents; they get no other document rights by default.
 
 ## API
 | Method | Route | Who | Notes |

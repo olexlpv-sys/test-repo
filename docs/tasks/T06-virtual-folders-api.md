@@ -6,6 +6,7 @@
 | **Blocks** | T07, T14 |
 | **Size** | S–M (1–1.5 days) |
 | **Requirements** | FR-F1 … FR-F4 |
+| **Read first** (nothing else) | [01-folders](../requirements/01-folders.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 
 ## Goal
 CRUD for the hierarchical virtual-folder structure that documents are attached to.
@@ -24,7 +25,7 @@ CRUD for the hierarchical virtual-folder structure that documents are attached t
 - Name: trimmed, 1–200 chars, no `/ \`, unique among siblings (case-insensitive — collation) → `409` on duplicate.
 - Move: target must exist; moving a folder into itself or into its descendant → `409 invalid-move` (check with recursive CTE or in-memory tree).
 - Sort order uses gaps (see [ADR-02](../architecture.md)); moving renumbers siblings only when needed.
-- Permissions: any authenticated user can manage folders (**assumption Q7**); keep the check in one policy so it can be tightened to admins later.
+- Permissions: **admins only** for create/rename/move/delete (`403` otherwise, policy `AdminOnly`); every user can read the tree and folder details.
 
 ## Implementation notes
 - Load the whole folder table in one query and build the tree in memory (folder count is expected to be small, < 10 000).
@@ -36,3 +37,4 @@ CRUD for the hierarchical virtual-folder structure that documents are attached t
 - [ ] Move into own descendant → `409 invalid-move`; valid move changes the tree.
 - [ ] Delete non-empty folder → `409 in-use`; delete empty folder → `204`.
 - [ ] Duplicate sibling name → `409`; same name under different parents is allowed.
+- [ ] Non-admin create/rename/move/delete → `403`; non-admin `GET /tree` → `200`.

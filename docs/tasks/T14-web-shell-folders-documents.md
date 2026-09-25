@@ -5,7 +5,8 @@
 | **Depends on** | T06, T07 (can start against the OpenAPI contract / mocks after T04) |
 | **Blocks** | T15, T16, T17 |
 | **Size** | M (2–3 days) |
-| **Requirements** | FR-UI1, FR-UI4 |
+| **Requirements** | FR-UI1, FR-UI4, FR-F5, FR-V8 |
+| **Read first** (nothing else) | [08-web-ui](../requirements/08-web-ui.md) · [01-folders](../requirements/01-folders.md) · [03-versioning-and-signing](../requirements/03-versioning-and-signing.md) (FR-V8 only) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 
 ## Goal
 Scaffold the SPA and deliver the main window: folder tree on the left, documents of the selected folder on the right with Add/Delete.
@@ -21,7 +22,8 @@ Scaffold the SPA and deliver the main window: folder tree on the left, documents
 - CI: add a web job (`npm ci`, lint, test, build).
 
 ### 2. App shell
-- Header: product name, tabs **Documents** | **Admin** (Admin visible only for `isAdmin`), **current-user switcher** (dropdown of `GET /api/users`, persisted in `localStorage`, default = first user).
+- Header: product name, tabs **Documents** | **Admin** (Admin visible only for `isAdmin`).
+- **Test mode "Acting as" dropdown** (FR-UI4): shown only when `GET /api/system/info` returns `authMode = "Test"`, together with a visible **TEST MODE** banner. Lists `GET /api/users` with display name + login + role hint for the open document (Owner / Editor / Approver). Selection persisted in `localStorage` (default = first user); switching invalidates all TanStack Query caches so every screen re-renders with the new user's rights. Optional hotkey `Ctrl+Shift+U` to cycle users — handy for the owner → approver 1 → approver 2 signing scenario.
 - Global error toast for ProblemDetails (`title` + `detail`); `409 concurrency-conflict` shows "Changed by someone else — reload".
 
 ### 3. Main window (`/`)
@@ -35,17 +37,19 @@ Scaffold the SPA and deliver the main window: folder tree on the left, documents
 │                      │ └───────────┴────────┴─────────┴───────┴───────────┘ │
 └──────────────────────┴──────────────────────────────────────────────────────┘
 ```
-- **Folder tree** (`GET /api/folders/tree`): expand/collapse, select; context menu / toolbar: New sub-folder, Rename (inline), Delete (confirm; show `in-use` error nicely), drag-and-drop move (optional; otherwise "Move to…" dialog). Selected folder in URL (`?folder=12`) for deep links.
+- **Folder tree** (`GET /api/folders/tree`): expand/collapse, select. Management actions (New sub-folder, Rename inline, Delete with `in-use` handling, drag-and-drop move or "Move to…") are shown **only for admins**; the same component is reused in the Admin tab (T17). Selected folder in URL (`?folder=12`) for deep links.
 - **Document list** for the selected folder: columns Title, Status (badge colors: Draft = amber, Signed = green, Deleted = grey), Latest signed version, Owner, Modified; sort by column; toggle "show deleted".
 - **Add**: modal with Title → `POST /api/documents` → navigate to `/documents/{id}`.
 - **Delete**: enabled when one row is selected and current user is owner; confirm dialog → `DELETE /api/documents/{id}`.
 - **Row click** (or double-click, decide) → `/documents/{id}`.
+- **Restore**: with "show deleted" on, deleted rows show a **Restore** button (owner or admin) → `POST /api/documents/{id}/restore`.
 - Empty states: no folders, empty folder.
 
 ## Acceptance criteria
 - [ ] `npm run build` and `npm test` pass in CI; generated API client is up to date (CI check `gen:api` produces no diff).
-- [ ] Create/rename/delete folders from the UI; tree refreshes without full reload.
+- [ ] As admin, create/rename/delete folders; tree refreshes without full reload. As non-admin the actions are not shown.
 - [ ] Add a document → lands in the editor; back navigation shows it in the list with status Draft.
 - [ ] Delete button disabled for non-owners; deleting hides the row.
-- [ ] Switching user changes the `X-User-Id` on subsequent requests and refreshes data.
+- [ ] Switching user in the "Acting as" dropdown changes the `X-User-Id` on subsequent requests and refreshes data; the dropdown is hidden when the API is not in test mode.
+- [ ] Delete a document, toggle "show deleted", restore it.
 - [ ] Playwright smoke test: create folder → add document → see it in the list.

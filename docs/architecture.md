@@ -35,18 +35,22 @@ flowchart LR
 - **Scripts**: if `SESSION_CONTEXT('UserId')` is empty, the change is recorded with `Source = 'Script'`, `DbLogin = ORIGINAL_LOGIN()`. Support scripts should start with `EXEC audit.usp_SetSupportContext @Ticket = 'INC-123', @Reason = '…'` so the ticket is recorded too.
 - Rationale: application-level auditing (EF `SaveChanges` interceptor) cannot see script changes — a hard requirement. Temporal tables were considered but do not record *who* changed a row nor the reason; triggers do both. (Temporal tables can be added later for point-in-time queries if needed.)
 
-### ADR-05 Rich text = sanitized HTML
-- The editor (TipTap) produces HTML; the API sanitizes it with an allow-list (`HtmlSanitizer`), and stores `ContentHtml`, a derived `PlainText` and a SHA-256 `ContentHash`.
-- Diffs are computed server-side (`DiffPlex`) on a normalized block representation (paragraphs, headings, list items, table cells), word-level.
+### ADR-05 Rich text = schema-validated JSON modelled on Word (see [content-format.md](content-format.md))
+- Canonical storage: TipTap/ProseMirror JSON (`ContentJson`) validated against DocHub Content Schema v1, whose attributes mirror WordprocessingML (styles, fonts, spacing, numbering, table grid/borders/shading).
+- Derived: server-rendered `ContentHtml`, `PlainText`, SHA-256 `ContentHash` of canonical JSON.
+- Rejected: HTML as canonical (weak fidelity, sanitizer attack surface, noisy diffs); OOXML as canonical (not editable in the browser, lossy round-trips).
+- Diffs are computed server-side on the JSON block tree, word-level (`DiffPlex`), distinguishing text vs formatting changes.
 
-### ADR-06 "Authentication" = seeded users + header
-- A development authentication handler reads `X-User-Id` and builds a `ClaimsPrincipal` for a seeded, active user. Missing/unknown → `401`.
+### ADR-06 "Authentication" = Test mode (seeded users + header)
+- `Auth:Mode = Test`: an authentication handler reads `X-User-Id` and builds a `ClaimsPrincipal` for a seeded, active user. Missing/unknown → `401`.
+- `GET /api/system/info` returns `{ authMode: "Test", environment }`; the SPA shows the **"Acting as" user dropdown** and a TEST MODE banner only in this mode.
+- Startup fails if `Auth:Mode = Test` in the `Production` environment unless `Auth:AllowTestModeInProduction = true` (explicit opt-in for demo environments).
 - Designed so it can be swapped for Entra ID (JWT bearer) later without touching endpoints: everything uses `ICurrentUser`.
 
 ### ADR-07 API style
 - Controllers (or Minimal API endpoint groups — pick one in T04 and use consistently), JSON camelCase, `ProblemDetails` for errors,
   `rowVersion` (base64) in DTOs for optimistic concurrency, built-in `Microsoft.AspNetCore.OpenApi` + Scalar UI.
-- Layering is intentionally light: `Domain` (entities + rules), `Infrastructure` (EF, SQL, diff, sanitizer), `Api` (endpoints + application services). No MediatR/CQRS.
+- Layering is intentionally light: `Domain` (entities + rules), `Infrastructure` (EF, SQL, diff, content schema validator/renderer), `Api` (endpoints + application services). No MediatR/CQRS.
 
 ### ADR-08 Web UI: React SPA (confirmed)
 - Vite + React + TypeScript, TanStack Query for server state, a tree component (e.g. `react-arborist`), TipTap with the table extension, TS API client generated from OpenAPI (`openapi-typescript` + `openapi-fetch`).

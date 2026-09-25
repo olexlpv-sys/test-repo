@@ -16,7 +16,7 @@ support **version comparison**, **per-document / per-node permissions** and **co
 | Database | Azure SQL Database (local dev: SQL Server 2022 in Docker) |
 | DB schema source of truth | SDK-style SQL Database Project (`Microsoft.Build.Sql`) → DACPAC |
 | Web UI | React + TypeScript + Vite, TipTap rich-text editor |
-| Tests | xUnit, Testcontainers (MsSql), Playwright (UI smoke) |
+| Tests | xUnit, Testcontainers (MsSql), Respawn, Vitest, Playwright — see [testing strategy](docs/testing-strategy.md) |
 
 ## Repository layout (target)
 
@@ -24,7 +24,7 @@ support **version comparison**, **per-document / per-node permissions** and **co
 /DocHub.slnx                  API solution
 /src/DocHub.Api               ASP.NET Core Web API (host, endpoints)
 /src/DocHub.Domain            Entities, enums, domain rules (no infrastructure deps)
-/src/DocHub.Infrastructure    EF Core DbContext, SQL session context, diff, sanitizer
+/src/DocHub.Infrastructure    EF Core DbContext, SQL session context, diff, content renderer
 /tests/DocHub.Domain.Tests
 /tests/DocHub.Api.Tests       Integration tests against a real SQL Server container
 /database/DocHub.Database.slnx
@@ -35,6 +35,9 @@ support **version comparison**, **per-document / per-node permissions** and **co
 
 ## Documentation
 
-- [Requirements](docs/requirements.md) — consolidated functional requirements, assumptions, open questions
+- [Requirements](docs/requirements/README.md) — one file per area, plus the decisions log
+- [Rich-text content format](docs/content-format.md)
+- [Development process: reviews, defect rules, testing](docs/process.md) · [Testing strategy](docs/testing-strategy.md)
+- [Work queue](docs/work-queue.md) — the single place to pick the next item
 - [Architecture & key decisions](docs/architecture.md)
 - [Execution plan & task index](docs/tasks/00-execution-plan.md)

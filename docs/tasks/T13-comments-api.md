@@ -6,6 +6,7 @@
 | **Blocks** | T16 (comments panel) |
 | **Size** | S–M (1.5 days) |
 | **Requirements** | FR-CM1, FR-CM2, FR-P3 |
+| **Read first** (nothing else) | [07-comments](../requirements/07-comments.md) · [06-permissions](../requirements/06-permissions.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 
 ## Goal
 Comments on the document as a whole or on a specific node, with one level of replies, edit/delete of own comments and resolve/reopen.

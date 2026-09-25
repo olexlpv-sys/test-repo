@@ -5,6 +5,7 @@
 | **Depends on** | T10, T12, T13, T15 |
 | **Size** | M–L (3–4 days) |
 | **Requirements** | FR-C1, FR-C2, FR-CM1, FR-P1 … FR-P4, FR-UI5 |
+| **Read first** (nothing else) | [05-version-comparison](../requirements/05-version-comparison.md) · [07-comments](../requirements/07-comments.md) · [06-permissions](../requirements/06-permissions.md) · [08-web-ui](../requirements/08-web-ui.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 
 ## Goal
 Complete the document form with comparison, comments and role management.

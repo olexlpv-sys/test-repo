@@ -6,6 +6,7 @@
 | **Blocks** | T05–T13 |
 | **Size** | M (2–3 days) |
 | **Requirements** | FR-H2, NFR-2, NFR-3, NFR-4, NFR-7 |
+| **Read first** (nothing else) | [04-change-tracking](../requirements/04-change-tracking.md) · [09-non-functional](../requirements/09-non-functional.md) · [architecture](../architecture.md) (only sections linked in the text) · [process](../process.md) |
 
 ## Goal
 Cross-cutting plumbing every feature task relies on, so feature tasks only add endpoints and rules.
@@ -19,8 +20,10 @@ Cross-cutting plumbing every feature task relies on, so feature tasks only add e
 - **No migrations.** A test asserts the model matches the DACPAC (see §5).
 - `EnableRetryOnFailure` for Azure SQL transient errors.
 
-### 2. Current user ("dev authentication")
-- `DevHeaderAuthenticationHandler`: reads `X-User-Id`, loads the user (cached), rejects missing/unknown/inactive users with `401`.
+### 2. Current user — **Test mode** ([ADR-06](../architecture.md))
+- `TestModeAuthenticationHandler` (active when `Auth:Mode = Test`): reads `X-User-Id`, loads the user (cached), rejects missing/unknown/inactive users with `401`.
+- `GET /api/system/info` (anonymous) → `{ authMode, environment, version }` — the SPA uses it to show the "Acting as" dropdown.
+- Guard: startup fails for `Test` mode in `Production` unless `Auth:AllowTestModeInProduction = true`.
 - `ICurrentUser { int UserId; bool IsAdmin; }` — the only way endpoints learn who is calling.
 - `GET /api/me` → current user.
 - OpenAPI: declare the `X-User-Id` security scheme so Scalar can send it.
@@ -42,11 +45,13 @@ Cross-cutting plumbing every feature task relies on, so feature tasks only add e
 - DB health check added to `/health`.
 
 ### 5. Test infrastructure (`DocHub.Api.Tests`)
-- `DocHubApiFactory : WebApplicationFactory<Program>` + **Testcontainers.MsSql**: start SQL Server once per test run, deploy the DACPAC (`Microsoft.SqlServer.DacFx` `DacServices.Deploy`) including seed.
+- `DocHubApiFactory : WebApplicationFactory<Program>` reusing the SQL container fixture from `tests/DocHub.Testing` (T02).
 - Isolation: **Respawn** reset of `app` tables (except seed) between tests, or one database per test class.
 - Helpers: `client.AsUser(2)` sets `X-User-Id`; builders for folders/documents/nodes.
 - Test: EF model ↔ DB schema check (compare `IModel` tables/columns with `INFORMATION_SCHEMA.COLUMNS`).
 - CI runs these tests (Docker available on `ubuntu-latest`).
+- Authorization-matrix test harness (endpoint × role → expected status) that later tasks extend — see [testing strategy](../testing-strategy.md).
+- OpenAPI snapshot test (Verify) + committed `src/DocHub.Api/openapi.v1.json`.
 
 ## Acceptance criteria
 - [ ] `GET /api/me` with `X-User-Id: 2` → alice; without header → `401` ProblemDetails.
