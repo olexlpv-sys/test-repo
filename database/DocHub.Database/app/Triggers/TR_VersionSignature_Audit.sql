@@ -50,12 +50,13 @@ BEGIN
     -- for rows that move between versions — and record the first tampering with a Signed version (TamperedAt = ChangedAt of that log row).
     MERGE [app].[VersionStamp] WITH (HOLDLOCK) AS [target]
     USING (
-        SELECT [x].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], CAST(NULL AS DATETIME2 (7)) AS [TamperedAt]
+        SELECT [x].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], MIN(CASE WHEN [v].[Status] = 2 THEN [l].[ChangedAt] END) AS [TamperedAt]
         FROM @Logged AS [l]
         LEFT JOIN inserted AS [i] ON [i].[Id] = [l].[EntityId]
         LEFT JOIN deleted AS [d] ON [d].[Id] = [l].[EntityId]
         CROSS APPLY (VALUES ([i].[DocumentVersionId]), ([d].[DocumentVersionId])) AS [x] ([DocumentVersionId])
         JOIN [app].[DocumentVersion] AS [v] ON [v].[Id] = [x].[DocumentVersionId]
+        CROSS JOIN [audit].[fn_ChangeContext]() AS [ctx]
         GROUP BY [x].[DocumentVersionId]) AS [source]
     ON [target].[DocumentVersionId] = [source].[DocumentVersionId]
     WHEN MATCHED THEN

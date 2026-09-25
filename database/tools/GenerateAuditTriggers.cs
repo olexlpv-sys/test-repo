@@ -24,13 +24,18 @@ var tables = new[]
         DocumentId = "{r}.[DocumentId]",
         DocumentVersionId = "{r}.[Id]",
         AdvancesVersionStamp = true,
-        // A Signed version whose signing data changes (unsign, re-sign, new hash/number/time) is tampering; IsCurrent flips legitimately.
-        TamperCondition = "[d].[Status] = 2 AND ([i].[Id] IS NULL OR [i].[Status] IS DISTINCT FROM [d].[Status] OR [i].[VersionNumber] IS DISTINCT FROM [d].[VersionNumber] OR [i].[SignedAt] IS DISTINCT FROM [d].[SignedAt] OR [i].[SignedContentHash] IS DISTINCT FROM [d].[SignedContentHash] OR [i].[DocumentId] IS DISTINCT FROM [d].[DocumentId])",
+        // Tampering: (a) the signing data of a Signed version changes (unsign, re-sign, new hash/number/time; IsCurrent flips
+        // legitimately), or (b) a script — not the API — creates a Signed version or signs a draft.
+        TamperCondition = "([d].[Status] = 2 AND ([i].[Id] IS NULL OR [i].[Status] IS DISTINCT FROM [d].[Status] OR [i].[VersionNumber] IS DISTINCT FROM [d].[VersionNumber] OR [i].[SignedAt] IS DISTINCT FROM [d].[SignedAt] OR [i].[SignedContentHash] IS DISTINCT FROM [d].[SignedContentHash] OR [i].[DocumentId] IS DISTINCT FROM [d].[DocumentId]))"
+            + " OR ([i].[Status] = 2 AND ([d].[Id] IS NULL OR [d].[Status] <> 2) AND [ctx].[Source] = 'Script')",
     },
     new AuditedTable("VersionSignature", "Id", [C("DocumentVersionId"), C("UserId"), C("SignedAt"), C("ContentHash"), C("WithdrawnAt"), S("Comment")])
     {
         DocumentVersionId = "{r}.[DocumentVersionId]",
         AdvancesVersionStamp = true,
+        // Signatures are only collected while the version is a Draft (the API inserts the last one before finalizing), so any
+        // signature change on a Signed version is tampering.
+        TamperCondition = SignedVersion,
     },
     new AuditedTable("DocumentNode", "Id", [C("DocumentVersionId"), C("LogicalNodeId"), C("ParentNodeId"), C("NodeTypeId"), S("Title"), C("SortOrder"), C("CreatedAt"), C("CreatedByUserId"), C("ModifiedAt"), C("ModifiedByUserId")])
     {
@@ -126,15 +131,17 @@ static string GenerateTrigger(AuditedTable t)
         sb.AppendLine("    DECLARE @Source VARCHAR (10) = (SELECT [Source] FROM [audit].[fn_ChangeContext]());");
         sb.AppendLine("    DECLARE @DerivedRewritten BIT = CASE WHEN UPDATE([ContentHtml]) AND UPDATE([PlainText]) AND UPDATE([ContentHash]) THEN 1 ELSE 0 END;");
         sb.AppendLine();
-        sb.AppendLine("    IF UPDATE([ContentJson]) OR UPDATE([ContentHtml]) OR UPDATE([PlainText]) OR UPDATE([ContentHash]) OR UPDATE([DerivedStale])");
+        sb.AppendLine("    IF UPDATE([ContentJson]) OR UPDATE([ContentHtml]) OR UPDATE([PlainText]) OR UPDATE([ContentHash]) OR UPDATE([DerivedStale]) -- also true for INSERT");
         sb.AppendLine("    BEGIN");
         sb.AppendLine("        UPDATE [nc]");
         sb.AppendLine("        SET [DerivedStale] = 1");
         sb.AppendLine("        FROM [app].[NodeContent] AS [nc]");
         sb.AppendLine("        JOIN inserted AS [i] ON [i].[NodeId] = [nc].[NodeId]");
-        sb.AppendLine("        JOIN deleted AS [d] ON [d].[NodeId] = [i].[NodeId]");
+        sb.AppendLine("        LEFT JOIN deleted AS [d] ON [d].[NodeId] = [i].[NodeId]");
         sb.AppendLine("        WHERE [nc].[DerivedStale] = 0");
         sb.AppendLine("          AND (");
+        sb.AppendLine("                ([d].[NodeId] IS NULL AND @Source = 'Script')");
+        sb.AppendLine("             OR");
         sb.AppendLine("                (CAST([i].[ContentJson] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[ContentJson] AS VARBINARY (MAX))");
         sb.AppendLine("                 AND NOT (@DerivedRewritten = 1 AND [i].[ContentHash] IS DISTINCT FROM [d].[ContentHash]))");
         sb.AppendLine("             OR (@Source = 'Script' AND (CAST([i].[ContentJson] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[ContentJson] AS VARBINARY (MAX))");
@@ -200,6 +207,7 @@ static string GenerateTrigger(AuditedTable t)
         sb.AppendLine(CultureInfo.InvariantCulture, $"        LEFT JOIN deleted AS [d] ON [d].[{key}] = [l].[EntityId]");
         sb.AppendLine(CultureInfo.InvariantCulture, $"        CROSS APPLY (VALUES ({versionOf("[i]")}), ({versionOf("[d]")})) AS [x] ([DocumentVersionId])");
         sb.AppendLine("        JOIN [app].[DocumentVersion] AS [v] ON [v].[Id] = [x].[DocumentVersionId]");
+        sb.AppendLine("        CROSS JOIN [audit].[fn_ChangeContext]() AS [ctx]");
         sb.AppendLine("        GROUP BY [x].[DocumentVersionId]) AS [source]");
         sb.AppendLine("    ON [target].[DocumentVersionId] = [source].[DocumentVersionId]");
         sb.AppendLine("    WHEN MATCHED THEN");

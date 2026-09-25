@@ -56,12 +56,13 @@ BEGIN
     -- for rows that move between versions — and record the first tampering with a Signed version (TamperedAt = ChangedAt of that log row).
     MERGE [app].[VersionStamp] WITH (HOLDLOCK) AS [target]
     USING (
-        SELECT [x].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], MIN(CASE WHEN [d].[Status] = 2 AND ([i].[Id] IS NULL OR [i].[Status] IS DISTINCT FROM [d].[Status] OR [i].[VersionNumber] IS DISTINCT FROM [d].[VersionNumber] OR [i].[SignedAt] IS DISTINCT FROM [d].[SignedAt] OR [i].[SignedContentHash] IS DISTINCT FROM [d].[SignedContentHash] OR [i].[DocumentId] IS DISTINCT FROM [d].[DocumentId]) THEN [l].[ChangedAt] END) AS [TamperedAt]
+        SELECT [x].[DocumentVersionId], MAX([l].[Id]) AS [LastChangeLogId], MIN(CASE WHEN ([d].[Status] = 2 AND ([i].[Id] IS NULL OR [i].[Status] IS DISTINCT FROM [d].[Status] OR [i].[VersionNumber] IS DISTINCT FROM [d].[VersionNumber] OR [i].[SignedAt] IS DISTINCT FROM [d].[SignedAt] OR [i].[SignedContentHash] IS DISTINCT FROM [d].[SignedContentHash] OR [i].[DocumentId] IS DISTINCT FROM [d].[DocumentId])) OR ([i].[Status] = 2 AND ([d].[Id] IS NULL OR [d].[Status] <> 2) AND [ctx].[Source] = 'Script') THEN [l].[ChangedAt] END) AS [TamperedAt]
         FROM @Logged AS [l]
         LEFT JOIN inserted AS [i] ON [i].[Id] = [l].[EntityId]
         LEFT JOIN deleted AS [d] ON [d].[Id] = [l].[EntityId]
         CROSS APPLY (VALUES ([i].[Id]), ([d].[Id])) AS [x] ([DocumentVersionId])
         JOIN [app].[DocumentVersion] AS [v] ON [v].[Id] = [x].[DocumentVersionId]
+        CROSS JOIN [audit].[fn_ChangeContext]() AS [ctx]
         GROUP BY [x].[DocumentVersionId]) AS [source]
     ON [target].[DocumentVersionId] = [source].[DocumentVersionId]
     WHEN MATCHED THEN

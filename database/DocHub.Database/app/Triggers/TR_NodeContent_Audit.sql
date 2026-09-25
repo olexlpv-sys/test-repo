@@ -15,15 +15,17 @@ BEGIN
     DECLARE @Source VARCHAR (10) = (SELECT [Source] FROM [audit].[fn_ChangeContext]());
     DECLARE @DerivedRewritten BIT = CASE WHEN UPDATE([ContentHtml]) AND UPDATE([PlainText]) AND UPDATE([ContentHash]) THEN 1 ELSE 0 END;
 
-    IF UPDATE([ContentJson]) OR UPDATE([ContentHtml]) OR UPDATE([PlainText]) OR UPDATE([ContentHash]) OR UPDATE([DerivedStale])
+    IF UPDATE([ContentJson]) OR UPDATE([ContentHtml]) OR UPDATE([PlainText]) OR UPDATE([ContentHash]) OR UPDATE([DerivedStale]) -- also true for INSERT
     BEGIN
         UPDATE [nc]
         SET [DerivedStale] = 1
         FROM [app].[NodeContent] AS [nc]
         JOIN inserted AS [i] ON [i].[NodeId] = [nc].[NodeId]
-        JOIN deleted AS [d] ON [d].[NodeId] = [i].[NodeId]
+        LEFT JOIN deleted AS [d] ON [d].[NodeId] = [i].[NodeId]
         WHERE [nc].[DerivedStale] = 0
           AND (
+                ([d].[NodeId] IS NULL AND @Source = 'Script')
+             OR
                 (CAST([i].[ContentJson] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[ContentJson] AS VARBINARY (MAX))
                  AND NOT (@DerivedRewritten = 1 AND [i].[ContentHash] IS DISTINCT FROM [d].[ContentHash]))
              OR (@Source = 'Script' AND (CAST([i].[ContentJson] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[ContentJson] AS VARBINARY (MAX))
@@ -82,6 +84,7 @@ BEGIN
         LEFT JOIN deleted AS [d] ON [d].[NodeId] = [l].[EntityId]
         CROSS APPLY (VALUES ([i].[DocumentVersionId]), ([d].[DocumentVersionId])) AS [x] ([DocumentVersionId])
         JOIN [app].[DocumentVersion] AS [v] ON [v].[Id] = [x].[DocumentVersionId]
+        CROSS JOIN [audit].[fn_ChangeContext]() AS [ctx]
         GROUP BY [x].[DocumentVersionId]) AS [source]
     ON [target].[DocumentVersionId] = [source].[DocumentVersionId]
     WHEN MATCHED THEN

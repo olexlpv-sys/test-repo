@@ -360,9 +360,7 @@ public sealed class AuditTriggerTests(DocHubDatabaseFixture database) : IClassFi
         var documentId = await db.Data.DocumentAsync();
         var signedId = await db.Data.VersionAsync(documentId);
         var nodeId = await db.Data.NodeAsync(signedId);
-        await db.ExecuteAsync(
-            "WAITFOR DELAY '00:00:00.010'; UPDATE app.DocumentVersion SET Status = 2, VersionNumber = 1, SignedAt = SYSUTCDATETIME() WHERE Id = @v; WAITFOR DELAY '00:00:00.010';",
-            ("@v", signedId));
+        await SignAsApiAsync(db, signedId);
         var draftId = await db.Data.VersionAsync(documentId);
         var signedStampBefore = await StampAsync(db, signedId);
 
@@ -395,6 +393,97 @@ public sealed class AuditTriggerTests(DocHubDatabaseFixture database) : IClassFi
     }
 
     [Fact]
+    public async Task Script_signing_a_draft_or_inserting_a_signed_version_marks_tampering()
+    {
+        await using var db = await database.OpenRolledBackTransactionAsync(Ct);
+        var documentId = await db.Data.DocumentAsync();
+        var draftId = await db.Data.VersionAsync(documentId);
+        var support = await db.Data.DatabaseUserInRoleAsync("support_writer");
+
+        await AsUserAsync(db, support);
+        await db.ExecuteAsync("UPDATE app.DocumentVersion SET Status = 2, VersionNumber = 1, SignedAt = SYSUTCDATETIME() WHERE Id = @v;", ("@v", draftId));
+        await db.ExecuteAsync("REVERT;");
+        var otherDocumentId = await db.Data.DocumentAsync();
+        await AsUserAsync(db, support);
+        await db.ExecuteAsync(
+            "INSERT INTO app.DocumentVersion (DocumentId, Status, VersionNumber, SignedAt, CreatedByUserId) VALUES (@d, 2, 1, SYSUTCDATETIME(), 2);",
+            ("@d", otherDocumentId));
+        await db.ExecuteAsync("REVERT;");
+        var insertedSignedId = await db.ScalarAsync<int>("SELECT Id FROM app.DocumentVersion WHERE DocumentId = @d", ("@d", otherDocumentId));
+
+        Assert.True(await IsTamperedAsync(db, draftId));
+        Assert.True(await IsTamperedAsync(db, insertedSignedId));
+    }
+
+    [Fact]
+    public async Task Api_signing_collected_signatures_does_not_mark_tampering()
+    {
+        await using var db = await database.OpenRolledBackTransactionAsync(Ct);
+        var versionId = await db.Data.VersionAsync(await db.Data.DocumentAsync());
+
+        await AsApiAsync(db, userId: CarolUserId);
+        await db.ExecuteAsync("INSERT INTO app.VersionSignature (DocumentVersionId, UserId, ContentHash) VALUES (@v, 4, CAST(REPLICATE(0x03, 32) AS varbinary(32)));", ("@v", versionId));
+        await db.ExecuteAsync("UPDATE app.DocumentVersion SET Status = 2, VersionNumber = 1, SignedAt = SYSUTCDATETIME() WHERE Id = @v;", ("@v", versionId));
+        await db.ExecuteAsync("REVERT;");
+
+        Assert.False(await IsTamperedAsync(db, versionId));
+    }
+
+    [Theory]
+    [InlineData("INSERT INTO app.VersionSignature (DocumentVersionId, UserId, ContentHash) VALUES (@v, 5, CAST(REPLICATE(0x07, 32) AS varbinary(32)));")]
+    [InlineData("UPDATE app.VersionSignature SET WithdrawnAt = SYSUTCDATETIME() WHERE DocumentVersionId = @v;")]
+    [InlineData("UPDATE app.VersionSignature SET ContentHash = CAST(REPLICATE(0x08, 32) AS varbinary(32)) WHERE DocumentVersionId = @v;")]
+    [InlineData("DELETE FROM app.VersionSignature WHERE DocumentVersionId = @v;")]
+    public async Task Script_change_to_signatures_of_a_signed_version_marks_tampering(string sql)
+    {
+        await using var db = await database.OpenRolledBackTransactionAsync(Ct);
+        var versionId = await db.Data.VersionAsync(await db.Data.DocumentAsync());
+        await AsApiAsync(db, userId: CarolUserId);
+        await db.ExecuteAsync("INSERT INTO app.VersionSignature (DocumentVersionId, UserId, ContentHash) VALUES (@v, 4, CAST(REPLICATE(0x03, 32) AS varbinary(32)));", ("@v", versionId));
+        await db.ExecuteAsync("UPDATE app.DocumentVersion SET Status = 2, VersionNumber = 1, SignedAt = SYSUTCDATETIME() WHERE Id = @v;", ("@v", versionId));
+        await db.ExecuteAsync("REVERT;");
+        var support = await db.Data.DatabaseUserInRoleAsync("support_writer");
+
+        await AsUserAsync(db, support);
+        await db.ExecuteAsync(sql, ("@v", versionId));
+        await db.ExecuteAsync("REVERT;");
+
+        Assert.True(await IsTamperedAsync(db, versionId));
+    }
+
+    [Fact]
+    public async Task Script_insert_of_content_with_derived_columns_is_flagged_stale()
+    {
+        await using var db = await database.OpenRolledBackTransactionAsync(Ct);
+        var nodeId = await db.Data.NodeAsync(await db.Data.VersionAsync(await db.Data.DocumentAsync()));
+        var support = await db.Data.DatabaseUserInRoleAsync("support_writer");
+
+        await AsUserAsync(db, support);
+        await db.ExecuteAsync(
+            """
+            INSERT INTO app.NodeContent (NodeId, DocumentVersionId, LogicalNodeId, ContentJson, ContentHtml, PlainText, ContentHash, ModifiedByUserId)
+            SELECT n.Id, n.DocumentVersionId, n.LogicalNodeId, @j, N'<p>forged</p>', N'forged', CAST(REPLICATE(0x09, 32) AS varbinary(32)), 2
+            FROM app.DocumentNode AS n WHERE n.Id = @n;
+            """, ("@j", NewJson), ("@n", nodeId));
+        await db.ExecuteAsync("REVERT;");
+
+        Assert.True(await db.ScalarAsync<bool>("SELECT DerivedStale FROM app.NodeContent WHERE NodeId = @n", ("@n", nodeId)));
+    }
+
+    [Fact]
+    public async Task Api_insert_of_content_is_not_flagged_stale()
+    {
+        await using var db = await database.OpenRolledBackTransactionAsync(Ct);
+        var nodeId = await db.Data.NodeAsync(await db.Data.VersionAsync(await db.Data.DocumentAsync()));
+
+        await AsApiAsync(db, userId: AliceUserId);
+        await db.Data.ContentAsync(nodeId);
+        await db.ExecuteAsync("REVERT;");
+
+        Assert.False(await db.ScalarAsync<bool>("SELECT DerivedStale FROM app.NodeContent WHERE NodeId = @n", ("@n", nodeId)));
+    }
+
+    [Fact]
     public async Task Making_a_new_draft_current_does_not_mark_the_signed_version_as_tampered()
     {
         await using var db = await database.OpenRolledBackTransactionAsync(Ct);
@@ -416,7 +505,7 @@ public sealed class AuditTriggerTests(DocHubDatabaseFixture database) : IClassFi
         await db.ExecuteAsync(
             """
             UPDATE app.NodeContent
-            SET ContentJson = @j, ContentHtml = N'<p>Changed</p>', PlainText = N'Changed', ContentHash = CAST(REPLICATE(0x02, 32) AS varbinary(32))
+            SET ContentJson = @j, ContentHtml = N'<p>Changed</p>', PlainText = N'Changed', ContentHash = CAST(REPLICATE(0x02, 32) AS varbinary(32)), DerivedStale = 0
             WHERE NodeId = @n;
             """, ("@j", NewJson), ("@n", nodeId));
 
@@ -435,10 +524,12 @@ public sealed class AuditTriggerTests(DocHubDatabaseFixture database) : IClassFi
         var (versionId, _) = await ContentNodeAsync(db);
         var afterCreate = await StampAsync(db, versionId);
 
+        await AsApiAsync(db, userId: CarolUserId);
         await db.ExecuteAsync("INSERT INTO app.VersionSignature (DocumentVersionId, UserId, ContentHash) VALUES (@v, 4, CAST(REPLICATE(0x03, 32) AS varbinary(32)));", ("@v", versionId));
         var afterSignature = await StampAsync(db, versionId);
         await db.ExecuteAsync("UPDATE app.DocumentVersion SET Status = 2, VersionNumber = 1, SignedAt = SYSUTCDATETIME() WHERE Id = @v;", ("@v", versionId));
         var afterSigning = await StampAsync(db, versionId);
+        await db.ExecuteAsync("REVERT;");
 
         Assert.True(afterSignature > afterCreate);
         Assert.True(afterSigning > afterSignature);
@@ -494,12 +585,20 @@ public sealed class AuditTriggerTests(DocHubDatabaseFixture database) : IClassFi
         await db.Data.ContentAsync(nodeId);
         if (state == VersionState.Signed)
         {
-            await db.ExecuteAsync(
-                "WAITFOR DELAY '00:00:00.010'; UPDATE app.DocumentVersion SET Status = 2, VersionNumber = 1, SignedAt = SYSUTCDATETIME() WHERE Id = @v; WAITFOR DELAY '00:00:00.010';",
-                ("@v", versionId));
+            await SignAsApiAsync(db, versionId);
         }
 
         return (versionId, nodeId);
+    }
+
+    /// <summary>Signs a draft the way the API does (as app_api), so the signing itself is not tampering.</summary>
+    private static async Task SignAsApiAsync(RolledBackScope db, int versionId)
+    {
+        await AsApiAsync(db, userId: CarolUserId);
+        await db.ExecuteAsync(
+            "WAITFOR DELAY '00:00:00.010'; UPDATE app.DocumentVersion SET Status = 2, VersionNumber = 1, SignedAt = SYSUTCDATETIME() WHERE Id = @v; WAITFOR DELAY '00:00:00.010';",
+            ("@v", versionId));
+        await db.ExecuteAsync("REVERT;");
     }
 
     private static async Task AsApiAsync(RolledBackScope db, int userId)

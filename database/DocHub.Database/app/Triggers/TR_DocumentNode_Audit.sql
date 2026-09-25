@@ -64,6 +64,7 @@ BEGIN
         LEFT JOIN deleted AS [d] ON [d].[Id] = [l].[EntityId]
         CROSS APPLY (VALUES ([i].[DocumentVersionId]), ([d].[DocumentVersionId])) AS [x] ([DocumentVersionId])
         JOIN [app].[DocumentVersion] AS [v] ON [v].[Id] = [x].[DocumentVersionId]
+        CROSS JOIN [audit].[fn_ChangeContext]() AS [ctx]
         GROUP BY [x].[DocumentVersionId]) AS [source]
     ON [target].[DocumentVersionId] = [source].[DocumentVersionId]
     WHEN MATCHED THEN
