@@ -81,6 +81,9 @@ flowchart LR
 | `draft-already-exists` | 409 | Creating a second draft |
 | `concurrency-conflict` | 409 | `rowVersion` mismatch |
 | `invalid-move` | 409 | Moving a node/folder under itself or its descendant |
+| `method-not-allowed` | 405 | HTTP method not supported by the route |
+| `payload-too-large` / `unsupported-media-type` | 413 / 415 | Request body too large / wrong content type |
+| `internal-error` | 500 | Unexpected error (no internal details are returned) |
 | `in-use` | 409 | Deleting a node type/style/folder that is referenced |
 | `document-deleted` | 409 | Mutating a soft-deleted document |
 | `not-deleted` | 409 | Restoring a document that is not deleted |

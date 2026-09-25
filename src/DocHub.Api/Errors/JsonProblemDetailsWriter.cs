@@ -14,8 +14,7 @@ internal sealed class JsonProblemDetailsWriter : IProblemDetailsWriter
     public ValueTask WriteAsync(ProblemDetailsContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var problem = context.ProblemDetails;
-        problem.Status ??= context.HttpContext.Response.StatusCode;
-        return new ValueTask(context.HttpContext.Response.WriteAsJsonAsync(problem, typeof(ProblemDetails), options: null, contentType: "application/problem+json"));
+        ProblemDefaults.Apply(context);
+        return new ValueTask(context.HttpContext.Response.WriteAsJsonAsync(context.ProblemDetails, typeof(ProblemDetails), options: null, contentType: "application/problem+json"));
     }
 }

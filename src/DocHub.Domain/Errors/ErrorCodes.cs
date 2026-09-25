@@ -12,4 +12,8 @@ public static class ErrorCodes
     public const string DuplicateGrant = "duplicate-grant";
     public const string Conflict = "conflict";
     public const string InternalError = "internal-error";
+    public const string MethodNotAllowed = "method-not-allowed";
+    public const string PayloadTooLarge = "payload-too-large";
+    public const string UnsupportedMediaType = "unsupported-media-type";
+    public const string RequestFailed = "request-failed";
 }

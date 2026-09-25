@@ -107,12 +107,29 @@ public sealed class ErrorHandlingTests(DocHubApiWithTestEndpointsFactory factory
         Assert.Equal("Approver", body.GetProperty("role").GetString());
     }
 
-    [Fact]
-    public async Task Unknown_route_returns_404_problem()
+    [Theory]
+    [InlineData("GET", "/api/nothing-here", null, HttpStatusCode.NotFound, "not-found")]
+    [InlineData("GET", "/api/nothing-here", "text/html", HttpStatusCode.NotFound, "not-found")]
+    [InlineData("POST", "/api/me", null, HttpStatusCode.MethodNotAllowed, "method-not-allowed")]
+    [InlineData("POST", "/api/me", "application/xml", HttpStatusCode.MethodNotAllowed, "method-not-allowed")]
+    [InlineData("POST", "/__test/errors/conflict", "text/html", HttpStatusCode.Conflict, "version-not-editable")]
+    public async Task Every_problem_has_type_title_and_trace_id_whatever_the_accept_header(string method, string path, string? accept, HttpStatusCode status, string type)
     {
-        var problem = await SendAsync(HttpMethod.Get, "/api/nothing-here", null, HttpStatusCode.NotFound);
+        using var client = factory.CreateClientFor(TestUsers.Alice);
+        if (accept is not null)
+        {
+            client.DefaultRequestHeaders.Accept.ParseAdd(accept);
+        }
 
-        Assert.Equal("not-found", problem.GetProperty("type").GetString());
+        using var response = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), new Uri(path, UriKind.Relative)), Ct);
+
+        Assert.Equal(status, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        Assert.Equal(type, problem.GetProperty("type").GetString());
+        Assert.False(string.IsNullOrEmpty(problem.GetProperty("title").GetString()));
+        Assert.Equal((int)status, problem.GetProperty("status").GetInt32());
+        Assert.False(string.IsNullOrEmpty(problem.GetProperty("traceId").GetString()));
     }
 
     private async Task<JsonElement> SendAsync(HttpMethod method, string path, object? body, HttpStatusCode expected)

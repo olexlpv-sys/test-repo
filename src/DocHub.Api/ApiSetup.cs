@@ -37,14 +37,7 @@ internal static class ApiSetup
         AddAuthentication(builder);
 
         // Errors & JSON conventions.
-        services.AddProblemDetails(options => options.CustomizeProblemDetails = context =>
-        {
-            context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
-            if (context.ProblemDetails.Status == StatusCodes.Status404NotFound && context.ProblemDetails.Type is null or "https://tools.ietf.org/html/rfc9110#section-15.5.5")
-            {
-                context.ProblemDetails.Type = Domain.Errors.ErrorCodes.NotFound;
-            }
-        });
+        services.AddProblemDetails(options => options.CustomizeProblemDetails = ProblemDefaults.Apply);
         // Registered after the default writer: used when the client's Accept header excludes JSON.
         services.AddSingleton<Microsoft.AspNetCore.Http.IProblemDetailsWriter, JsonProblemDetailsWriter>();
         services.AddExceptionHandler<ExceptionToProblemHandler>();

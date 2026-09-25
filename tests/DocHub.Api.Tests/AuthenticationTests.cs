@@ -71,6 +71,8 @@ public sealed class AuthenticationTests(DocHubApiFactory factory) : IClassFixtur
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
         Assert.Equal("unauthenticated", problem.GetProperty("type").GetString());
+        Assert.False(string.IsNullOrEmpty(problem.GetProperty("traceId").GetString()));
+        Assert.False(string.IsNullOrEmpty(problem.GetProperty("title").GetString()));
     }
 
     [Fact]
