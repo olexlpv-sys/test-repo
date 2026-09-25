@@ -36,6 +36,12 @@ flowchart LR
 - **Scripts**: every change not made by the API is recorded with `Source = 'Script'`, `DbLogin = ORIGINAL_LOGIN()`. `Source = 'App'` requires the API context **and** a caller in the `app_api` role (or `db_owner` for local development), so a support script cannot pose as the API by setting `UserId`. Support scripts should start with `EXEC audit.usp_SetSupportContext @Ticket = 'INC-123', @Reason = '…'` so the ticket is recorded too.
 - Rationale: application-level auditing (EF `SaveChanges` interceptor) cannot see script changes — a hard requirement. Temporal tables were considered but do not record *who* changed a row nor the reason; triggers do both. (Temporal tables can be added later for point-in-time queries if needed.)
 
+### ADR-04a Tamper evidence against privileged principals (T21, decisions log Q18)
+- Triggers (ADR-04) answer *who/why*; they can be bypassed by `dbo`, a DBA or the deployment pipeline.
+- Audited tables are **temporal + updatable ledger** tables and `audit.ChangeLog` is an **append-only ledger** table: history can't be changed or switched off by anyone; every transaction's principal is recorded.
+- Digests (immutable storage) and Azure SQL Auditing live outside the pipeline's reach; a nightly reconciliation reports trigger bypasses and forged audit rows.
+- Plain temporal tables alone were rejected as a security control (a `dbo` can switch versioning off and edit history); combined with ledger they also give `FOR SYSTEM_TIME AS OF` queries.
+
 ### ADR-05 Rich text = schema-validated JSON modelled on Word (see [content-format.md](content-format.md))
 - Canonical storage: TipTap/ProseMirror JSON (`ContentJson`) validated against DocHub Content Schema v1, whose attributes mirror WordprocessingML (styles, fonts, spacing, numbering, table grid/borders/shading).
 - Derived: server-rendered `ContentHtml`, `PlainText`, SHA-256 `ContentHash` of canonical JSON.
@@ -55,7 +61,7 @@ flowchart LR
 
 ### ADR-09 Data access: EF Core for CRUD, stored procedures for hot read paths ([FR-D1…D6](requirements/11-data-access.md))
 - All entity CRUD via EF Core (`DocHubDbContext`).
-- Permission checks, document lists and search via stored procedures (`usp_CheckPermission`, `usp_GetEffectivePermissions`, `usp_ListDocuments`, `usp_SearchDocuments`, `usp_SearchInDocument`); set-based bulk operations too (`usp_CopyVersionToDraft`, `usp_DeleteSubtree`).
+- Permission checks and document lists via stored procedures (`usp_CheckPermission`, `usp_GetEffectivePermissions`, `usp_ListDocuments`); set-based bulk operations too (`usp_CopyVersionToDraft`, `usp_DeleteSubtree`).
 - Procedures are called through one thin infrastructure layer (`IDbProcedures` with one typed method per procedure; `Database.SqlQuery<T>` / `DbDataReader` for multi-result sets), always parameterized, running on the same connection so the session context (ADR-04) applies.
 - Each procedure: DB tests for correctness + an API integration test comparing results with an EF reference query.
 

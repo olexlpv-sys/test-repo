@@ -17,7 +17,7 @@ Items marked **[A]** are assumptions — confirm or correct them in the [decisio
 | [10-decisions-log.md](10-decisions-log.md) | Product decisions, open questions, spec assumptions | Q*, A-* |
 | [12-load-and-performance.md](12-load-and-performance.md) | Load profile (50 k readers, 10 k docs, 20 req/s), SLO p99 ≤ 3 s, binding design consequences | NFR-L* |
 | [13-export.md](13-export.md) | PDF export | FR-E* |
-| [11-data-access.md](11-data-access.md) | EF Core for CRUD, stored procedures for permissions/lists/search, DB project owns all objects | FR-D* |
+| [11-data-access.md](11-data-access.md) | EF Core for CRUD, stored procedures for permissions and lists, DB project owns all objects | FR-D* |
 
 Related specs: [content-format.md](../content-format.md) (rich-text format), [architecture.md](../architecture.md).
 
@@ -35,5 +35,5 @@ Related specs: [content-format.md](../content-format.md) (rich-text format), [ar
 
 ## Out of scope (first release)
 
-Real authentication (Entra ID), DOCX import/export (designed for, see ../content-format.md §3; PDF export is in scope — FR-E*), substring search inside words (full-text word/prefix search is in scope — FR-D6), attachments/images upload,
+Real authentication (Entra ID), DOCX import/export (designed for, see ../content-format.md §3; PDF export is in scope — FR-E*), full-text / content search (only the title filter of the document list is in scope — FR-D6), attachments/images upload,
 notifications, approval workflow (multi-step), real-time collaborative editing, Azure infrastructure-as-code.

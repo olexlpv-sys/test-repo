@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Depends on** | T07, T08, T09 (harness); T10–T15, T18, T20 (full scenario mix, UI probe) |
+| **Depends on** | T07, T08, T09 (harness); T10–T15, T20 (full scenario mix, UI probe) |
 | **Size** | L ([sizing](../process.md#9-sizing-and-agent-effort)) |
 | **Requirements** | NFR-L1 … NFR-L12, NFR-6 |
 | **Read first** (nothing else) | [12-load-and-performance](../requirements/12-load-and-performance.md) · [11-data-access](../requirements/11-data-access.md) · [testing strategy](../testing-strategy.md) · [process](../process.md) |
@@ -13,7 +13,7 @@ Prove NFR-L4 (p99 ≤ 3 s at 20 req/s on production-scale data) and keep proving
 ## Scope
 1. **Data generator** `tools/DocHub.DataGen` (.NET console app): builds the NFR-L2 volume with set-based inserts (`SqlBulkCopy`) into a deployed DACPAC database. Deterministic seed, configurable scale (`--scale 0.1` for CI, `1.0` for the full test). It creates 50 500 users, 100 folders, 10 000 documents with 5 versions each, realistic tree shapes (depth distribution, 1–2 000 nodes), content produced from the Content Schema fixtures (with derived columns and `ContentStyleUsage` rows), grants, comments and signatures. The audit triggers are disabled during the bulk load, and the generator writes one synthetic audit row per entity so history queries have data.
 2. **Load scenarios** with **NBomber** (`tests/DocHub.LoadTests`), following the NFR-L3 mix:
-   - Reader: list folder → open document → read 5 nodes → search.
+   - Reader: list folder (with title filter) → open document → read 5 nodes.
    - Editor: open draft → autosave content every 3 s × 10 → view node history → compare with latest signed.
    - Other: comment, sign/withdraw, admin reads, **PDF export** (≈ 1 % of traffic, T20).
    - Users are picked from the generated population through the test-mode `X-User-Id` header.

@@ -10,7 +10,9 @@ The single source of "what's next". Process rules: [process.md](process.md). Dep
 5. Fix valid findings → re-review delta → repeat until **GREEN**.
 6. Set `done`, write a handoff note (≤ 5 lines) in the table below, including actuals: wall-clock, review rounds (process §9).
 
-Status: `todo` · `in-progress` · `in-review` · `done` · `blocked`
+Status: `todo` · `in-progress` · `in-review` · `done` · `blocked` · `dropped`
+
+Q22 is placed right after Q04 (it hardens the Q03 schema before feature work builds on it).
 
 ## Queue
 
@@ -21,6 +23,7 @@ Status: `todo` · `in-progress` · `in-review` · `done` · `blocked`
 | Q02 | [T02](tasks/T02-database-project-and-schema.md) DB project & schema | DB + TEST | Q01 | A | done | **GREEN** (2 rounds) |
 | Q03 | [T03](tasks/T03-database-change-tracking.md) Audit triggers | DB + TEST | Q02 | A | done | **GREEN** (3 rounds) |
 | Q04 | [T04](tasks/T04-api-foundation.md) API foundation | CODE + TEST | Q01, Q03 | A | in-review | – |
+| Q22 | [T21](tasks/T21-tamper-evident-audit.md) Tamper-evident audit: ledger, deploy-script guard, reconciliation | DB + CODE + TEST | Q04 | A | todo | – |
 | Q05 | [T05](tasks/T05-users-and-node-types-api.md) Users, node types, content styles | CODE + TEST | Q04 | B | todo | – |
 | Q06 | [T06](tasks/T06-virtual-folders-api.md) Folders | CODE + TEST | Q04 | B | todo | – |
 | Q07 | [T07](tasks/T07-documents-and-versions-api.md) Documents, signing, restore | CODE + TEST | Q04, Q06 | A | todo | – |
@@ -34,9 +37,9 @@ Status: `todo` · `in-progress` · `in-review` · `done` · `blocked`
 | Q15 | [T12](tasks/T12-version-comparison-api.md) Compare | CODE + TEST | Q11, Q14 (diff engine) | B | todo | – |
 | Q16 | [T15](tasks/T15-web-document-editor.md) Web section editor + inline history | CODE + TEST | Q08, Q09, Q10, Q11, Q14 | C | todo | – |
 | Q17 | [T16](tasks/T16-web-compare-comments-permissions.md) Web compare/comments/permissions | CODE + TEST | Q09, Q13, Q15, Q16 | C | todo | – |
-| Q18 | [T18](tasks/T18-search.md) Search (SPs, API, UI) | DB + CODE + TEST | Q11, Q16 | B | todo | – |
+| Q18 | ~~T18 Search~~ — out of scope (decisions log Q13) | – | – | – | dropped | – |
 | Q21 | [T20](tasks/T20-pdf-export.md) PDF export (API, worker, UI) | CODE + TEST | Q05, Q07, Q09, Q11, Q16 | B | todo | – |
-| Q19 | [T19](tasks/T19-load-and-performance.md) Load & performance harness + tuning | TEST + CODE | Q11 (harness), Q13, Q14, Q15, Q16, Q18, Q21 (full mix) | B | todo | – |
+| Q19 | [T19](tasks/T19-load-and-performance.md) Load & performance harness + tuning | TEST + CODE | Q11 (harness), Q13, Q14, Q15, Q16, Q21 (full mix) | B | todo | – |
 | Q20 | Release-candidate E2E & NFR pass (full Playwright, full-scale load + soak, a11y, mutation report, DACPAC drift report) | TEST | Q12, Q17, Q19 | – | todo | – |
 
 Lanes: **A** backend core / DB · **B** backend features · **C** frontend.
@@ -44,5 +47,5 @@ Lanes: **A** backend core / DB · **B** backend features · **C** frontend.
 ## Handoff notes
 - **Q00** — Doc set reviewed in 7 fresh-context rounds (process §4, REQ/SPEC rule): 19 → 12 → 11 → 7 → 7 → 1 → 0 valid findings, all fixed. Product input added during review (data access via EF + SPs, load profile, in-editor history, PDF export) was reviewed in the same loop. Next: Q01.
 - **Q01** — .NET 10 solution (`DocHub.slnx`), CPM, warnings-as-errors, `/health`, OpenAPI+Scalar (dev only), xUnit v3 on Microsoft.Testing.Platform (`dotnet test --solution`), docker-compose SQL 2022, CI on every push/PR (green). Deviation: SDK installed from Ubuntu apt (dot.net blocked by proxy); CI now runs on all branch pushes. Review: 2 findings fixed → GREEN. Actuals: ≈ 40 min wall-clock (incl. SDK install and one CI run), 2 review rounds.
-- **Q02** — `database/DocHub.Database` (Microsoft.Build.Sql, Azure SQL): 13 tables, constraints, load-profile indexes, roles/grants, idempotent seed that never overwrites admin data. `DocHub.Testing`: Testcontainers SQL fixture + DacFx deploy (DACPAC built via the solution). 31 tests incl. redeploy drift check; CI job publishes with SqlPackage + deploy-report drift gate (green). Follow-ups: **T18 needs a SQL image with full-text** (`mssql-server-fts`; default image has none); optional demo-document seed deferred; tool manifest at repo root. Actuals: ≈ 50 min, 2 review rounds (fixed: Release DACPAC path, seed re-linking styles).
+- **Q02** — `database/DocHub.Database` (Microsoft.Build.Sql, Azure SQL): 13 tables, constraints, load-profile indexes, roles/grants, idempotent seed that never overwrites admin data. `DocHub.Testing`: Testcontainers SQL fixture + DacFx deploy (DACPAC built via the solution). 31 tests incl. redeploy drift check; CI job publishes with SqlPackage + deploy-report drift gate (green). Follow-ups: optional demo-document seed deferred; tool manifest at repo root. Actuals: ≈ 50 min, 2 review rounds (fixed: Release DACPAC path, seed re-linking styles).
 - **Q03** — `audit.ChangeLog` (append-only, page-compressed, static monthly partitions 2026–2035) + 11 generated set-based triggers (`dotnet run database/tools/GenerateAuditTriggers.cs`). `Source='App'` requires the `app_api`/`db_owner` role — scripts can't pose as the API. Derived-only NodeContent updates unaudited only for the API; script edits → audited, `DerivedStale`, tampering. `VersionStamp` trigger-only (DENY); tampering covers moves, (un/re)signing by script, signature changes. For T04+: API must connect as an `app_api` member; EF needs `HasTrigger`; API content save sets `DerivedStale = 0`; signing inserts the last signature before finalizing. Actuals: ≈ 2 h, 3 review rounds (7 findings, all support-script bypasses). CI deferred (Q17).

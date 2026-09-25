@@ -35,8 +35,9 @@ Every answer from the product owner is recorded here; the affected requirement f
 | Q10 | Several approvers — one or all? | **All approvers must sign** |
 | Q11 | Owner as Approver of own document? | **No**; a test-mode user dropdown lets one person act as different users |
 | Q12 | Node-level Editor grant includes descendants? | **Yes** |
-| Q13 | Search technique | **Full-text (word/prefix)** — forced by the load profile (NFR-L7) |
+| Q13 | Search | **Full-text / content search is out of scope**; only the document-list title filter remains (FR-D6). T18 removed from the queue. |
 | Q15 | Where is change history shown? | **Inside the editor, per section/node**: inline timeline + track changes with authors |
 | Q17 | CI | **Deferred until physically needed**: the workflow runs only manually; items close on green local verification (clean-copy Release build + tests). Re-enable on PRs/merges to `main`. |
+| Q18 | Tamper evidence against privileged users (DBA, deployment pipeline) | Triggers + **ledger tables** (append-only change log, updatable ledger for document data) + digests and Azure SQL Auditing outside the pipeline's reach + nightly reconciliation — T21 |
 | Q16 | Export | **PDF export** (async, cached for signed versions) — [13-export](13-export.md) |
 | Q14 | Load profile | 50 k readers, 500 editors/owners, 10 k documents, 100 folders, **≤ 3 s at 20 req/s** ([12-load-and-performance](12-load-and-performance.md)) |

@@ -24,9 +24,9 @@ Source requirements: [requirements/](../requirements/README.md) · Decisions: [a
 | [T16](T16-web-compare-comments-permissions.md) | Web: compare, comments, permissions | T10, T12, T13, T15 | M–L | M3 Web UI |
 | [T17](T17-web-admin-tab.md) | Web: Admin tab (folders, node types, styles, users, audit) | T05, T11, T14 | M | M3 Web UI |
 
-| [T18](T18-search.md) | Search: full-text stored procedures, API, UI | T07, T09, T14, T15 | M | M3 Web UI |
+| ~~T18~~ | *Search — out of scope (decisions log Q13)* | – | – | – |
 | [T20](T20-pdf-export.md) | PDF export: async jobs, headless Chromium, cache, UI | T05, T07, T09, T10, T15 | L | M3 Web UI |
-| [T19](T19-load-and-performance.md) | Load & performance harness + tuning | T07–T09 (harness), T10–T15, T18, T20 (full mix) | L | M4 Performance |
+| [T19](T19-load-and-performance.md) | Load & performance harness + tuning | T07–T09 (harness), T10–T15, T20 (full mix) | L | M4 Performance |
 
 **Effort** is measured in agent work, not person-days — see [process §9](../process.md#9-sizing-and-agent-effort). Initial estimate: ≈ 60–90 agent-hours in total, ≈ 35–75 h wall-clock with three parallel lanes (bounded below by the critical path, sized with the §9 table), plus waiting time on product-owner decisions; recalibrated from the actuals in the work queue after Q02–Q04. Load profile: [12-load-and-performance](../requirements/12-load-and-performance.md).
 
@@ -68,10 +68,8 @@ flowchart TD
   T11 --> T17
   T05 --> T14
   T10 --> T15
-  T09 --> T18[T18 Search]
-  T15 --> T18
   T09 --> T19[T19 Load & perf]
-  T18 --> T19
+  T15 --> T19
   T09 --> T20[T20 PDF export]
   T15 --> T20
   T20 --> T19
@@ -93,7 +91,7 @@ Items with a different lane letter in the work queue can run concurrently in sep
 | Lane | Scope | Order |
 |---|---|---|
 | A — backend core / DB | schema, audit, foundation, documents, tree, content, history | Q01 → Q02 → Q03 → Q04 → Q07 → Q10 → Q11 → Q14 |
-| B — backend features | dictionaries, folders, permissions, comments, compare, search, export, load | Q05, Q06 → Q09 → Q13 → Q15 → Q18 → Q21 → Q19 |
+| B — backend features | dictionaries, folders, permissions, comments, compare, export, load | Q05, Q06 → Q09 → Q13 → Q15 → Q21 → Q19 |
 | C — frontend | SPA against the committed OpenAPI snapshot | Q08 → Q12 → Q16 → Q17 |
 
 Parallelization seams already designed into the tasks:
@@ -126,7 +124,7 @@ Parallelization seams already designed into the tasks:
 
 | Risk | Mitigation |
 |---|---|
-| 3 s SLO at 20 req/s on 15 M node rows | Full-text search, `IsCurrent` filter, caching of immutable signed versions, SP hot paths, nightly load runs from Q19 on; tuning budget in T19. |
+| 3 s SLO at 20 req/s on 15 M node rows | `IsCurrent` filter, caching of immutable signed versions, SP hot paths, nightly load runs from Q19 on; tuning budget in T19. |
 | Audit triggers slow down bulk operations (draft copy of large trees) | Set-based triggers; perf test in T07 (2 000 nodes < 2 s); `Operation` context key lets history collapse copy rows. |
 | `audit.ChangeLog` grows fast (full HTML in JSON on each autosave) | Debounced autosave; skip no-op updates (T09 rule 5); plan retention/partitioning later; consider `COMPRESS()` for `OldValues/NewValues`. |
 | Rich-text/table editing edge cases (merged cells) break diffs | Diff fixtures with merged cells in T11; normalized block model shared by T11/T12. |
