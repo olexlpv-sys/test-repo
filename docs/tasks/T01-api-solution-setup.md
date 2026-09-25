@@ -1,0 +1,43 @@
+# T01 — Create the .NET API solution
+
+| | |
+|---|---|
+| **Depends on** | — |
+| **Blocks** | T04 and all API tasks |
+| **Size** | S (0.5–1 day) |
+| **Requirements** | NFR-1, NFR-2 |
+
+## Goal
+Create an empty but runnable .NET 10 API solution with project structure, shared build settings, test projects and CI build.
+
+## Scope
+
+1. Solution `DocHub.slnx` in the repo root (new XML solution format) with:
+   | Project | Type | References |
+   |---|---|---|
+   | `src/DocHub.Api` | `webapi` (ASP.NET Core) | Domain, Infrastructure |
+   | `src/DocHub.Domain` | `classlib` | — |
+   | `src/DocHub.Infrastructure` | `classlib` | Domain |
+   | `tests/DocHub.Domain.Tests` | `xunit` | Domain |
+   | `tests/DocHub.Api.Tests` | `xunit` | Api (uses `Microsoft.AspNetCore.Mvc.Testing`) |
+2. `global.json` pinning the .NET 10 SDK (`rollForward: latestFeature`).
+3. `Directory.Build.props`: `net10.0`, `Nullable=enable`, `ImplicitUsings=enable`, `TreatWarningsAsErrors=true`, `AnalysisLevel=latest-recommended`.
+4. `Directory.Packages.props` — **Central Package Management** for all NuGet versions.
+5. `DocHub.Api`:
+   - `GET /health` (ASP.NET Core health checks; DB check added in T04).
+   - OpenAPI via `Microsoft.AspNetCore.OpenApi`, Scalar UI at `/scalar` in Development.
+   - `appsettings.json` with `ConnectionStrings:DocHub` placeholder; local overrides via user-secrets.
+   - Structured logging (built-in console JSON formatter is enough).
+6. `docker-compose.yml` at repo root: SQL Server 2022 (`mcr.microsoft.com/mssql/server:2022-latest`) on port 1433 with a dev SA password from `.env` (commit `.env.example` only).
+7. CI: `.github/workflows/ci.yml` — on PR and push to `main`: `dotnet restore`, `build`, `test` for `DocHub.slnx` (DB and web jobs are added by T02/T14).
+8. Update `README.md` → "Getting started" (prerequisites, `docker compose up -d`, `dotnet run`).
+
+## Out of scope
+Database schema (T02), EF Core wiring (T04), any business endpoints.
+
+## Acceptance criteria
+- [ ] `dotnet build DocHub.slnx` and `dotnet test DocHub.slnx` succeed with zero warnings.
+- [ ] `dotnet run --project src/DocHub.Api` starts; `GET /health` → `200 Healthy`; `/openapi/v1.json` and `/scalar` are reachable in Development.
+- [ ] One placeholder test in each test project passes (API test uses `WebApplicationFactory` to call `/health`).
+- [ ] CI workflow runs green on the PR.
+- [ ] No package versions in individual `.csproj` files.

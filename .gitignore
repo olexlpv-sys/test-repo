@@ -1,0 +1,32 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.rsuser
+TestResults/
+*.dacpac
+artifacts/
+
+# Rider / VS Code
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Node / web
+node_modules/
+dist/
+.vite/
+coverage/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+*.pfx
+
+# OS
+.DS_Store
+Thumbs.db

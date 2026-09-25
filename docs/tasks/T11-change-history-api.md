@@ -1,0 +1,68 @@
+# T11 — Change history API (node text & structure)
+
+| | |
+|---|---|
+| **Depends on** | T03, T09 |
+| **Blocks** | T15 (history panel) |
+| **Can run in parallel with** | T12 (shares the diff engine — agree on who builds it first, see §3) |
+| **Size** | M (2–3 days) |
+| **Requirements** | FR-H1, FR-H3, FR-H4, FR-H5 |
+
+## Goal
+Read `audit.ChangeLog` (written by triggers — T03) and present a human-readable history for nodes and documents, including changes made by support scripts.
+
+## API
+| Method | Route | Notes |
+|---|---|---|
+| GET | `/api/documents/{id}/nodes/{logicalNodeId}/history?page&pageSize` | history of one node **across all versions**, newest first |
+| GET | `/api/history/entries/{entryId}/diff` | diff between `OldValues` and `NewValues` of a content entry |
+| GET | `/api/documents/{id}/history?versionId?&from?&to?&userId?&source?&page&pageSize` | document-wide activity feed (nodes, content, versions, permissions, comments) |
+
+### History entry shape
+```json
+{
+  "id": 123456,
+  "changedAt": "2026-09-25T10:15:00Z",
+  "versionId": 42, "versionLabel": "Draft (based on v2)",
+  "kind": "ContentChanged",
+  "user": { "id": 2, "displayName": "Alice" },
+  "source": "App",
+  "dbLogin": null, "ticket": null, "reason": null,
+  "summary": "Content changed (+12 / −3 words)",
+  "changes": [ { "field": "title", "old": "Section 1", "new": "Scope" } ],
+  "hasContentDiff": true
+}
+```
+`kind` ∈ `NodeCreated, NodeDeleted, NodeRenamed, NodeTypeChanged, NodeMoved, ContentChanged, CopiedToNewDraft, VersionSigned, VersionCreated, VersionDiscarded, PermissionGranted, PermissionRevoked, CommentAdded, …` — derived from `TableName`, `Operation` and `ChangedColumns`.
+
+For `source = "Script"`, `user` is `null` (or the acting user from `usp_SetSupportContext`) and `dbLogin`, `ticket`, `reason` are filled; the UI highlights these entries.
+
+## Rules
+1. **Grouping**: rows with the same `CorrelationId` + entity are merged into one entry (e.g. node title + node type changed in one request).
+2. **Draft copies**: inserting nodes/content during "new draft" (T07) must not flood the history — collapse all `I` rows of one copy operation into a single `CopiedToNewDraft` entry per node (detect via `CorrelationId` of the draft creation, or have T07 set session context key `Operation = 'CopyVersion'` — preferred; add the key to the T03 contract).
+3. `NodeMoved`: `ParentNodeId` or `SortOrder` changed — resolve old/new parent titles for display.
+4. **Content diff** (`/diff`): parse `OldValues.ContentHtml` and `NewValues.ContentHtml`, normalize to blocks, word-level diff; response:
+   ```json
+   { "blocks": [ { "type": "paragraph", "ops": [ {"op":"equal","text":"The "}, {"op":"delete","text":"old"}, {"op":"insert","text":"new"} ] },
+                 { "type": "table", "rows": [[ { "ops": [...] } ]] } ],
+     "html": "<p>The <del>old</del><ins>new</ins> …</p>",
+     "stats": { "inserted": 12, "deleted": 3 } }
+   ```
+   `html` is ready to render (sanitized).
+5. **Tampering flag**: entries that modified a Signed version after `SignedAt` get `"afterSigning": true` (uses `audit.vSignedVersionTampering`, T03).
+6. Read access: anyone who can view the document (T10).
+7. Performance: history for one node uses the `(LogicalNodeId, ChangedAt)` index; filter by `DocumentId` too.
+
+## 3. Diff engine (shared with T12)
+`IContentDiffService` in `DocHub.Infrastructure`:
+- `HtmlBlockParser` (AngleSharp) → `IReadOnlyList<Block>` (paragraph/heading/list-item/table→rows→cells with text);
+- block alignment (LCS on block text hashes) + word-level `DiffPlex` inside changed blocks;
+- rendering to `ops` JSON and to `<ins>/<del>` HTML.
+Unit tests with fixtures in `tests/DocHub.Domain.Tests/DiffFixtures/`. Whoever starts first (T11 or T12) builds it.
+
+## Acceptance criteria
+- [ ] Edit content of a node 3 times in v1-draft, sign, create draft, edit once more → node history shows 4 `ContentChanged` + `VersionSigned` context + 1 `CopiedToNewDraft`, in the correct order, with correct users.
+- [ ] Rename + change type in one request → one grouped entry.
+- [ ] A direct SQL update (no session context) appears with `source = Script` and `dbLogin`; with `usp_SetSupportContext` it shows `ticket` and `reason`.
+- [ ] Script edit of a Signed version appears with `afterSigning = true`.
+- [ ] Diff of a table where one cell changed marks only that cell.

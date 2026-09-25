@@ -1,0 +1,36 @@
+# T13 — Comments API
+
+| | |
+|---|---|
+| **Depends on** | T07, T10 (for full role rules; can start with the T07 owner-only seam) |
+| **Blocks** | T16 (comments panel) |
+| **Size** | S–M (1.5 days) |
+| **Requirements** | FR-CM1, FR-CM2, FR-P3 |
+
+## Goal
+Comments on the document as a whole or on a specific node, with one level of replies, edit/delete of own comments and resolve/reopen.
+
+## API
+| Method | Route | Notes |
+|---|---|---|
+| GET | `/api/versions/{versionId}/comments?logicalNodeId?&scope=all|document|node&includeResolved=true` | threads: `[{ id, logicalNodeId?, nodeTitle?, author, body, createdAt, editedAt, resolvedAt, resolvedBy, rowVersion, replies: [...] }]` |
+| GET | `/api/documents/{id}/comments/counts?versionId=` | `{ document: 2, nodes: { "<logicalNodeId>": 3, … } }` — for badges in the tree |
+| POST | `/api/versions/{versionId}/comments` | `{ logicalNodeId?, parentCommentId?, body }` → `201` |
+| PUT | `/api/comments/{id}` | `{ body, rowVersion }` — author only |
+| DELETE | `/api/comments/{id}` | author or owner; soft delete (`body` shown as "deleted" if it has replies) |
+| POST | `/api/comments/{id}/resolve` / `/reopen` | top-level comments only; owner or approver |
+
+## Rules
+- Who may comment: `IDocumentAuthorization.CanComment` (owner, editors, approvers — T10 matrix).
+- Allowed on Draft and Signed versions; on a Deleted version or deleted document → `409 version-not-editable`.
+- `logicalNodeId` must exist in that version (`400`).
+- Replies: `parentCommentId` must be a top-level comment of the same version and same node (no nested replies) → `400`.
+- `body`: 1–4000 chars, plain text (render as text in the UI; no HTML).
+- Comments are bound to a version; they do **not** copy to a new draft (Q6). `GET` on a draft can pass `includePreviousVersions=true` to also return comments from older versions for the same `LogicalNodeId`, flagged with `versionLabel`.
+
+## Acceptance criteria
+- [ ] Approver can comment on the document and on a node; a user without roles → `403`.
+- [ ] Reply to a reply → `400`.
+- [ ] Only the author edits; owner can delete any; only owner/approver resolve.
+- [ ] Commenting on a signed version works; on a discarded draft → `409`.
+- [ ] Counts endpoint matches the list.
