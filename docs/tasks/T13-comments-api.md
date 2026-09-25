@@ -29,6 +29,12 @@ Comments on the document as a whole or on a specific node, with one level of rep
 - `body`: 1–4000 chars, plain text (render as text in the UI; no HTML).
 - Comments are bound to a version; they do **not** copy to a new draft (Q6). `GET` on a draft can pass `includePreviousVersions=true` to also return comments from older versions for the same `LogicalNodeId`, flagged with `versionLabel`.
 
+## Implementation notes (Q13)
+- Counts are the not-deleted comments (replies included) of the version: by default the draft, else the current version.
+- A deleted comment stays in the list (`isDeleted`, `body = null`) only while it has live replies. Replies to a deleted comment are refused.
+- Editing, deleting and resolving follow the same checks as creating: 404, then 409 document-deleted, then 409 version-not-editable.
+- `includePreviousVersions` adds node comments of older, not discarded versions, but only on nodes the version still has.
+
 ## Acceptance criteria
 - [ ] Approver can comment on the document and on a node; a user without roles → `403`.
 - [ ] Reply to a reply → `400`.

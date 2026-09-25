@@ -22,7 +22,7 @@ public sealed class AuthorizationMatrixTests(DocHubApiFactory factory) : IClassF
         await AuthorizationMatrix.AssertAsync(factory, cases, TestContext.Current.CancellationToken);
     }
 
-    /// <summary>T05–T11: dictionaries, folders, documents, trees, contents, permissions and history are readable by every user; writes are admin-only (non-existing ids/invalid bodies: no side effects).</summary>
+    /// <summary>T05–T11: dictionaries, folders, documents, trees, contents, permissions, history and comments are readable by every user; writes are admin-only (non-existing ids/invalid bodies: no side effects).</summary>
     [Fact]
     public async Task Dictionary_endpoints_follow_the_matrix()
     {
@@ -97,6 +97,15 @@ public sealed class AuthorizationMatrixTests(DocHubApiFactory factory) : IClassF
                 new AccessCase("GET", "/api/history/entries/999999999/diff", user, Missing),
                 new AccessCase("GET", "/api/history/entries/999999999/content", user, Missing),
                 new AccessCase("GET", "/api/admin/audit", user, Admin(HttpStatusCode.BadRequest)),
+
+                // T13 comments (per-role rules: CommentTests).
+                new AccessCase("GET", "/api/versions/999999/comments", user, Missing),
+                new AccessCase("GET", "/api/documents/999999/comments/counts", user, Missing),
+                new AccessCase("POST", "/api/versions/999999/comments", user, Missing, new { body = "x" }),
+                new AccessCase("PUT", "/api/comments/999999", user, Missing, new { body = "x", rowVersion = "AAAAAAAAAAA=" }),
+                new AccessCase("DELETE", "/api/comments/999999?rowVersion=AAAAAAAAAAA=", user, Missing),
+                new AccessCase("POST", "/api/comments/999999/resolve", user, Missing),
+                new AccessCase("POST", "/api/comments/999999/reopen", user, Missing),
             };
         });
 
