@@ -16,13 +16,13 @@ Source requirements: [requirements/](../requirements/README.md) · Decisions: [a
 | [T08](T08-document-tree-api.md) | Document tree API | T05, T07 | M | M1 Core API |
 | [T09](T09-node-content-api.md) | Word-like styled content API (JSON schema) | T05, T08 | L | M1 Core API |
 | [T10](T10-permissions.md) | Permissions (Owner/Editor/Approver) | T07 | M | M2 Advanced API |
-| [T11](T11-change-history-api.md) | Change history API + diff engine + attributed diff | T03, T09 | L | M2 Advanced API |
+| [T11](T11-change-history-api.md) | Change history API + diff engine + attributed diff | T03, T09, T21 | L | M2 Advanced API |
 | [T12](T12-version-comparison-api.md) | Version comparison API | T09 (+ diff engine) | M | M2 Advanced API |
 | [T13](T13-comments-api.md) | Comments API | T07, T10 | S–M | M2 Advanced API |
 | [T14](T14-web-shell-folders-documents.md) | Web: shell, folder tree, document list | T05, T06, T07 | M | M3 Web UI |
 | [T15](T15-web-document-editor.md) | Web: section editor with inline per-section history & track changes, tree, signing | T08, T09, T10, T11, T14 | XL | M3 Web UI |
 | [T16](T16-web-compare-comments-permissions.md) | Web: compare, comments, permissions | T10, T12, T13, T15 | M–L | M3 Web UI |
-| [T17](T17-web-admin-tab.md) | Web: Admin tab (folders, node types, styles, users, audit) | T05, T11, T14 | M | M3 Web UI |
+| [T17](T17-web-admin-tab.md) | Web: Admin tab (folders, node types, styles, users, audit) | T05, T11, T14, T21 | M | M3 Web UI |
 
 | ~~T18~~ | *Search — out of scope (decisions log Q13)* | – | – | – |
 | [T21](T21-tamper-evident-audit.md) | Tamper-evident audit: temporal + ledger, deploy-script guard, reconciliation | T03, T04 | L | M0 Foundation |
@@ -109,7 +109,7 @@ Parallelization seams already designed into the tasks:
 
 | Milestone | Tasks | Demo |
 |---|---|---|
-| **M0 Foundation** | T01–T04 | `dotnet test` green in CI with a real SQL container; DACPAC deploys; an API write shows up in `audit.ChangeLog` with the user; a manual SQL script change shows up as `Script`. |
+| **M0 Foundation** | T01–T04, T21 | `dotnet test` green in CI with a real SQL container; DACPAC deploys; an API write shows up in `audit.ChangeLog` with the user; a manual SQL script change shows up as `Script`.; with the audit triggers disabled by `dbo`, a changed signed version is reported by reconciliation. |
 | **M1 Core API** | T05–T09 | Via Scalar: create folder → document → build the example tree → edit content with a table → grant two approvers (DB rows until T10) → both sign → v1 → new draft → edit with styles/tables → both sign → v2 → delete → restore. |
 | **M2 Advanced API** | T10–T13 | Node history across v1/v2/draft incl. a support-script change; compare v1 vs draft; approver comments; node-scoped editor restrictions. |
 | **M4 Performance** | T19 | Scale-0.1 nightly green; full-scale run meets p99 ≤ 3 s at 20 req/s. |
