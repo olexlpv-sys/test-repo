@@ -36,6 +36,14 @@ public sealed class DictionaryEndpointsTests(DocHubApiFactory factory) : IClassF
         Assert.Equal(0, wildcard.GetProperty("totalCount").GetInt32());
     }
 
+    [Fact]
+    public async Task A_huge_page_number_is_an_empty_page()
+    {
+        var page = await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, "/api/users?page=2147483647&pageSize=100", null, HttpStatusCode.OK);
+
+        Assert.Equal(0, page.GetProperty("items").GetArrayLength());
+    }
+
     [Theory]
     [InlineData("/api/users?pageSize=101")]
     [InlineData("/api/users?page=0")]
@@ -285,6 +293,32 @@ public sealed class DictionaryEndpointsTests(DocHubApiFactory factory) : IClassF
         var duplicate = await ApiClient.ExpectAsync(factory, TestUsers.Admin, HttpMethod.Post, "/api/content-styles",
             new { styleId = "Normal", name = "Normal again", kind = "Paragraph", properties = new { } }, HttpStatusCode.Conflict);
         Assert.Equal("duplicate-name", duplicate.GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task Based_on_ids_are_stored_as_in_the_catalog()
+    {
+        var created = await ApiClient.ExpectAsync(factory, TestUsers.Admin, HttpMethod.Post, "/api/content-styles",
+            new { styleId = "CaseProbe", name = "Case probe", kind = "Paragraph", basedOnStyleId = "heading2", properties = new { bold = true } }, HttpStatusCode.Created);
+
+        Assert.Equal("Heading2", created.GetProperty("basedOnStyleId").GetString());
+    }
+
+    [Fact]
+    public async Task A_style_broken_by_a_support_script_does_not_break_the_stylesheet()
+    {
+        await ApiClient.ExpectAsync(factory, TestUsers.Admin, HttpMethod.Post, "/api/content-styles",
+            new { styleId = "Broken", name = "Broken", kind = "Paragraph", properties = new { bold = true } }, HttpStatusCode.Created);
+        await using (var support = await SqlSession.OpenAsync(factory.AdminConnectionString))
+        {
+            await support.ExecuteAsync("UPDATE app.ContentStyle SET PropertiesJson = N'[]' WHERE StyleId = 'Broken';");
+        }
+
+        using var anonymous = factory.CreateClientFor(null);
+        using var response = await anonymous.GetAsync(new Uri("/api/content-styles/stylesheet.css", UriKind.Relative), Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(".ds-style-Broken {", await response.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
+        await ApiClient.ExpectAsync(factory, TestUsers.Admin, HttpMethod.Get, "/api/content-styles?includeInactive=true", null, HttpStatusCode.OK);
     }
 
     private async Task<JsonElement> StyleAsync(string styleId)

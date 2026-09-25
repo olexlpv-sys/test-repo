@@ -20,6 +20,8 @@ public sealed class StylePropertiesTests
     [InlineData("""{"fontSize":1}""", "properties.fontSize")]
     [InlineData("""{"fontSize":22.5}""", "properties.fontSize")]
     [InlineData("""{"color":"#12345"}""", "properties.color")]
+    [InlineData("{\"color\":\"#FFFFFF\\n\"}", "properties.color")]
+    [InlineData("{\"borders\":{\"top\":{\"style\":\"single\",\"color\":\"#000000\\n\"}}}", "properties.borders.top.color")]
     [InlineData("""{"fontFamily":"Arial; } body { display:none"}""", "properties.fontFamily")]
     [InlineData("""{"spacingBefore":31681}""", "properties.spacingBefore")]
     [InlineData("""{"lineRule":"double"}""", "properties.lineRule")]
@@ -78,6 +80,26 @@ public sealed class StylePropertiesTests
         var css = StyleProperties.ToCss([Style("A", ContentStyleKind.Paragraph, "B", """{"bold":true}"""), Style("B", ContentStyleKind.Paragraph, "A", """{"italic":true}""")]);
 
         Assert.Contains("font-style: italic", Rule(css, "A"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Css_resolves_base_styles_case_insensitively()
+    {
+        var css = StyleProperties.ToCss([Style("Heading1", ContentStyleKind.Paragraph, null, """{"fontSize":40}"""), Style("Probe", ContentStyleKind.Paragraph, "heading1", """{"bold":true}""")]);
+
+        Assert.Contains("font-size: 20pt", Rule(css, "Probe"), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("42")]
+    [InlineData("not json")]
+    public void Css_ignores_properties_that_are_not_an_object(string json)
+    {
+        var css = StyleProperties.ToCss([Style("Base", ContentStyleKind.Paragraph, null, json), Style("Child", ContentStyleKind.Paragraph, "Base", """{"bold":true}""")]);
+
+        Assert.Contains("font-weight: 700", Rule(css, "Child"), StringComparison.Ordinal);
+        Assert.Contains(".ds-style-Base {", css, StringComparison.Ordinal);
     }
 
     [Fact]

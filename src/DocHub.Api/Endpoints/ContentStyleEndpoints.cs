@@ -68,7 +68,7 @@ internal sealed class ContentStyleEndpoints : IEndpointModule
             {
                 var kind = request.Kind!.Value;
                 var errors = rules.Validate(request.Properties, kind);
-                await ValidateBasedOnAsync(db, request.StyleId!, kind, request.BasedOnStyleId, errors, ct);
+                var basedOn = await ValidateBasedOnAsync(db, request.StyleId!, kind, request.BasedOnStyleId, errors, ct);
                 if (errors.Count > 0)
                 {
                     return Problem(errors);
@@ -79,7 +79,7 @@ internal sealed class ContentStyleEndpoints : IEndpointModule
                     StyleId = request.StyleId!,
                     Name = request.Name!.Trim(),
                     Kind = kind,
-                    BasedOnStyleId = request.BasedOnStyleId,
+                    BasedOnStyleId = basedOn,
                     PropertiesJson = request.Properties.GetRawText(),
                 };
                 db.ContentStyles.Add(style);
@@ -96,7 +96,7 @@ internal sealed class ContentStyleEndpoints : IEndpointModule
             {
                 var style = await db.ContentStyles.SingleOrDefaultAsync(s => s.Id == id, ct) ?? throw DomainException.NotFound("Content style", id);
                 var errors = rules.Validate(request.Properties, style.Kind);
-                await ValidateBasedOnAsync(db, style.StyleId, style.Kind, request.BasedOnStyleId, errors, ct);
+                var basedOn = await ValidateBasedOnAsync(db, style.StyleId, style.Kind, request.BasedOnStyleId, errors, ct);
                 if (errors.Count > 0)
                 {
                     return Problem(errors);
@@ -104,7 +104,7 @@ internal sealed class ContentStyleEndpoints : IEndpointModule
 
                 db.Entry(style).Property(s => s.RowVersion).OriginalValue = request.RowVersion!;
                 style.Name = request.Name!.Trim();
-                style.BasedOnStyleId = request.BasedOnStyleId;
+                style.BasedOnStyleId = basedOn;
                 style.PropertiesJson = request.Properties.GetRawText();
                 style.IsActive = request.IsActive;
                 await db.SaveChangesAsync(ct);
@@ -152,26 +152,29 @@ internal sealed class ContentStyleEndpoints : IEndpointModule
     private static async Task<StyleRow> FindAsync(DocHubDbContext db, int id, CancellationToken ct) =>
         await Project(db, db.ContentStyles.Where(s => s.Id == id)).SingleOrDefaultAsync(ct) ?? throw DomainException.NotFound("Content style", id);
 
-    /// <summary>BasedOn must be an existing style of the same kind (as in Word) and must not lead back to the style.</summary>
-    private static async Task ValidateBasedOnAsync(
+    /// <summary>
+    /// BasedOn must be an existing style of the same kind (as in Word) and must not lead back to the style. Returns the base
+    /// style's id as stored (ids compare case-insensitively).
+    /// </summary>
+    private static async Task<string?> ValidateBasedOnAsync(
         DocHubDbContext db, string styleId, ContentStyleKind kind, string? basedOnStyleId, Dictionary<string, string[]> errors, CancellationToken ct)
     {
         if (basedOnStyleId is null)
         {
-            return;
+            return null;
         }
 
         var catalog = await db.ContentStyles.AsNoTracking().Select(s => new { s.StyleId, s.Kind, s.BasedOnStyleId }).ToDictionaryAsync(s => s.StyleId, StringComparer.OrdinalIgnoreCase, ct);
         if (!catalog.TryGetValue(basedOnStyleId, out var parent))
         {
             errors["basedOnStyleId"] = ["The style doesn't exist."];
-            return;
+            return null;
         }
 
         if (parent.Kind != kind)
         {
             errors["basedOnStyleId"] = [$"A {kind} style can only be based on another {kind} style."];
-            return;
+            return null;
         }
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -180,9 +183,11 @@ internal sealed class ContentStyleEndpoints : IEndpointModule
             if (string.Equals(current, styleId, StringComparison.OrdinalIgnoreCase))
             {
                 errors["basedOnStyleId"] = ["The style can't be based on itself or on a style based on it."];
-                return;
+                return null;
             }
         }
+
+        return parent.StyleId;
     }
 
     private static ValidationProblem Problem(Dictionary<string, string[]> errors) =>
@@ -194,6 +199,7 @@ internal sealed class ContentStyleEndpoints : IEndpointModule
     {
         public ContentStyleResponse ToResponse()
         {
+            // PropertiesJson is valid JSON (CHECK constraint), but a support script may store a non-object.
             using var properties = JsonDocument.Parse(PropertiesJson);
             return new ContentStyleResponse(Id, StyleId, Name, Kind, BasedOnStyleId, properties.RootElement.Clone(), IsBuiltIn, IsActive, RowVersion, UsageCount);
         }

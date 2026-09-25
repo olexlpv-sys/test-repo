@@ -28,7 +28,7 @@ internal sealed class UserEndpoints : IEndpointModule
                 var total = await users.CountAsync(ct);
                 var items = await users
                     .OrderBy(u => u.DisplayName).ThenBy(u => u.Id)
-                    .Skip((query.Page - 1) * query.PageSize)
+                    .Skip(query.Skip)
                     .Take(query.PageSize)
                     .Select(u => new UserResponse(u.Id, u.Login, u.DisplayName, u.Email, u.IsAdmin, u.IsActive))
                     .ToListAsync(ct);
@@ -57,6 +57,9 @@ internal sealed class UserEndpoints : IEndpointModule
     {
         public const int DefaultPageSize = 20;
         public const int MaxPageSize = 100;
+
+        /// <summary>Rows to skip; clamped so a huge page number gives an empty page instead of an overflow.</summary>
+        public int Skip => (int)Math.Min(((long)Page - 1) * PageSize, int.MaxValue);
     }
 
     public sealed record UserResponse(int Id, string Login, string DisplayName, string? Email, bool IsAdmin, bool IsActive);

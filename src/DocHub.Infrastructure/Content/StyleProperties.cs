@@ -140,7 +140,8 @@ public sealed partial class StyleProperties(IEnumerable<string> fontFamilies)
     public static string ToCss(IReadOnlyCollection<ContentStyle> styles)
     {
         ArgumentNullException.ThrowIfNull(styles);
-        var byId = styles.ToDictionary(s => s.StyleId, StringComparer.Ordinal);
+        // Style ids compare case-insensitively, like the database collation (BasedOn references).
+        var byId = styles.GroupBy(s => s.StyleId, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var css = new StringBuilder("/* Generated from the DocHub style catalog (app.ContentStyle). */\n");
         foreach (var style in styles.OrderBy(s => s.StyleId, StringComparer.Ordinal))
         {
@@ -165,7 +166,7 @@ public sealed partial class StyleProperties(IEnumerable<string> fontFamilies)
     private static Dictionary<string, JsonElement> Resolve(ContentStyle style, Dictionary<string, ContentStyle> byId)
     {
         var chain = new List<ContentStyle>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var current = style; current is not null && seen.Add(current.StyleId);
              current = current.BasedOnStyleId is { } basedOn && byId.TryGetValue(basedOn, out var parent) ? parent : null)
         {
@@ -175,7 +176,13 @@ public sealed partial class StyleProperties(IEnumerable<string> fontFamilies)
         var merged = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var item in Enumerable.Reverse(chain))
         {
-            using var document = JsonDocument.Parse(item.PropertiesJson);
+            // A style changed by a support script may hold anything ISJSON accepts; such properties are ignored here.
+            if (Parse(item.PropertiesJson) is not { } document)
+            {
+                continue;
+            }
+
+            using var owned = document;
             foreach (var property in document.RootElement.EnumerateObject())
             {
                 // Character styles based on paragraph styles take only character formatting.
@@ -189,6 +196,25 @@ public sealed partial class StyleProperties(IEnumerable<string> fontFamilies)
         }
 
         return merged;
+    }
+
+    private static JsonDocument? Parse(string json)
+    {
+        try
+        {
+            var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                return document;
+            }
+
+            document.Dispose();
+        }
+        catch (JsonException)
+        {
+        }
+
+        return null;
     }
 
     private static IEnumerable<string> Declarations(Dictionary<string, JsonElement> p)
@@ -461,10 +487,10 @@ public sealed partial class StyleProperties(IEnumerable<string> fontFamilies)
     private static Dictionary<string, string[]> Finish(Dictionary<string, List<string>> errors) =>
         errors.ToDictionary(e => e.Key, e => e.Value.ToArray(), StringComparer.Ordinal);
 
-    [GeneratedRegex("^#[0-9A-Fa-f]{6}$")]
+    [GeneratedRegex(@"^#[0-9A-Fa-f]{6}\z")]
     private static partial Regex ColorPattern();
 
     // Defence in depth for CSS output (fonts are also validated against the configured list).
-    [GeneratedRegex("^[A-Za-z0-9 \\-]{1,64}$")]
+    [GeneratedRegex(@"^[A-Za-z0-9 \-]{1,64}\z")]
     private static partial Regex SafeFont();
 }

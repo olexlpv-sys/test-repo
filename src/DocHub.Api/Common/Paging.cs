@@ -10,7 +10,8 @@ public sealed record PageRequest(
     public const int DefaultPageSize = 50;
     public const int MaxPageSize = 200;
 
-    public int Skip => (Page - 1) * PageSize;
+    /// <summary>Rows to skip; clamped so a huge page number gives an empty page instead of an overflow.</summary>
+    public int Skip => (int)Math.Min(((long)Page - 1) * PageSize, int.MaxValue);
 }
 
 public sealed record PagedResult<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount);
