@@ -2,7 +2,7 @@ namespace DocHub.Domain.Entities;
 
 public sealed class NodeContent
 {
-    public const string EmptyContentJson = """{"type":"doc","content":[]}""";
+    public const string EmptyContentJson = """{"content":[],"type":"doc"}""";
 
     public int NodeId { get; set; }
 

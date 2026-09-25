@@ -33,6 +33,9 @@ public sealed partial class StyleProperties(IEnumerable<string> fontFamilies)
 
     private readonly HashSet<string> _fonts = new(fontFamilies, StringComparer.Ordinal);
 
+    /// <summary>The configured fonts (also the only ones node content may use).</summary>
+    public IReadOnlySet<string> FontFamilies => _fonts;
+
     public StyleProperties()
         : this(DefaultFontFamilies)
     {

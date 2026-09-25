@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.Globalization;
 using DocHub.Api.Auth;
 using DocHub.Api.Common;
 using DocHub.Api.Documents;
@@ -13,7 +12,6 @@ using DocHub.Infrastructure.Procedures;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
-using Microsoft.Net.Http.Headers;
 
 namespace DocHub.Api.Endpoints;
 
@@ -24,7 +22,7 @@ namespace DocHub.Api.Endpoints;
 internal sealed class NodeEndpoints : IEndpointModule
 {
     /// <summary>The content of a new node (canonical empty document).</summary>
-    public const string EmptyContent = """{"type":"doc","content":[]}""";
+    public const string EmptyContent = ContentSchema.EmptyDocument;
 
     public void Map(IEndpointRouteBuilder endpoints)
     {
@@ -35,13 +33,8 @@ internal sealed class NodeEndpoints : IEndpointModule
                     ?? throw DomainException.NotFound("Version", versionId);
                 await authorization.EnsureCanViewAsync(version.DocumentId, ct);
 
-                // NFR-L9: ETag = version stamp (any change, script edits included, advances it).
-                var stamp = await db.VersionStamps.AsNoTracking().Where(s => s.DocumentVersionId == versionId).Select(s => (long?)s.LastChangeLogId).SingleOrDefaultAsync(ct) ?? 0;
-                var etag = new EntityTagHeaderValue($"\"{stamp.ToString(CultureInfo.InvariantCulture)}\"");
-                http.Response.Headers.ETag = etag.ToString();
-                http.Response.Headers.CacheControl = "private, no-cache";
-                http.Response.Headers.Vary = "X-User-Id";
-                if (http.Request.GetTypedHeaders().IfNoneMatch.Any(tag => tag.Compare(etag, useStrongComparison: false)))
+                var stamp = await VersionETag.StampAsync(db, versionId, ct);
+                if (VersionETag.IsNotModified(http, stamp))
                 {
                     return Results.StatusCode(StatusCodes.Status304NotModified);
                 }

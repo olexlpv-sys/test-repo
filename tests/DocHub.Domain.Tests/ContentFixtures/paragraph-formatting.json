@@ -1,0 +1,20 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "paragraph",
+      "attrs": { "align": "justify", "indentFirstLine": 720, "lineSpacing": 360, "lineRule": "auto", "spacingAfter": 160 },
+      "content": [{ "type": "text", "text": "A justified paragraph with a half-inch first-line indent and 1.5 line spacing, like Word's defaults for formal documents." }]
+    },
+    {
+      "type": "paragraph",
+      "attrs": { "align": "right", "indentLeft": 1440, "indentRight": 360, "hanging": 360, "spacingBefore": 240, "lineSpacing": 280, "lineRule": "exact", "keepWithNext": true },
+      "content": [{ "type": "text", "text": "Right aligned," }, { "type": "hardBreak" }, { "type": "text", "text": "hanging indent, exact line height." }]
+    },
+    { "type": "pageBreak" },
+    { "type": "paragraph", "attrs": { "styleId": "Quote", "pageBreakBefore": true }, "content": [{ "type": "text", "text": "A quote on a new page." }] },
+    { "type": "horizontalRule" },
+    { "type": "paragraph" },
+    { "type": "paragraph", "content": [{ "type": "text", "text": "Text after an empty paragraph." }] }
+  ]
+}

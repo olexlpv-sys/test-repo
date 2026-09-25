@@ -38,6 +38,13 @@ The canonical format is **TipTap/ProseMirror JSON validated against DocHub Conte
 ## DB changes (in T02)
 `app.NodeContent`: `ContentJson nvarchar(max)` (`ISJSON` check) + `SchemaVersion tinyint` are the source of truth; `ContentHtml`, `PlainText`, `ContentHash` are derived.
 
+## Implementation notes (Q11)
+- Validator/canonicalizer `ContentDocument` and renderer `ContentHtmlRenderer` live in `DocHub.Domain.Content`; the renderer re-checks every value itself, since it also renders script-stored (unvalidated) JSON.
+- Style ids match the catalog case-insensitively and are stored in the catalog's spelling (the stylesheet's class). The empty document is stored canonically: `{"content":[],"type":"doc"}`.
+- The `PUT` takes the document lock (`NodeRules.MutateAsync`) like structural edits, so a save never lands in a version that was just signed.
+- An API save that restores content whose derived columns are already current keeps the hash, and the T03 trigger keeps the row flagged. The refresher clears it; reads render on the fly until then.
+- Fixtures and approved HTML snapshots: `tests/DocHub.Domain.Tests/ContentFixtures/` (`UPDATE_CONTENT_SNAPSHOTS=1` rewrites them).
+
 ## Acceptance criteria
 - [ ] Round-trip fixture set (in `tests/.../ContentFixtures/`): headings with `Heading1–3` styles, justified paragraph with first-line indent and 1.5 line spacing, mixed fonts/sizes/colors/highlight, nested numbered lists, a table with `colspan`/`rowspan`, column widths, borders and cell shading — stored and returned identically (after canonicalization).
 - [ ] Invalid inputs → `400` with the JSON path: unknown node type, `color: "red; background:url(…)"`, `href: "javascript:…"`, font size 1000, unknown `styleId`.

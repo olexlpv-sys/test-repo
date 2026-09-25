@@ -72,6 +72,8 @@ public class DocHubApiFactory(SqlServerContainerFixture server) : WebApplication
         builder.UseSetting("ConnectionStrings:DocHub", ApiConnectionString);
         // The nightly reconciliation would start on its own schedule; tests run it explicitly.
         builder.UseSetting("Audit:Reconciliation:Enabled", "false");
+        // Tests run the refresher explicitly (RunOnceAsync), so script-edited rows stay stale until they do.
+        builder.UseSetting("Content:DerivedRefresh:Enabled", "false");
         builder.ConfigureTestServices(ConfigureServices);
         builder.ConfigureTestServices(services =>
         {

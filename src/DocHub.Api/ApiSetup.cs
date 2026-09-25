@@ -70,6 +70,7 @@ internal static class ApiSetup
         services.AddSingleton<IEndpointModule, DocumentEndpoints>();
         services.AddSingleton<IEndpointModule, VersionEndpoints>();
         services.AddSingleton<IEndpointModule, NodeEndpoints>();
+        services.AddSingleton<IEndpointModule, ContentEndpoints>();
 
         // Documents and versions (T07): the authorization seam, guards, signing and read models.
         services.AddScoped<IDocumentAuthorization, DocumentAuthorization>();
@@ -77,6 +78,7 @@ internal static class ApiSetup
         services.AddScoped<SigningService>();
         services.AddScoped<DocumentViews>();
         services.AddScoped<NodeRules>();
+        services.AddScoped<NodeContents>();
 
         // Signed-version trees and contents (NFR-L9).
         // Values are serialized (also for the in-memory copy) with the API's depth limit: trees are up to 100 levels deep.
@@ -84,6 +86,10 @@ internal static class ApiSetup
 
         // Style catalog schema (docs/content-format.md §2); the font list is configurable.
         services.AddSingleton(new StyleProperties(configuration.GetSection("Content:FontFamilies").Get<string[]>() is { Length: > 0 } fonts ? fonts : StyleProperties.DefaultFontFamilies));
+
+        // Script-edited content: derived columns re-rendered in the background (T09 rule 8).
+        services.Configure<DerivedRefreshOptions>(configuration.GetSection(DerivedRefreshOptions.SectionName));
+        services.AddHostedService<DerivedContentRefresher>();
 
         // Tamper evidence (T21 §4): nightly ledger reconciliation.
         services.Configure<ReconciliationOptions>(configuration.GetSection(ReconciliationOptions.SectionName));

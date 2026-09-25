@@ -1,0 +1,52 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "table",
+      "attrs": {
+        "styleId": "TableGrid",
+        "width": 9000,
+        "widthType": "dxa",
+        "align": "center",
+        "layout": "fixed",
+        "columnWidths": [3000, 3000, 3000],
+        "borders": {
+          "top": { "style": "double", "size": 6, "color": "#1F4E79" },
+          "bottom": { "style": "double", "size": 6, "color": "#1F4E79" },
+          "insideH": { "style": "single", "size": 4, "color": "#808080" },
+          "insideV": { "style": "dotted", "size": 4, "color": "#808080" }
+        }
+      },
+      "content": [
+        {
+          "type": "tableRow",
+          "attrs": { "isHeader": true, "cantSplit": true },
+          "content": [
+            { "type": "tableHeader", "attrs": { "colspan": 2, "shading": "#D9E2F3" }, "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Merged header", "marks": [{ "type": "bold" }] }] }] },
+            { "type": "tableHeader", "attrs": { "shading": "#D9E2F3" }, "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Notes" }] }] }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "attrs": { "height": 400, "heightRule": "atLeast" },
+          "content": [
+            { "type": "tableCell", "attrs": { "rowspan": 2, "verticalAlign": "center", "width": 3000 }, "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Spans two rows" }] }] },
+            { "type": "tableCell", "content": [{ "type": "paragraph", "attrs": { "align": "right" }, "content": [{ "type": "text", "text": "12.50" }] }] },
+            {
+              "type": "tableCell",
+              "attrs": { "borders": { "left": { "style": "thick", "size": 12, "color": "#C00000" } } },
+              "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Red left border" }] }, { "type": "paragraph", "content": [{ "type": "text", "text": "second line" }] }]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            { "type": "tableCell", "content": [{ "type": "paragraph", "attrs": { "align": "right" }, "content": [{ "type": "text", "text": "7.00" }] }] },
+            { "type": "tableCell", "attrs": { "verticalAlign": "bottom" }, "content": [{ "type": "paragraph" }] }
+          ]
+        }
+      ]
+    }
+  ]
+}

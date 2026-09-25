@@ -1,0 +1,34 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "paragraph",
+      "content": [
+        { "type": "text", "text": "Georgia 14pt blue, " , "marks": [{ "type": "textStyle", "attrs": { "fontFamily": "Georgia", "fontSize": 28, "color": "#1F4E79" } }] },
+        { "type": "text", "text": "Courier 9pt, ", "marks": [{ "type": "textStyle", "attrs": { "fontFamily": "Courier New", "fontSize": 18 } }] },
+        { "type": "text", "text": "highlighted", "marks": [{ "type": "highlight", "attrs": { "color": "#FFFF00" } }] },
+        { "type": "text", "text": ", " },
+        { "type": "text", "text": "bold italic", "marks": [{ "type": "bold" }, { "type": "italic" }] },
+        { "type": "text", "text": ", " },
+        { "type": "text", "text": "double underline", "marks": [{ "type": "underline", "attrs": { "style": "double" } }] },
+        { "type": "text", "text": ", " },
+        { "type": "text", "text": "underline", "marks": [{ "type": "underline" }] },
+        { "type": "text", "text": ", " },
+        { "type": "text", "text": "struck", "marks": [{ "type": "strike" }] },
+        { "type": "text", "text": ", H" },
+        { "type": "text", "text": "2", "marks": [{ "type": "subscript" }] },
+        { "type": "text", "text": "O, x" },
+        { "type": "text", "text": "2", "marks": [{ "type": "superscript" }] },
+        { "type": "text", "text": ", " },
+        { "type": "text", "text": "small caps", "marks": [{ "type": "smallCaps" }] },
+        { "type": "text", "text": ", " },
+        { "type": "text", "text": "all caps", "marks": [{ "type": "allCaps" }] },
+        { "type": "text", "text": ", " },
+        { "type": "text", "text": "a link", "marks": [{ "type": "link", "attrs": { "href": "https://example.com/a?b=1&c=2" } }] },
+        { "type": "text", "text": " and " },
+        { "type": "text", "text": "a strong character style", "marks": [{ "type": "charStyle", "attrs": { "styleId": "Strong" } }] },
+        { "type": "text", "text": ". <script>alert('x')</script> & \"quotes\"" }
+      ]
+    }
+  ]
+}

@@ -30,7 +30,7 @@ Q22 is placed right after Q04 (it hardens the Q03 schema before feature work bui
 | Q08 | [T14](tasks/T14-web-shell-folders-documents.md) Web shell & lists | CODE + TEST | Q05, Q06, Q07 | C | todo | – |
 | Q09 | [T10](tasks/T10-permissions.md) Permissions | CODE + TEST | Q07 | B | todo | – |
 | Q10 | [T08](tasks/T08-document-tree-api.md) Tree | CODE + TEST | Q05, Q07 | A | in-review | – |
-| Q11 | [T09](tasks/T09-node-content-api.md) Styled content | CODE + TEST | Q05, Q10 | A | todo | – |
+| Q11 | [T09](tasks/T09-node-content-api.md) Styled content | CODE + TEST | Q05, Q10 | A | in-review | – |
 | Q12 | [T17](tasks/T17-web-admin-tab.md) Web admin | CODE + TEST | Q05, Q08, Q14, Q22 | C | todo | – |
 | Q13 | [T13](tasks/T13-comments-api.md) Comments | CODE + TEST | Q07, Q09 | B | todo | – |
 | Q14 | [T11](tasks/T11-change-history-api.md) History + diff engine | CODE + TEST | Q03, Q11, Q22 | A | todo | – |

@@ -1,0 +1,9 @@
+{
+  "type": "doc",
+  "content": [
+    { "type": "heading", "attrs": { "level": 1 }, "content": [{ "type": "text", "text": "1 Scope" }] },
+    { "type": "heading", "attrs": { "level": 2 }, "content": [{ "type": "text", "text": "1.1 Purpose" }] },
+    { "type": "heading", "attrs": { "level": 3, "styleId": "Heading3" }, "content": [{ "type": "text", "text": "1.1.1 Background" }] },
+    { "type": "paragraph", "attrs": { "styleId": "Normal" }, "content": [{ "type": "text", "text": "Body text under the headings." }] }
+  ]
+}
