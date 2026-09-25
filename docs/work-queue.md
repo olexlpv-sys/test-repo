@@ -17,7 +17,7 @@ Status: `todo` · `in-progress` · `in-review` · `done` · `blocked`
 | # | Item | Artifact | Depends on | Lane | Status | Review |
 |---|---|---|---|---|---|---|
 | Q00 | Review requirements & task specs (this doc set) | REQ + SPEC | — | – | done | **GREEN** after 7 rounds |
-| Q01 | [T01](tasks/T01-api-solution-setup.md) API solution | CODE | Q00 | A | in-review | – |
+| Q01 | [T01](tasks/T01-api-solution-setup.md) API solution | CODE | Q00 | A | done | **GREEN** (2 rounds) |
 | Q02 | [T02](tasks/T02-database-project-and-schema.md) DB project & schema | DB + TEST | Q01 | A | todo | – |
 | Q03 | [T03](tasks/T03-database-change-tracking.md) Audit triggers | DB + TEST | Q02 | A | todo | – |
 | Q04 | [T04](tasks/T04-api-foundation.md) API foundation | CODE + TEST | Q01, Q03 | A | todo | – |
@@ -43,3 +43,4 @@ Lanes: **A** backend core / DB · **B** backend features · **C** frontend.
 
 ## Handoff notes
 - **Q00** — Doc set reviewed in 7 fresh-context rounds (process §4, REQ/SPEC rule): 19 → 12 → 11 → 7 → 7 → 1 → 0 valid findings, all fixed. Product input added during review (data access via EF + SPs, load profile, in-editor history, PDF export) was reviewed in the same loop. Next: Q01.
+- **Q01** — .NET 10 solution (`DocHub.slnx`), CPM, warnings-as-errors, `/health`, OpenAPI+Scalar (dev only), xUnit v3 on Microsoft.Testing.Platform (`dotnet test --solution`), docker-compose SQL 2022, CI on every push/PR (green). Deviation: SDK installed from Ubuntu apt (dot.net blocked by proxy); CI now runs on all branch pushes. Review: 2 findings fixed → GREEN.
