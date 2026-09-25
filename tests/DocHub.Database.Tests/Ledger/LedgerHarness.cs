@@ -25,7 +25,17 @@ internal sealed class LedgerHarness(DocHubDatabaseFixture database)
     public async Task<SqlSession> LoginAsync(params string[] roles) =>
         await SqlSession.OpenAsync(await SqlLogins.CreateAsync(database, null, roles));
 
-    public static Task<DateTime> NowAsync(ISqlCommands db) => db.ScalarAsync<DateTime>("SELECT SYSUTCDATETIME();");
+    /// <summary>
+    /// Starts a test's reconciliation window on the ledger's own clock: a no-op ledger write, returning its commit time.
+    /// <c>commit_time</c> has 3.33 ms precision and lags <c>SYSUTCDATETIME()</c> by a few milliseconds, so a window that starts
+    /// at <c>SYSUTCDATETIME()</c> could miss the test's first transactions. Later commits have a commit time at or after it.
+    /// </summary>
+    public static Task<DateTime> StartWindowAsync(ISqlCommands dbo) => dbo.ScalarAsync<DateTime>(
+        """
+        UPDATE app.NodeType SET Name = Name WHERE Id = 1;
+        SELECT t.commit_time FROM sys.database_ledger_transactions AS t
+        WHERE t.transaction_id = (SELECT MAX(ledger_transaction_id) FROM app.NodeType_Ledger WHERE Id = 1);
+        """);
 
     /// <summary>Runs reconciliation as an <c>app_api</c> login (as the API does) and returns the number of new findings.</summary>
     public async Task<int> ReconcileAsync(DateTime from, string? digest = null)

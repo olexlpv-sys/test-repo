@@ -15,7 +15,7 @@ public sealed class ReconciliationTests(DocHubDatabaseFixture database) : IClass
     {
         await using var dbo = await _ledger.DboAsync();
         await using var api = await _ledger.ApiAsync();
-        var from = await LedgerHarness.NowAsync(dbo);
+        var from = await LedgerHarness.StartWindowAsync(dbo);
         var (_, versionId, nodeId) = await LedgerHarness.DocumentAsync(api, signed: true);
         var stampBefore = await dbo.ScalarAsync<long>("SELECT LastChangeLogId FROM app.VersionStamp WHERE DocumentVersionId = @v;", ("@v", versionId));
 
@@ -49,7 +49,7 @@ public sealed class ReconciliationTests(DocHubDatabaseFixture database) : IClass
     {
         await using var dbo = await _ledger.DboAsync();
         await using var api = await _ledger.ApiAsync();
-        var from = await LedgerHarness.NowAsync(dbo);
+        var from = await LedgerHarness.StartWindowAsync(dbo);
         var (documentId, versionId, nodeId) = await LedgerHarness.DocumentAsync(api, signed: false);
 
         var logId = await dbo.ScalarAsync<long>(
@@ -76,7 +76,7 @@ public sealed class ReconciliationTests(DocHubDatabaseFixture database) : IClass
     {
         await using var dbo = await _ledger.DboAsync();
         await using var api = await _ledger.ApiAsync();
-        var from = await LedgerHarness.NowAsync(dbo);
+        var from = await LedgerHarness.StartWindowAsync(dbo);
         var (_, versionId, nodeId) = await LedgerHarness.DocumentAsync(api, signed: true);
         // An audited script change of the signed version: the trigger sets TamperedAt (no finding — it is audited).
         await dbo.ExecuteAsync("UPDATE app.NodeContent SET ContentJson = JSON_MODIFY(ContentJson, '$.edited', 1) WHERE NodeId = @n;", ("@n", nodeId));
@@ -106,7 +106,7 @@ public sealed class ReconciliationTests(DocHubDatabaseFixture database) : IClass
     {
         await using var dbo = await _ledger.DboAsync();
         await using var api = await _ledger.ApiAsync();
-        var from = await LedgerHarness.NowAsync(dbo);
+        var from = await LedgerHarness.StartWindowAsync(dbo);
 
         // API: create, save content (ContentJson + all derived columns), derived-only refresher update, sign, comment, delete.
         var (documentId, versionId, nodeId) = await LedgerHarness.DocumentAsync(api, signed: false);
@@ -151,7 +151,7 @@ public sealed class ReconciliationTests(DocHubDatabaseFixture database) : IClass
     {
         await using var dbo = await _ledger.DboAsync();
         await using var api = await _ledger.ApiAsync();
-        var from = await LedgerHarness.NowAsync(dbo);
+        var from = await LedgerHarness.StartWindowAsync(dbo);
         var (_, versionId, nodeId) = await LedgerHarness.DocumentAsync(api, signed: true);
         await LedgerHarness.BypassContentEditAsync(dbo, nodeId);
         await dbo.ExecuteAsync("INSERT INTO audit.ChangeLog (TableName, Operation, EntityId, Source, DbLogin) VALUES (N'app.Folder', 'U', 1, 'App', N'x');");
@@ -174,7 +174,7 @@ public sealed class ReconciliationTests(DocHubDatabaseFixture database) : IClass
     public async Task Api_login_whose_name_differs_from_its_user_is_not_a_finding_but_a_db_owner_posing_as_the_api_is()
     {
         await using var dbo = await _ledger.DboAsync();
-        var from = await LedgerHarness.NowAsync(dbo);
+        var from = await LedgerHarness.StartWindowAsync(dbo);
         await using (var api = await _ledger.ApiAsync(userName: $"api_user_{Guid.NewGuid():N}"))
         {
             await LedgerHarness.DocumentAsync(api, signed: true);
@@ -202,7 +202,7 @@ public sealed class ReconciliationTests(DocHubDatabaseFixture database) : IClass
     {
         await using var dbo = await _ledger.DboAsync();
         await using var api = await _ledger.ApiAsync();
-        var from = await LedgerHarness.NowAsync(dbo);
+        var from = await LedgerHarness.StartWindowAsync(dbo);
         var (_, versionId, nodeId) = await LedgerHarness.DocumentAsync(api, signed: true);
 
         await LedgerHarness.BypassContentEditAsync(dbo, nodeId, $"UPDATE app.DocumentVersion SET SignedAt = DATEADD(MINUTE, 10, SYSUTCDATETIME()) WHERE Id = {versionId};");
@@ -218,7 +218,7 @@ public sealed class ReconciliationTests(DocHubDatabaseFixture database) : IClass
     {
         await using var dbo = await _ledger.DboAsync();
         await using var api = await _ledger.ApiAsync();
-        var from = await LedgerHarness.NowAsync(dbo);
+        var from = await LedgerHarness.StartWindowAsync(dbo);
         var (_, versionId, nodeId) = await LedgerHarness.DocumentAsync(api, signed: false);
 
         await LedgerHarness.BypassContentEditAsync(dbo, nodeId, $"UPDATE app.DocumentVersion SET Status = 2, VersionNumber = 1, SignedAt = SYSUTCDATETIME() WHERE Id = {versionId};");
@@ -234,7 +234,7 @@ public sealed class ReconciliationTests(DocHubDatabaseFixture database) : IClass
     {
         await using var dbo = await _ledger.DboAsync();
         await using var api = await _ledger.ApiAsync();
-        var from = await LedgerHarness.NowAsync(dbo);
+        var from = await LedgerHarness.StartWindowAsync(dbo);
         var (_, versionId, nodeId) = await LedgerHarness.DocumentAsync(api, signed: false);
         await LedgerHarness.BypassContentEditAsync(dbo, nodeId);
         Assert.Equal(1, await _ledger.ReconcileAsync(from));

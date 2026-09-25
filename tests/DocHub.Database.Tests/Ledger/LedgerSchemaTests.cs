@@ -152,7 +152,7 @@ public abstract class FindingTableReplacementTests(DocHubDatabaseFixture databas
     {
         await using var dbo = await _ledger.DboAsync();
         await using var api = await _ledger.ApiAsync();
-        var from = await LedgerHarness.NowAsync(dbo);
+        var from = await LedgerHarness.StartWindowAsync(dbo);
         var (_, _, nodeId) = await LedgerHarness.DocumentAsync(api, signed: true);
         await LedgerHarness.BypassContentEditAsync(dbo, nodeId);
         Assert.Equal(1, await _ledger.ReconcileAsync(from));

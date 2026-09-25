@@ -69,7 +69,8 @@ public sealed class AuditReconciliationTests(DocHubApiFactory factory) : IClassF
 
         var run = await service.RunOnceAsync(Ct);
 
-        Assert.Equal(1, run.NewFindings);
+        Assert.True(run.NewFindings >= 1);
+        Assert.Equal(1, await dbo.ScalarAsync<int>("SELECT COUNT(*) FROM audit.ReconciliationFinding WHERE Kind = 'TriggerBypass' AND EntityId = @n;", ("@n", nodeId)));
         var log = Assert.Single(await dbo.QueryAsync(
             "SELECT UserId, Source, OperationContext FROM audit.ChangeLog WHERE TableName = N'audit.ReconciliationFinding' AND DocumentVersionId = @v;",
             ("@v", versionId)));
