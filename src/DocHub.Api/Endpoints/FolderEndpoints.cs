@@ -103,7 +103,12 @@ internal sealed class FolderEndpoints : IEndpointModule
                     db.ChangeTracker.Clear();
                     await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
                     // One move at a time: two concurrent moves could otherwise create a cycle together.
-                    await db.Database.ExecuteSqlRawAsync("EXEC sys.sp_getapplock @Resource = N'folders', @LockMode = 'Exclusive', @LockOwner = 'Transaction';", ct);
+                    await db.Database.ExecuteSqlRawAsync(
+                        """
+                        DECLARE @result INT;
+                        EXEC @result = sys.sp_getapplock @Resource = N'folders', @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 10000;
+                        IF @result < 0 THROW 50041, N'Another folder move is in progress; try again.', 1;
+                        """, ct);
 
                     var all = await db.Folders.AsNoTracking().Select(f => new { f.Id, f.ParentFolderId, f.SortOrder, f.Name }).ToDictionaryAsync(f => f.Id, ct);
                     if (!all.ContainsKey(id))
@@ -118,8 +123,10 @@ internal sealed class FolderEndpoints : IEndpointModule
                             throw DomainException.NotFound("Folder", parentId);
                         }
 
-                        // The new parent must not be the folder itself or one of its descendants.
-                        for (int? current = parentId; current is { } c; current = all[c].ParentFolderId)
+                        // The new parent must not be the folder itself or one of its descendants (bounded: the tree is never
+                        // longer than the folder count; TR_Folder_NoCycle keeps the table acyclic).
+                        var steps = 0;
+                        for (int? current = parentId; current is { } c && all.ContainsKey(c) && steps++ <= all.Count; current = all[c].ParentFolderId)
                         {
                             if (c == id)
                             {

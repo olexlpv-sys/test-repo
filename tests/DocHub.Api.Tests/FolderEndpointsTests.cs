@@ -6,8 +6,39 @@ using DocHub.Testing.Database;
 namespace DocHub.Api.Tests;
 
 /// <summary>T06: virtual folders through the API (FR-F1…F5).</summary>
-public sealed class FolderEndpointsTests(DocHubApiFactory factory) : IClassFixture<DocHubApiFactory>
+public sealed class FolderEndpointsTests(DocHubApiWithTestEndpointsFactory factory) : IClassFixture<DocHubApiWithTestEndpointsFactory>
 {
+    [Fact]
+    public async Task A_support_script_cannot_create_a_folder_cycle()
+    {
+        var a = await CreateAsync(null, $"Cycle A {Guid.NewGuid():N}");
+        var b = await CreateAsync(a, "B");
+        var c = await CreateAsync(b, "C");
+        await using var support = await SqlSession.OpenAsync(factory.AdminConnectionString);
+
+        var error = await Assert.ThrowsAsync<Microsoft.Data.SqlClient.SqlException>(() =>
+            support.ExecuteAsync("UPDATE app.Folder SET ParentFolderId = @c WHERE Id = @a;", ("@c", c), ("@a", a)));
+
+        Assert.Equal(50040, error.Number);
+        // The tree stays intact and moves keep working.
+        var x = await CreateAsync(null, $"Cycle X {Guid.NewGuid():N}");
+        await ApiClient.ExpectAsync(factory, TestUsers.Admin, HttpMethod.Post, $"/api/folders/{x}/move",
+            new { newParentFolderId = c, rowVersion = await RowVersionAsync(x) }, HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Lost_races_with_a_deleted_or_referenced_folder_map_to_not_found_and_in_use()
+    {
+        var parent = await CreateAsync(null, $"Race {Guid.NewGuid():N}");
+        await CreateAsync(parent, "Child");
+
+        var inUse = await ApiClient.ExpectAsync(factory, TestUsers.Admin, HttpMethod.Delete, $"/__test/folders/raw/{parent}", null, HttpStatusCode.Conflict);
+        Assert.Equal("in-use", inUse.GetProperty("type").GetString());
+
+        var missing = await ApiClient.ExpectAsync(factory, TestUsers.Admin, HttpMethod.Post, "/__test/folders/raw/999999", null, HttpStatusCode.NotFound);
+        Assert.Equal("not-found", missing.GetProperty("type").GetString());
+    }
+
     [Fact]
     public async Task A_five_level_hierarchy_is_returned_nested_and_ordered()
     {

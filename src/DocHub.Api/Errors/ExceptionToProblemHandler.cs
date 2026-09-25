@@ -15,6 +15,7 @@ internal sealed partial class ExceptionToProblemHandler(IProblemDetailsService p
     private const int UniqueIndexViolation = 2601;
     private const int UniqueConstraintViolation = 2627;
     private const int ConstraintViolation = 547;
+    private const int FolderCycle = 50040; // TR_Folder_NoCycle
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
@@ -42,8 +43,12 @@ internal sealed partial class ExceptionToProblemHandler(IProblemDetailsService p
             (StatusCodes.Status409Conflict, UniqueConstraintCodes.For(IndexName(sql.Message)), "Duplicate", "An item with the same key already exists."),
         DbUpdateException { InnerException: SqlException { Number: ConstraintViolation } fk } when InUseReference().IsMatch(fk.Message) =>
             (StatusCodes.Status409Conflict, ErrorCodes.InUse, "In use", "The item is referenced by other data; deactivate it instead."),
+        DbUpdateException { InnerException: SqlException { Number: ConstraintViolation } fk } when MissingParent().IsMatch(fk.Message) =>
+            (StatusCodes.Status404NotFound, ErrorCodes.NotFound, "Not found", "The referenced folder no longer exists."),
         DbUpdateException { InnerException: SqlException { Number: ConstraintViolation } } =>
             (StatusCodes.Status409Conflict, ErrorCodes.Conflict, "Conflict", "The change conflicts with related data."),
+        DbUpdateException { InnerException: SqlException { Number: FolderCycle } } =>
+            (StatusCodes.Status409Conflict, ErrorCodes.InvalidMove, "Invalid move", "A folder can't be moved into itself or into one of its sub-folders."),
         BadHttpRequestException { StatusCode: StatusCodes.Status413PayloadTooLarge } =>
             (StatusCodes.Status413PayloadTooLarge, ErrorCodes.PayloadTooLarge, "Payload too large", "The request body is too large."),
         BadHttpRequestException { StatusCode: StatusCodes.Status415UnsupportedMediaType } =>
@@ -73,9 +78,13 @@ internal sealed partial class ExceptionToProblemHandler(IProblemDetailsService p
     [GeneratedRegex(@"'((?:UX|UQ|PK)_[A-Za-z0-9_]+)'", RegexOptions.CultureInvariant)]
     private static partial Regex IndexNamePattern();
 
-    // A DELETE that lost a race with a new reference (node → node type, content → style, style → base style).
-    [GeneratedRegex(@"DELETE statement conflicted with the REFERENCE constraint ""(FK_DocumentNode_NodeType|FK_ContentStyleUsage_Style|FK_ContentStyle_BasedOn)""", RegexOptions.CultureInvariant)]
+    // A DELETE that lost a race with a new reference (node → node type, content → style, style → base style, folder → parent, document → folder).
+    [GeneratedRegex(@"DELETE statement conflicted with the (?:SAME TABLE )?REFERENCE constraint ""(FK_DocumentNode_NodeType|FK_ContentStyleUsage_Style|FK_ContentStyle_BasedOn|FK_Folder_Parent|FK_Document_Folder)""", RegexOptions.CultureInvariant)]
     private static partial Regex InUseReference();
+
+    // A create/move/document that lost a race with the deletion of the folder it points to.
+    [GeneratedRegex(@"(INSERT|UPDATE) statement conflicted with the FOREIGN KEY (?:SAME TABLE )?constraint ""(FK_Folder_Parent|FK_Document_Folder)""", RegexOptions.CultureInvariant)]
+    private static partial Regex MissingParent();
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Unhandled exception")]
     private static partial void LogUnhandled(ILogger logger, Exception exception);

@@ -46,6 +46,21 @@ internal sealed class TestEndpoints : IEndpointModule
             return TypedResults.Ok(new { folder.Id, folder.RowVersion, folder.CreatedAt });
         }).WithValidation<CreateFolder>();
 
+        // Skip the endpoints' pre-checks to hit the database constraints directly (lost races, T06 review).
+        group.MapPost("/folders/raw/{parentId:int}", async (int parentId, DocHubDbContext db, CancellationToken ct) =>
+        {
+            db.Folders.Add(new Folder { ParentFolderId = parentId, Name = $"raw {Guid.NewGuid():N}", SortOrder = 1, CreatedByUserId = 1 });
+            await db.SaveChangesAsync(ct);
+            return TypedResults.Ok();
+        });
+
+        group.MapDelete("/folders/raw/{id:int}", async (int id, DocHubDbContext db, CancellationToken ct) =>
+        {
+            db.Folders.Remove(await db.Folders.SingleAsync(f => f.Id == id, ct));
+            await db.SaveChangesAsync(ct);
+            return TypedResults.NoContent();
+        });
+
         group.MapPost("/errors/{kind}", IResult (string kind) => throw kind switch
         {
             "validation" => DomainException.Validation("Bad input."),
