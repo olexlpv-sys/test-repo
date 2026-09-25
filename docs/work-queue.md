@@ -3,7 +3,7 @@
 The single source of "what's next". Process rules: [process.md](process.md). Dependencies & rationale: [execution plan](tasks/00-execution-plan.md).
 
 ## Protocol (per item)
-1. Take the **first `todo` item whose dependencies are `done`** (items with the same lane letter can run in parallel).
+1. Take the **first `todo` item whose dependencies are `done`** (items with **different** lane letters can run in parallel in separate agent sessions; items within one lane run in lane order).
 2. Set `in-progress`, load **only** the task file + its *Read first* list.
 3. Implement with tests ([testing strategy](testing-strategy.md)); CI green; open PR.
 4. Set `in-review`; request review with the template in [process §5](process.md#5-review-request-template-keep-it-this-small) in a fresh context.

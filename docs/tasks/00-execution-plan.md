@@ -28,7 +28,7 @@ Source requirements: [requirements/](../requirements/README.md) · Decisions: [a
 | [T20](T20-pdf-export.md) | PDF export: async jobs, headless Chromium, cache, UI | T05, T07, T09, T10, T15 | L | M3 Web UI |
 | [T19](T19-load-and-performance.md) | Load & performance harness + tuning | T07–T09 (harness), T10–T15, T18, T20 (full mix) | L | M4 Performance |
 
-**Effort** is measured in agent work, not person-days — see [process §9](../process.md#9-sizing-and-agent-effort). Initial estimate: ≈ 60–90 agent-hours in total, ≈ 30–40 h wall-clock with three parallel lanes, plus waiting time on product-owner decisions; recalibrated from the actuals in the work queue after Q02–Q04. Load profile: [12-load-and-performance](../requirements/12-load-and-performance.md).
+**Effort** is measured in agent work, not person-days — see [process §9](../process.md#9-sizing-and-agent-effort). Initial estimate: ≈ 60–90 agent-hours in total, ≈ 35–75 h wall-clock with three parallel lanes (bounded below by the critical path, sized with the §9 table), plus waiting time on product-owner decisions; recalibrated from the actuals in the work queue after Q02–Q04. Load profile: [12-load-and-performance](../requirements/12-load-and-performance.md).
 
 ## 2. Dependency graph
 
@@ -78,9 +78,9 @@ flowchart TD
   T14 --> T17
 
   classDef crit fill:#fde2e1,stroke:#c0392b,color:#000;
-  class T01,T02,T03,T04,T06,T07,T08,T09,T11,T15,T16 crit;
+  class T01,T02,T03,T04,T06,T07,T08,T09,T11,T15,T20,T19 crit;
 ```
-Red = **critical path**: T01 → T02 → T03 → T04 → T06 → T07 → T08 → T09 → T11 → T15 → T16 (the longest sequential chain of queue items).
+Red = **critical path**: T01 → T02 → T03 → T04 → T06 → T07 → T08 → T09 → T11 → T15 → T20 → T19 → release candidate (Q20) — the longest dependency chain in the work queue.
 
 ## 3. Suggested sequencing
 
