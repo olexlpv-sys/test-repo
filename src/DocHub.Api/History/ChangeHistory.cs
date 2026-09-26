@@ -122,13 +122,14 @@ public sealed class ChangeHistory(DocHubDbContext db, IContentDiffService diff)
                 Parameter("@l", logicalNodeId), Parameter("@d", documentId))
             .ToListAsync(cancellationToken);
 
-    /// <summary>A document's rows, optionally filtered (index on DocumentId, ChangedAt).</summary>
+    /// <summary>A document's rows, optionally filtered (index on DocumentId, ChangedAt); the worker's export job progress updates are left out.</summary>
     public Task<List<ChangeLogRow>> DocumentRowsAsync(int documentId, int? versionId, DateTime? from, DateTime? to, int? userId, string? source, CancellationToken cancellationToken) =>
         db.Database.SqlQueryRaw<ChangeLogRow>(
                 $"""
                 SELECT {Columns} FROM [audit].[ChangeLog]
                 WHERE [DocumentId] = @d AND [ChangedAt] >= @from AND [ChangedAt] < @to
                   AND (@v IS NULL OR [DocumentVersionId] = @v) AND (@u IS NULL OR [UserId] = @u) AND (@s IS NULL OR [Source] = @s)
+                  AND NOT ([TableName] = N'app.ExportJob' AND [Operation] <> 'I' AND [Source] = N'App')
                 """,
                 Parameter("@d", documentId), Parameter("@from", from ?? DateTime.MinValue), Parameter("@to", to ?? DateTime.MaxValue),
                 Parameter("@v", versionId), Parameter("@u", userId), Parameter("@s", source))
@@ -307,6 +308,7 @@ public sealed class ChangeHistory(DocHubDbContext db, IContentDiffService diff)
             ("app.DocumentPermission", "D") => ("PermissionRevoked", [new FieldChange("role", Role(row.Old("Role")), null), new FieldChange("userId", row.Old("UserId"), null)]),
             ("app.VersionSignature", "I") => ("SignatureAdded", changes),
             ("app.VersionSignature", "U") when row.Columns.Contains("WithdrawnAt") => ("SignatureWithdrawn", changes),
+            ("app.ExportJob", "I") => ("PdfExportRequested", []),
             ("app.Comment", "I") => ("CommentAdded", changes),
             ("app.Comment", _) => ("CommentChanged", changes),
             ("app.Document", "I") => ("DocumentCreated", [new FieldChange("title", null, row.New("Title"))]),
@@ -346,6 +348,7 @@ public sealed class ChangeHistory(DocHubDbContext db, IContentDiffService diff)
         "SignatureAdded" => "Signed",
         "SignatureWithdrawn" => "Signature withdrawn",
         "CommentAdded" => "Comment added",
+        "PdfExportRequested" => "PDF export requested",
         "DocumentCreated" => "Document created",
         "DocumentDeleted" => "Document deleted",
         "DocumentRestored" => "Document restored",

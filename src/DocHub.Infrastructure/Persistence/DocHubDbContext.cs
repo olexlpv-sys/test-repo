@@ -35,6 +35,8 @@ public sealed class DocHubDbContext(DbContextOptions<DocHubDbContext> options) :
 
     public DbSet<Comment> Comments => Set<Comment>();
 
+    public DbSet<ExportJob> ExportJobs => Set<ExportJob>();
+
     public DbSet<ReconciliationFinding> ReconciliationFindings => Set<ReconciliationFinding>();
 
     public DbSet<VersionContentHash> VersionContentHashes => Set<VersionContentHash>();

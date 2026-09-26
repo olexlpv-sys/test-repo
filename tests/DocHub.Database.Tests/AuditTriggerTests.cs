@@ -14,7 +14,7 @@ public sealed class AuditTriggerTests(DocHubDatabaseFixture database) : IClassFi
     private static readonly string[] AuditedTables =
     [
         "app.Comment", "app.ContentStyle", "app.Document", "app.DocumentNode", "app.DocumentPermission", "app.DocumentVersion",
-        "app.Folder", "app.NodeContent", "app.NodeType", "app.User", "app.VersionSignature",
+        "app.ExportJob", "app.Folder", "app.NodeContent", "app.NodeType", "app.User", "app.VersionSignature",
     ];
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

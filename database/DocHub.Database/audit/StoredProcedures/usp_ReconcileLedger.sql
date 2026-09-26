@@ -402,6 +402,36 @@ BEGIN
         ON [d].[ledger_transaction_id] = [i].[ledger_transaction_id] AND [d].[Id] = [i].[Id] AND [d].[n] = [i].[n]
     JOIN [#Tx] AS [t] ON [t].[TransactionId] = COALESCE([i].[ledger_transaction_id], [d].[ledger_transaction_id]);
 
+    WITH [l] AS (
+        SELECT [x].*, ROW_NUMBER() OVER (PARTITION BY [x].[ledger_transaction_id], [x].[Id], [x].[ledger_operation_type] ORDER BY [x].[ledger_sequence_number]) AS [n]
+        FROM [app].[ExportJob_Ledger] AS [x]
+        JOIN [#Tx] AS [tx] ON [tx].[TransactionId] = [x].[ledger_transaction_id])
+    INSERT INTO [#Change] ([TableName], [EntityId], [TransactionId], [DocumentId], [VersionNew], [VersionOld], [Audited])
+    SELECT N'app.ExportJob', COALESCE([i].[Id], [d].[Id]), [t].[TransactionId],
+           COALESCE([i].[DocumentId], [d].[DocumentId]),
+           NULL, NULL,
+           CASE WHEN [i].[Id] IS NULL OR [d].[Id] IS NULL
+         OR [i].[DocumentId] IS DISTINCT FROM [d].[DocumentId]
+                     OR [i].[DocumentVersionId] IS DISTINCT FROM [d].[DocumentVersionId]
+                     OR [i].[LogicalNodeId] IS DISTINCT FROM [d].[LogicalNodeId]
+                     OR CAST([i].[OptionsJson] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[OptionsJson] AS VARBINARY (MAX))
+                     OR [i].[Status] IS DISTINCT FROM [d].[Status]
+                     OR [i].[Progress] IS DISTINCT FROM [d].[Progress]
+                     OR [i].[RequestedByUserId] IS DISTINCT FROM [d].[RequestedByUserId]
+                     OR [i].[RequestedAt] IS DISTINCT FROM [d].[RequestedAt]
+                     OR [i].[StartedAt] IS DISTINCT FROM [d].[StartedAt]
+                     OR [i].[FinishedAt] IS DISTINCT FROM [d].[FinishedAt]
+                     OR CAST([i].[Error] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[Error] AS VARBINARY (MAX))
+                     OR CAST([i].[BlobPath] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[BlobPath] AS VARBINARY (MAX))
+                     OR CAST([i].[FileName] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[FileName] AS VARBINARY (MAX))
+                     OR [i].[FileSize] IS DISTINCT FROM [d].[FileSize]
+                     OR CAST([i].[CacheKey] AS VARBINARY (MAX)) IS DISTINCT FROM CAST([d].[CacheKey] AS VARBINARY (MAX))
+                THEN 1 ELSE 0 END
+    FROM (SELECT * FROM [l] WHERE [l].[ledger_operation_type] = 1) AS [i]
+    FULL OUTER JOIN (SELECT * FROM [l] WHERE [l].[ledger_operation_type] = 2) AS [d]
+        ON [d].[ledger_transaction_id] = [i].[ledger_transaction_id] AND [d].[Id] = [i].[Id] AND [d].[n] = [i].[n]
+    JOIN [#Tx] AS [t] ON [t].[TransactionId] = COALESCE([i].[ledger_transaction_id], [d].[ledger_transaction_id]);
+
     -- ChangeLog rows written in the window (hidden ledger column: written by SQL Server, immutable).
     CREATE TABLE [#Log]
     (
@@ -446,7 +476,7 @@ BEGIN
                                    AND EXISTS (SELECT 1 FROM [#FindingTx] AS [f] WHERE [f].[Id] = [cl].[EntityId] AND [f].[TransactionId] = [cl].[TransactionId])
                               THEN NULL
                               ELSE N'reconciliation row without a finding inserted in the same transaction' END
-                     WHEN [cl].[TableName] NOT IN (N'app.User', N'app.Folder', N'app.NodeType', N'app.ContentStyle', N'app.Document', N'app.DocumentVersion', N'app.VersionSignature', N'app.DocumentNode', N'app.NodeContent', N'app.DocumentPermission', N'app.Comment') THEN N'not an audited table'
+                     WHEN [cl].[TableName] NOT IN (N'app.User', N'app.Folder', N'app.NodeType', N'app.ContentStyle', N'app.Document', N'app.DocumentVersion', N'app.VersionSignature', N'app.DocumentNode', N'app.NodeContent', N'app.DocumentPermission', N'app.Comment', N'app.ExportJob') THEN N'not an audited table'
                      WHEN NOT EXISTS (SELECT 1 FROM [#Change] AS [c]
                                       WHERE [c].[TableName] = [cl].[TableName] AND [c].[EntityId] = [cl].[EntityId] AND [c].[TransactionId] = [cl].[TransactionId])
                          THEN N'its ledger transaction did not change the entity'
@@ -589,6 +619,29 @@ BEGIN
         (N'app', N'DocumentVersion', N'ledger_start_sequence_number'),
         (N'app', N'DocumentVersion', N'ledger_end_transaction_id'),
         (N'app', N'DocumentVersion', N'ledger_end_sequence_number'),
+        (N'app', N'ExportJob', N'Id'),
+        (N'app', N'ExportJob', N'DocumentId'),
+        (N'app', N'ExportJob', N'DocumentVersionId'),
+        (N'app', N'ExportJob', N'LogicalNodeId'),
+        (N'app', N'ExportJob', N'OptionsJson'),
+        (N'app', N'ExportJob', N'Status'),
+        (N'app', N'ExportJob', N'Progress'),
+        (N'app', N'ExportJob', N'RequestedByUserId'),
+        (N'app', N'ExportJob', N'RequestedAt'),
+        (N'app', N'ExportJob', N'StartedAt'),
+        (N'app', N'ExportJob', N'FinishedAt'),
+        (N'app', N'ExportJob', N'Error'),
+        (N'app', N'ExportJob', N'BlobPath'),
+        (N'app', N'ExportJob', N'FileName'),
+        (N'app', N'ExportJob', N'FileSize'),
+        (N'app', N'ExportJob', N'CacheKey'),
+        (N'app', N'ExportJob', N'RowVersion'),
+        (N'app', N'ExportJob', N'ValidFrom'),
+        (N'app', N'ExportJob', N'ValidTo'),
+        (N'app', N'ExportJob', N'ledger_start_transaction_id'),
+        (N'app', N'ExportJob', N'ledger_start_sequence_number'),
+        (N'app', N'ExportJob', N'ledger_end_transaction_id'),
+        (N'app', N'ExportJob', N'ledger_end_sequence_number'),
         (N'app', N'Folder', N'Id'),
         (N'app', N'Folder', N'ParentFolderId'),
         (N'app', N'Folder', N'Name'),

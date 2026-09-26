@@ -13,6 +13,7 @@ const kindLabels: Record<string, string> = {
   VersionDiscarded: 'draft discarded',
   SignatureAdded: 'signature',
   SignatureWithdrawn: 'signature withdrawn',
+  PdfExportRequested: 'PDF export',
 };
 
 /** Short kind label for a timeline row (content, rename, type change, move, created, copied to draft). */

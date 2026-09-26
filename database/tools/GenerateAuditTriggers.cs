@@ -73,6 +73,13 @@ var tables = new[]
         DocumentVersionId = "{r}.[DocumentVersionId]",
         LogicalNodeId = "{r}.[LogicalNodeId]",
     },
+    // PDF exports (T20, FR-E7): who exported what, with which options. Document and version only — no LogicalNodeId, so an
+    // exported subtree does not show up in that node's history or change counts; exports never advance the version stamp.
+    new AuditedTable("ExportJob", "Id", [C("DocumentId"), C("DocumentVersionId"), C("LogicalNodeId"), S("OptionsJson"), C("Status"), C("Progress"), C("RequestedByUserId"), C("RequestedAt"), C("StartedAt"), C("FinishedAt"), S("Error"), S("BlobPath"), S("FileName"), C("FileSize"), S("CacheKey")])
+    {
+        DocumentId = "{r}.[DocumentId]",
+        DocumentVersionId = "{r}.[DocumentVersionId]",
+    },
 };
 
 var triggerDirectory = Path.Combine(project, "app", "Triggers");

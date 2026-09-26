@@ -9,12 +9,12 @@ public sealed class DeploymentTests(SqlServerContainerFixture server)
     private static readonly string[] ExpectedTables =
     [
         "app.Comment", "app.ContentStyle", "app.ContentStyleUsage", "app.Document", "app.DocumentNode",
-        "app.DocumentPermission", "app.DocumentVersion", "app.Folder", "app.NodeContent", "app.NodeType",
+        "app.DocumentPermission", "app.DocumentVersion", "app.ExportJob", "app.Folder", "app.NodeContent", "app.NodeType",
         "app.User", "app.VersionContentHash", "app.VersionSignature", "app.VersionStamp",
         "audit.ChangeLog", "audit.ReconciliationBaseline", "audit.ReconciliationFinding",
         // History tables of the temporal + ledger tables (T21).
         "history.Comment", "history.ContentStyle", "history.Document", "history.DocumentNode", "history.DocumentPermission",
-        "history.DocumentVersion", "history.Folder", "history.NodeContent", "history.NodeType", "history.User",
+        "history.DocumentVersion", "history.ExportJob", "history.Folder", "history.NodeContent", "history.NodeType", "history.User",
         "history.VersionSignature", "history.VersionStamp",
     ];
 

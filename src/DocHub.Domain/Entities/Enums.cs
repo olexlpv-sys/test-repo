@@ -19,3 +19,12 @@ public enum ContentStyleKind : byte
     Character = 2,
     Table = 3,
 }
+
+/// <summary>PDF export job state (T20); stored as <c>app.ExportJob.Status</c>.</summary>
+public enum ExportStatus : byte
+{
+    Queued = 0,
+    Running = 1,
+    Succeeded = 2,
+    Failed = 3,
+}
