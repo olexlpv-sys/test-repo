@@ -34,8 +34,8 @@ internal sealed class CompareEndpoints : IEndpointModule
                 }
 
                 // Signed versions change only by tampering, which advances their stamps (NFR-L9).
-                var key = string.Create(CultureInfo.InvariantCulture,
-                    $"compare:{baseVersion.Id}:{await VersionETag.StampAsync(db, baseVersion.Id, ct)}:{targetVersion.Id}:{await VersionETag.StampAsync(db, targetVersion.Id, ct)}:{includeUnchanged ?? false}");
+                var (baseStamp, targetStamp) = (await VersionETag.StampAsync(db, baseVersion.Id, ct), await VersionETag.StampAsync(db, targetVersion.Id, ct));
+                var key = string.Create(CultureInfo.InvariantCulture, $"compare:{baseVersion.Id}:{baseStamp}:{targetVersion.Id}:{targetStamp}:{includeUnchanged ?? false}");
                 return TypedResults.Ok(await cache.GetOrCreateAsync(key, async token => await Compute(token), cancellationToken: ct));
             })
             .WithTags("Compare")
