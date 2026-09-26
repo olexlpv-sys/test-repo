@@ -32,7 +32,7 @@ public static class AttributedDiff
         /// <summary>Who last actually moved this character's block (cleared when the block is back in baseline order).</summary>
         public DiffAuthor? MovedBy { get; set; }
 
-        /// <summary>Who last moved another block across this one while it is out of order (weaker than an own move).</summary>
+        /// <summary>Who last moved another block across this one while it is out of order (weaker than an own move or a restructure).</summary>
         public DiffAuthor? DisplacedBy { get; set; }
 
         /// <summary>Who last restructured this character's block: split, merged or largely rewrote it.</summary>
@@ -46,21 +46,23 @@ public static class AttributedDiff
         var baseline = Flatten(baselineJson);
         var index = 0;
         var state = baseline.Select(block => block.Select(p => new CharInfo(p.C, p.Marks, index++, null, null)).ToList()).ToList();
+        var blockOf = baseline.SelectMany((block, b) => Enumerable.Repeat(b, block.Count)).ToArray();
         var deletedBy = new Dictionary<int, DiffAuthor>();
 
         foreach (var step in steps)
         {
             var moved = new List<List<CharInfo>>();
             state = Apply(state, Flatten(step.Json), step.Author, deletedBy, moved);
-            MarkMoves(state, moved, step.Author);
+            MarkMoves(state, moved, step.Author, blockOf);
         }
 
         // Baseline characters that survive: who moved / restructured them (for deletes the final diff shows of moved text).
         var movedBy = new Dictionary<int, DiffAuthor>();
         foreach (var c in state.SelectMany(b => b))
         {
-            // Deletes of text that went elsewhere belong to whoever moved it away (before any later split of it).
-            if (c.BaselineIndex is { } i && (c.MovedBy ?? c.DisplacedBy ?? c.PlacedBy) is { } by)
+            // Deletes of text that went elsewhere belong to whoever moved it away (before any later split of it), else to whoever
+            // restructured it; being pushed out of order by someone else's move is the weakest reason.
+            if (c.BaselineIndex is { } i && (c.MovedBy ?? c.PlacedBy ?? c.DisplacedBy) is { } by)
             {
                 movedBy[i] = by;
             }
@@ -442,68 +444,94 @@ public static class AttributedDiff
     }
 
     /// <summary>
-    /// After a step: blocks this step actually moved are moved by its author (a newer move overrides an older one); blocks
-    /// they now jump over are displaced by the author (the final diff may show either side of a swap as the moved one).
-    /// Blocks back in baseline order (no inversion with any other block) lose both marks — an undone move leaves nothing.
+    /// After a step: blocks this step actually moved are moved by its author (a newer move overrides an older one); text they
+    /// now jump over is displaced by the author (the final diff may show either side of a swap as the moved one). Order is
+    /// judged per run of text from one baseline block, so a merged block's parts are judged separately. Runs back in baseline
+    /// order (no inversion with any other run) lose both marks — an undone move leaves nothing. Linear in the document size.
     /// </summary>
-    private static void MarkMoves(List<List<CharInfo>> state, List<List<CharInfo>> moved, DiffAuthor author)
+    private static void MarkMoves(List<List<CharInfo>> state, List<List<CharInfo>> moved, DiffAuthor author, int[] blockOf)
     {
-        var positions = new List<(int Block, int Position)>();
+        var movedSet = new HashSet<List<CharInfo>>(moved, ReferenceEqualityComparer.Instance);
+        var runs = new List<(int Block, int Position, List<CharInfo> Chars)>();
         for (var b = 0; b < state.Count; b++)
         {
-            if (state[b].FirstOrDefault(c => c.BaselineIndex is not null) is { BaselineIndex: { } position })
+            List<CharInfo>? run = null;
+            foreach (var c in state[b])
             {
-                positions.Add((b, position));
+                if (c.BaselineIndex is not { } i)
+                {
+                    continue;
+                }
+
+                if (run is null || blockOf[run[0].BaselineIndex!.Value] != blockOf[i])
+                {
+                    run = [];
+                    runs.Add((b, i, run));
+                }
+
+                run.Add(c);
             }
         }
 
-        // Out of order at all: prefix maximum / suffix minimum (linear).
-        var suffixMin = new int[positions.Count + 1];
-        suffixMin[positions.Count] = int.MaxValue;
-        for (var i = positions.Count - 1; i >= 0; i--)
+        // Out of order at all: prefix maximum / suffix minimum over the runs.
+        var suffixMin = new int[runs.Count + 1];
+        suffixMin[runs.Count] = int.MaxValue;
+        for (var k = runs.Count - 1; k >= 0; k--)
         {
-            suffixMin[i] = Math.Min(suffixMin[i + 1], positions[i].Position);
+            suffixMin[k] = Math.Min(suffixMin[k + 1], runs[k].Position);
         }
 
-        var outOfOrder = new HashSet<int>();
+        var outOfOrder = new bool[runs.Count];
         var prefixMax = int.MinValue;
-        for (var i = 0; i < positions.Count; i++)
+        for (var k = 0; k < runs.Count; k++)
         {
-            if (prefixMax > positions[i].Position || suffixMin[i + 1] < positions[i].Position)
-            {
-                outOfOrder.Add(positions[i].Block);
-            }
-
-            prefixMax = Math.Max(prefixMax, positions[i].Position);
+            outOfOrder[k] = prefixMax > runs[k].Position || suffixMin[k + 1] < runs[k].Position;
+            prefixMax = Math.Max(prefixMax, runs[k].Position);
         }
 
-        var movedSet = new HashSet<List<CharInfo>>(moved, ReferenceEqualityComparer.Instance);
-        for (var k = 0; k < positions.Count; k++)
+        // Inverted with a run moved in this step (in another block): the moved runs' prefix maximum before the run's block and
+        // suffix minimum after it.
+        bool Moved(int k) => movedSet.Contains(state[runs[k].Block]);
+        var movedMinAfter = new int[runs.Count];
+        for (int k = runs.Count - 1, min = int.MaxValue, blockMin = int.MaxValue; k >= 0; k--)
         {
-            var (block, position) = positions[k];
-            var chars = state[block].Where(c => c.BaselineIndex is not null).ToList();
-            if (!outOfOrder.Contains(block))
+            if (k == runs.Count - 1 || runs[k].Block != runs[k + 1].Block)
+            {
+                min = Math.Min(min, blockMin);
+                blockMin = int.MaxValue;
+            }
+
+            movedMinAfter[k] = min;
+            blockMin = Moved(k) ? Math.Min(blockMin, runs[k].Position) : blockMin;
+        }
+
+        for (int k = 0, max = int.MinValue, blockMax = int.MinValue; k < runs.Count; k++)
+        {
+            if (k > 0 && runs[k].Block != runs[k - 1].Block)
+            {
+                max = Math.Max(max, blockMax);
+                blockMax = int.MinValue;
+            }
+
+            var (_, position, chars) = runs[k];
+            if (!outOfOrder[k])
             {
                 chars.ForEach(c => (c.MovedBy, c.DisplacedBy) = (null, null));
-                continue;
             }
-
-            if (movedSet.Contains(state[block]))
+            else
             {
-                chars.ForEach(c => c.MovedBy = author);
-            }
-        }
-
-        // Blocks inverted with a block moved in this step were jumped over by this author.
-        foreach (var (movedIndex, movedPosition) in positions.Where(p => movedSet.Contains(state[p.Block])))
-        {
-            foreach (var (block, position) in positions)
-            {
-                if (block != movedIndex && outOfOrder.Contains(block) && (block < movedIndex) != (position < movedPosition))
+                if (Moved(k))
                 {
-                    state[block].Where(c => c.BaselineIndex is not null).ToList().ForEach(c => c.DisplacedBy = author);
+                    chars.ForEach(c => c.MovedBy = author);
+                }
+
+                if (max > position || movedMinAfter[k] < position)
+                {
+                    chars.ForEach(c => c.DisplacedBy = author);
                 }
             }
+
+            blockMax = Moved(k) ? Math.Max(blockMax, position) : blockMax;
         }
     }
 

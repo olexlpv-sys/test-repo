@@ -279,6 +279,55 @@ public sealed class AttributedDiffTests
     }
 
     [Fact]
+    public void Being_pushed_out_of_order_does_not_claim_a_later_split_or_merge()
+    {
+        var baseline = Doc("Xa one.", "Yb two.", "Zc three.", "Wd four.", "Ve five.");
+        var pushed = Doc("Ve five.", "Xa one.", "Yb two.", "Zc three.", "Wd four.");
+        foreach (var restructured in new[]
+                 {
+                     Doc("Ve five.", "Xa", "one.", "Yb two.", "Zc three.", "Wd four."),
+                     Doc("Ve five.", "Xa one. Yb two.", "Zc three.", "Wd four."),
+                 })
+        {
+            var ops = AttributedDiff.Diff(Service, baseline, [new ContentStep(pushed, Alice), new ContentStep(restructured, Bob)])
+                .Blocks.SelectMany(b => b.Ops ?? []).Where(o => o.Op != "equal").ToList();
+            Assert.All(ops.Where(o => o.Text.Contains("Xa", StringComparison.Ordinal) || o.Text.Contains("one", StringComparison.Ordinal)),
+                o => Assert.Equal("Bob", o.By!.DisplayName));
+            Assert.All(ops.Where(o => o.Text.Contains("Ve", StringComparison.Ordinal)), o => Assert.Equal("Alice", o.By!.DisplayName));
+        }
+    }
+
+    [Fact]
+    public void Text_moved_away_and_then_merged_stays_with_the_mover()
+    {
+        var baseline = Doc("Xa one.", "Yb two.", "Zc three.", "Wd four.", "Ve five.");
+        var steps = new[]
+        {
+            new ContentStep(Doc("Yb two.", "Zc three.", "Wd four.", "Ve five.", "Xa one."), Alice),
+            new ContentStep(Doc("Yb two.", "Zc three.", "Wd four.", "Ve five. Xa one."), Bob),
+        };
+
+        var blocks = AttributedDiff.Diff(Service, baseline, steps).Blocks;
+        var first = blocks.First(b => b.Ops is not null && b.Status != "equal");
+        Assert.All(first.Ops!.Where(o => o.Op == "delete"), o => Assert.Equal("Alice", o.By!.DisplayName));
+        Assert.Contains(first.Ops!, o => o.Op == "delete" && o.Text.Contains("Xa one.", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("swap")]
+    [InlineData("reverse")]
+    public void Moving_many_paragraphs_at_once_is_attributed_in_linear_time(string kind)
+    {
+        var paragraphs = Enumerable.Range(0, 2000).Select(i => $"Paragraph {i} has about ten words of text in it.").ToArray();
+        var changed = kind == "swap" ? [.. paragraphs[1000..], .. paragraphs[..1000]] : paragraphs.Reverse().ToArray();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var diff = AttributedDiff.Diff(Service, Doc(paragraphs), [new ContentStep(Doc(changed), Alice)]);
+        watch.Stop();
+        Assert.All(diff.Blocks.SelectMany(b => b.Ops ?? []).Where(o => o.Op != "equal"), o => Assert.Equal("Alice", o.By!.DisplayName));
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(1.5), $"took {watch.Elapsed.TotalMilliseconds:F0} ms");
+    }
+
+    [Fact]
     public void Swapping_a_long_paragraph_is_attributed_in_linear_time()
     {
         var words = string.Join(' ', Enumerable.Range(0, 16000).Select(i => $"word{i % 997}"));
