@@ -142,6 +142,29 @@ describe('folder tree (FR-UI1, FR-F5)', () => {
     expect(calls.find((c) => c.method === 'PUT')?.path).toBe('/api/folders/11');
   });
 
+  it('renames with the row version seen when the dialog opened, so a concurrent change is a conflict', async () => {
+    let reads = 0;
+    fakeApi(
+      routes({
+        'GET /api/folders/(\\d+)': (_r, m) => ({
+          ...folder(Number(m[1]), 'Policies'),
+          rowVersion: reads++ === 0 ? 'seen' : 'newer',
+        }),
+        'PUT /api/folders/(\\d+)': (r) =>
+          (r.body as { rowVersion: string }).rowVersion === 'newer'
+            ? folder(11, 'x')
+            : new Reply(409, { type: 'concurrency-conflict', title: 'Conflict' }),
+      }),
+    );
+    renderApp();
+    await openActions('Policies');
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Rename folder' });
+    await userEvent.type(within(dialog).getByLabelText('Name'), ' 2');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Changed by someone else')).toBeInTheDocument();
+  });
+
   it('moves a folder to the top level but never into itself', async () => {
     const { calls } = fakeApi(routes({ 'POST /api/folders/(\\d+)/move': (_r, m) => folder(Number(m[1]), 'Archive') }));
     renderApp('/?folder=12');

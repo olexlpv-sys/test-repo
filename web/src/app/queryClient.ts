@@ -10,7 +10,8 @@ function toast(error: unknown): void {
 /** Server state; every failed request shows a toast with the ProblemDetails title and detail. */
 export function createQueryClient(): QueryClient {
   return new QueryClient({
-    queryCache: new QueryCache({ onError: toast }),
+    // Queries that handle their errors themselves set meta.silent.
+    queryCache: new QueryCache({ onError: (error, query) => !query.meta?.silent && toast(error) }),
     mutationCache: new MutationCache({
       // Mutations that handle a specific error themselves set meta.silent.
       onError: (error, _variables, _context, mutation) => {

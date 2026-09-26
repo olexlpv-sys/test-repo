@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { Center, Loader, Text } from '@mantine/core';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, setActingUserId, unwrap } from '../api/client';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api, ApiError, describeError, setActingUserId, unwrap } from '../api/client';
 import { SessionContext, type Session } from './sessionContext';
 
 const StorageKey = 'dochub.actingUserId';
@@ -23,6 +23,14 @@ function readRecent(): number[] {
     return Array.isArray(parsed) ? parsed.filter((n): n is number => Number.isInteger(n)).slice(0, MaxRecent) : [];
   } catch {
     return [];
+  }
+}
+
+function remove(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Storage unavailable: nothing was stored.
   }
 }
 
@@ -74,15 +82,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     queryKey: ['me', effectiveUserId],
     queryFn: () => unwrap(api.GET('/api/me')),
     enabled: effectiveUserId !== null || (info.isSuccess && !testMode),
+    meta: { silent: true },
+    placeholderData: keepPreviousData,
   });
+
+  // The stored user was deactivated or removed (401): forget it and act as the default user again.
+  if (testMode && userId !== null && me.error instanceof ApiError && me.error.status === 401) {
+    setUserId(null);
+    remove(StorageKey);
+  }
 
   const value = useMemo<Session>(
     () => ({ testMode, userId: effectiveUserId, me: me.data, recentUserIds, actAs }),
     [testMode, effectiveUserId, me.data, recentUserIds, actAs],
   );
-  // Nothing asks the API before it is known who acts (test mode) — otherwise every first request would fail with 401.
-  if (!info.isSuccess || (testMode && effectiveUserId === null)) {
-    return <Center h="100vh">{info.isError ? <Text c="red">The API is not reachable.</Text> : <Loader />}</Center>;
+  // Nothing asks the API before it is known who acts and that the API accepts them (test mode) — otherwise every request
+  // would fail with 401. Switching keeps the previous user's data on screen until the new one is confirmed.
+  if (!info.isSuccess || (testMode && !me.isSuccess)) {
+    const failure = info.isError
+      ? 'The API is not reachable.'
+      : me.isError && userId === null
+        ? describeError(me.error).message
+        : null;
+    return <Center h="100vh">{failure ? <Text c="red">{failure}</Text> : <Loader />}</Center>;
   }
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

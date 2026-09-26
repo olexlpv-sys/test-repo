@@ -56,6 +56,7 @@ describe('session (test auth mode, FR-UI4)', () => {
     await screen.findByRole('tab', { name: 'Admin' });
 
     const input = screen.getByRole('combobox', { name: 'Acting as' });
+    await waitFor(() => expect(input).toHaveValue('Administrator (admin) · admin')); // the directory has loaded
     await userEvent.clear(input);
     await userEvent.type(input, 'bob');
     await waitFor(() =>
@@ -82,6 +83,18 @@ describe('session (test auth mode, FR-UI4)', () => {
     expect(screen.queryByText('Test mode')).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Acting as' })).not.toBeInTheDocument();
     expect(calls.every((c) => !c.headers.has('X-User-Id'))).toBe(true);
+  });
+
+  it('forgets a stored user the API no longer accepts and acts as the default user', async () => {
+    localStorage.setItem('dochub.actingUserId', '999');
+    const { calls } = fakeApi({ ...baseRoutes(), ...emptyTree });
+    renderApp();
+
+    expect(await screen.findByRole('tab', { name: 'Admin' })).toBeInTheDocument();
+    expect(localStorage.getItem('dochub.actingUserId')).toBeNull();
+    // Only /api/me was asked with the stale id; nothing failed on screen.
+    expect(calls.filter((c) => c.headers.get('X-User-Id') === '999').map((c) => c.path)).toEqual(['/api/me']);
+    expect(screen.queryByText(/Unauthorized|Authentication/)).not.toBeInTheDocument();
   });
 
   it('says so when the API is not reachable', async () => {

@@ -16,7 +16,7 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useFolderTree } from '../api/queries';
-import { api, ApiError, unwrap, type Schemas } from '../api/client';
+import { api, ApiError, describeError, unwrap, type Schemas } from '../api/client';
 
 type FolderNode = Schemas['FolderNode'];
 
@@ -45,6 +45,14 @@ function pathTo(nodes: FolderNode[], id: number, path: number[] = []): number[] 
   return null;
 }
 
+/** A new folder (id = parent) or a rename, with the row version read when the dialog opened (a concurrent change → 409). */
+interface Edit {
+  mode: 'create' | 'rename';
+  id: number | null;
+  name: string;
+  rowVersion?: string;
+}
+
 async function folderRowVersion(id: number): Promise<string> {
   return (await unwrap(api.GET('/api/folders/{id}', { params: { path: { id } } }))).rowVersion;
 }
@@ -62,8 +70,8 @@ export function FolderTree({ selectedId, onSelect, manage }: FolderTreeProps) {
   const folders = useFolderTree();
   const data = useMemo(() => toTreeData(folders.data ?? []), [folders.data]);
   const tree = useTree();
-  const [editing, setEditing] = useState<{ mode: 'create' | 'rename'; id: number | null; name: string } | null>(null);
-  const [moving, setMoving] = useState<number | null>(null);
+  const [editing, setEditing] = useState<Edit | null>(null);
+  const [moving, setMoving] = useState<{ id: number; rowVersion: string } | null>(null);
 
   // Expand down to the selected folder (deep links: ?folder=12) — once per selection, in one state update (tree.expand
   // changes identity on every expansion, so it can't be an effect dependency).
@@ -81,12 +89,12 @@ export function FolderTree({ selectedId, onSelect, manage }: FolderTreeProps) {
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['folders'] });
 
   const save = useMutation({
-    mutationFn: async (edit: { mode: 'create' | 'rename'; id: number | null; name: string }) =>
-      edit.mode === 'rename' && edit.id !== null
+    mutationFn: (edit: Edit) =>
+      edit.mode === 'rename' && edit.id !== null && edit.rowVersion
         ? unwrap(
             api.PUT('/api/folders/{id}', {
               params: { path: { id: edit.id } },
-              body: { name: edit.name, rowVersion: await folderRowVersion(edit.id) },
+              body: { name: edit.name, rowVersion: edit.rowVersion },
             }),
           )
         : unwrap(api.POST('/api/folders', { body: { parentFolderId: edit.id, name: edit.name } })),
@@ -100,12 +108,8 @@ export function FolderTree({ selectedId, onSelect, manage }: FolderTreeProps) {
   });
 
   const remove = useMutation({
-    mutationFn: async (id: number) =>
-      unwrap(
-        api.DELETE('/api/folders/{id}', {
-          params: { path: { id }, query: { rowVersion: await folderRowVersion(id) } },
-        }),
-      ),
+    mutationFn: ({ id, rowVersion }: { id: number; rowVersion: string }) =>
+      unwrap(api.DELETE('/api/folders/{id}', { params: { path: { id }, query: { rowVersion } } })),
     meta: { silent: true },
     onSuccess: () => void refresh(),
     onError: (error) =>
@@ -115,16 +119,16 @@ export function FolderTree({ selectedId, onSelect, manage }: FolderTreeProps) {
         message:
           error instanceof ApiError && error.type === 'in-use'
             ? 'The folder still has sub-folders or documents (deleted documents too — move them out first).'
-            : error.message,
+            : describeError(error).message,
       }),
   });
 
   const move = useMutation({
-    mutationFn: async ({ id, parent }: { id: number; parent: number | null }) =>
+    mutationFn: ({ id, rowVersion, parent }: { id: number; rowVersion: string; parent: number | null }) =>
       unwrap(
         api.POST('/api/folders/{id}/move', {
           params: { path: { id } },
-          body: { newParentFolderId: parent, rowVersion: await folderRowVersion(id) },
+          body: { newParentFolderId: parent, rowVersion },
         }),
       ),
     onSuccess: () => {
@@ -133,14 +137,18 @@ export function FolderTree({ selectedId, onSelect, manage }: FolderTreeProps) {
     },
   });
 
-  const confirmDelete = (node: TreeNodeData) =>
+  // Rename, move and delete send the row version the admin saw when starting the action.
+  const withRowVersion = (id: number, start: (rowVersion: string) => void) =>
+    folderRowVersion(id).then(start, (error: unknown) => notifications.show({ color: 'red', ...describeError(error) }));
+
+  const confirmDelete = (node: TreeNodeData, rowVersion: string) =>
     modals.openConfirmModal({
       title: `Delete folder "${String(node.label)}"?`,
       children: <Text size="sm">Only empty folders can be deleted.</Text>,
       labels: { confirm: 'Delete', cancel: 'Cancel' },
       confirmProps: { color: 'red', variant: 'soft' },
       groupProps: { grow: true },
-      onConfirm: () => remove.mutate(Number(node.value)),
+      onConfirm: () => remove.mutate({ id: Number(node.value), rowVersion }),
     });
 
   return (
@@ -213,12 +221,29 @@ export function FolderTree({ selectedId, onSelect, manage }: FolderTreeProps) {
                       New sub-folder
                     </Menu.Item>
                     <Menu.Item
-                      onClick={() => setEditing({ mode: 'rename', id: Number(node.value), name: String(node.label) })}
+                      onClick={() =>
+                        void withRowVersion(Number(node.value), (rowVersion) =>
+                          setEditing({ mode: 'rename', id: Number(node.value), name: String(node.label), rowVersion }),
+                        )
+                      }
                     >
                       Rename
                     </Menu.Item>
-                    <Menu.Item onClick={() => setMoving(Number(node.value))}>Move to…</Menu.Item>
-                    <Menu.Item color="red" onClick={() => confirmDelete(node)}>
+                    <Menu.Item
+                      onClick={() =>
+                        void withRowVersion(Number(node.value), (rowVersion) =>
+                          setMoving({ id: Number(node.value), rowVersion }),
+                        )
+                      }
+                    >
+                      Move to…
+                    </Menu.Item>
+                    <Menu.Item
+                      color="red"
+                      onClick={() =>
+                        void withRowVersion(Number(node.value), (rowVersion) => confirmDelete(node, rowVersion))
+                      }
+                    >
                       Delete
                     </Menu.Item>
                   </Menu.Dropdown>
@@ -271,9 +296,9 @@ export function FolderTree({ selectedId, onSelect, manage }: FolderTreeProps) {
         opened={moving !== null}
         title="Move folder to…"
         allowRoot
-        excludeId={moving}
+        excludeId={moving?.id ?? null}
         onClose={() => setMoving(null)}
-        onPick={(parent) => moving !== null && move.mutate({ id: moving, parent })}
+        onPick={(parent) => moving && move.mutate({ ...moving, parent })}
       />
     </section>
   );

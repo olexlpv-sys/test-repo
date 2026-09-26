@@ -102,6 +102,29 @@ describe('document list (FR-UI1)', () => {
     await waitFor(() => expect(calls.some((c) => c.path === '/api/folders/12/documents')).toBe(true));
   });
 
+  it('pages large folders with "Show more"', async () => {
+    const many = Array.from({ length: 201 }, (_, i) => doc(1000 + i, `Doc ${String(i).padStart(3, '0')}`));
+    const { calls } = fakeApi(
+      routes({
+        'GET /api/folders/(\\d+)/documents': (r: { query: URLSearchParams }) => {
+          const page = Number(r.query.get('Page'));
+          return { items: many.slice((page - 1) * 200, page * 200), page, pageSize: 200, totalCount: many.length };
+        },
+      }),
+    );
+    renderApp();
+    await screen.findByText('Doc 000');
+    expect(screen.queryByText('Doc 200')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show more (200 of 201)' }));
+    expect(await screen.findByText('Doc 200')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Show more/ })).not.toBeInTheDocument();
+    expect(calls.filter((c) => c.path === '/api/folders/10/documents').map((c) => c.query.get('Page'))).toEqual([
+      '1',
+      '2',
+    ]);
+  });
+
   it('lets the owner delete the selected document (with its row version) but not a reader', async () => {
     localStorage.setItem('dochub.actingUserId', String(alice.id));
     const { calls } = fakeApi(routes({ 'DELETE /api/documents/(\\d+)': () => new Reply(204) }));

@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { ActionIcon, Button, Group, Menu, Modal, Stack, Switch, Text, TextInput } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError, unwrap, type Schemas } from '../api/client';
 import { useSession } from '../app/sessionContext';
 import { FolderPickerModal } from './FolderTree';
 
 type Item = Schemas['DocumentListItem'];
+const PageSize = 200;
+
 type SortBy = 'title' | 'status' | 'latestSignedVersion' | 'owner' | 'modifiedAt';
 
 const statusTone: Record<string, string | undefined> = { Draft: 'amber', Signed: 'green' };
@@ -34,20 +36,24 @@ export function DocumentList({ folderId, folderName }: { folderId: number; folde
   const [moving, setMoving] = useState<Item | null>(null);
   const [restoring, setRestoring] = useState<Item | null>(null);
 
-  const list = useQuery({
+  // Pages of 200 (the API maximum); "Show more" loads the next one.
+  const list = useInfiniteQuery({
     queryKey: ['documents', folderId, sort, showDeleted],
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       unwrap(
         api.GET('/api/folders/{folderId}/documents', {
           params: {
             path: { folderId },
-            query: { SortBy: sort.by, SortDir: sort.dir, IncludeDeleted: showDeleted, PageSize: 200 },
+            query: { SortBy: sort.by, SortDir: sort.dir, IncludeDeleted: showDeleted, Page: pageParam, PageSize },
           },
         }),
       ),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.page * last.pageSize < last.totalCount ? last.page + 1 : undefined),
     placeholderData: keepPreviousData,
   });
-  const items = list.data?.items ?? [];
+  const items = list.data?.pages.flatMap((p) => p.items) ?? [];
+  const total = list.data?.pages[0]?.totalCount ?? 0;
   const selectedItem = items.find((i) => i.id === selected) ?? null;
   const isOwner = (item: Item | null) => item?.myRoles.includes('Owner') ?? false;
 
@@ -240,6 +246,13 @@ export function DocumentList({ folderId, folderName }: { folderId: number; folde
               </div>
             </article>
           ))}
+          {list.hasNextPage && (
+            <Group justify="center" mt={20}>
+              <Button variant="soft" loading={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
+                Show more ({items.length} of {total})
+              </Button>
+            </Group>
+          )}
         </div>
       )}
 

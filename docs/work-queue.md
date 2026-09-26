@@ -27,7 +27,7 @@ Q22 is placed right after Q04 (it hardens the Q03 schema before feature work bui
 | Q05 | [T05](tasks/T05-users-and-node-types-api.md) Users, node types, content styles | CODE + TEST | Q04 | B | done | **GREEN** (2 rounds) |
 | Q06 | [T06](tasks/T06-virtual-folders-api.md) Folders | CODE + TEST | Q04 | B | done | **GREEN** (2 rounds) |
 | Q07 | [T07](tasks/T07-documents-and-versions-api.md) Documents, signing, restore | CODE + TEST | Q04, Q06 | A | done | **GREEN** (3 rounds) |
-| Q08 | [T14](tasks/T14-web-shell-folders-documents.md) Web shell & lists | CODE + TEST | Q05, Q06, Q07 | C | in-review | round 1 |
+| Q08 | [T14](tasks/T14-web-shell-folders-documents.md) Web shell & lists | CODE + TEST | Q05, Q06, Q07 | C | in-review | round 2 |
 | Q09 | [T10](tasks/T10-permissions.md) Permissions | CODE + TEST | Q07 | B | done | **GREEN** (2 rounds) |
 | Q10 | [T08](tasks/T08-document-tree-api.md) Tree | CODE + TEST | Q05, Q07 | A | done | **GREEN** (3 rounds) |
 | Q11 | [T09](tasks/T09-node-content-api.md) Styled content | CODE + TEST | Q05, Q10 | A | done | **GREEN** (3 rounds) |
