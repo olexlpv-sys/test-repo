@@ -33,6 +33,9 @@ public sealed record DataGenOptions
     /// <summary>Creation dates are spread over this many days before now (history queries need a spread).</summary>
     public int HistoryDays { get; init; } = 730;
 
+    /// <summary>The run fails (<see cref="TimeoutException"/>) when it takes longer (T19: &lt; 5 min at 0.1, &lt; 30 min at 1.0 on the target tier).</summary>
+    public TimeSpan? MaxDuration { get; init; }
+
     public int Users => Math.Max(20, (int)Math.Round(50_500 * Scale));
 
     /// <summary>Owners, editors and approvers (the other users are readers).</summary>

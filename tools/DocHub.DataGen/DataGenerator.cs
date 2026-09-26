@@ -65,7 +65,29 @@ public sealed class DataGenerator(string connectionString, DataGenOptions option
     private long _nextChangeLog;
     private readonly HashSet<string> _unusedIdentities = new(StringComparer.Ordinal);
 
+    /// <summary>Runs before each chunk is loaded (with its first document id): fault injection in tests.</summary>
+    public Action<int>? BeforeChunkLoad { get; init; }
+
+    /// <summary>Generates the data; throws <see cref="TimeoutException"/> when it takes longer than <see cref="DataGenOptions.MaxDuration"/>.</summary>
     public async Task<DataGenReport> RunAsync(CancellationToken cancellationToken = default)
+    {
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (options.MaxDuration is { } maxDuration)
+        {
+            limit.CancelAfter(maxDuration);
+        }
+
+        try
+        {
+            return await GenerateAsync(limit.Token);
+        }
+        catch (Exception e) when (limit.IsCancellationRequested && !cancellationToken.IsCancellationRequested && e is not TimeoutException)
+        {
+            throw new TimeoutException($"Data generation exceeded the time limit of {options.MaxDuration}.", e);
+        }
+    }
+
+    private async Task<DataGenReport> GenerateAsync(CancellationToken cancellationToken)
     {
         var watch = Stopwatch.StartNew();
         await using var connection = new SqlConnection(connectionString);
@@ -98,19 +120,29 @@ public sealed class DataGenerator(string connectionString, DataGenOptions option
         var versions = 0;
         var loaded = 0;
         var chunks = Channel.CreateBounded<Chunk>(new BoundedChannelOptions(options.Parallelism * 2) { SingleWriter = true });
+        // A failed loader stops the others and the producer (which would otherwise wait for room in the channel forever).
+        using var abort = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var loaders = Enumerable.Range(0, options.Parallelism).Select(_ => Task.Run(async () =>
         {
-            await foreach (var chunk in chunks.Reader.ReadAllAsync(cancellationToken))
+            try
             {
-                var audit = await LoadWithRetryAsync(chunk, cancellationToken);
-                Interlocked.Add(ref _audit, audit);
-                var done = Interlocked.Add(ref loaded, chunk.Count);
-                if (done % (options.ChunkDocuments * 20) < chunk.Count || done == options.Documents)
+                await foreach (var chunk in chunks.Reader.ReadAllAsync(abort.Token))
                 {
-                    log($"{done} / {options.Documents} documents loaded ({watch.Elapsed:mm\\:ss}).");
+                    var audit = await LoadWithRetryAsync(chunk, abort.Token);
+                    Interlocked.Add(ref _audit, audit);
+                    var done = Interlocked.Add(ref loaded, chunk.Count);
+                    if (done % (options.ChunkDocuments * 20) < chunk.Count || done == options.Documents)
+                    {
+                        log($"{done} / {options.Documents} documents loaded ({watch.Elapsed:mm\\:ss}).");
+                    }
                 }
             }
-        }, cancellationToken)).ToList();
+            catch
+            {
+                await abort.CancelAsync();
+                throw;
+            }
+        }, abort.Token)).ToList();
         try
         {
             for (var first = 0; first < options.Documents; first += options.ChunkDocuments)
@@ -123,8 +155,12 @@ public sealed class DataGenerator(string connectionString, DataGenOptions option
                 }
 
                 Seal(chunk.Tables);
-                await chunks.Writer.WriteAsync(chunk, cancellationToken);
+                await chunks.Writer.WriteAsync(chunk, abort.Token);
             }
+        }
+        catch (OperationCanceledException) when (abort.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            // A loader failed: its exception is rethrown below.
         }
         finally
         {
@@ -237,6 +273,7 @@ public sealed class DataGenerator(string connectionString, DataGenOptions option
     /// <summary>One transaction per chunk, all tables in foreign-key order. Returns the audit rows.</summary>
     private async Task<int> LoadChunkAsync(SqlConnection connection, Chunk chunk, CancellationToken cancellationToken)
     {
+        BeforeChunkLoad?.Invoke(chunk.FirstDocument);
         var watch = Stopwatch.StartNew();
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
         foreach (var table in chunk.Tables.InOrder)
@@ -425,10 +462,13 @@ public sealed class DataGenerator(string connectionString, DataGenOptions option
             int? parentId = node.Parent < 0 ? null : ids[node.Parent];
             var order = siblings[node.Parent] = siblings.GetValueOrDefault(node.Parent) + 1;
             var sortOrder = order * 1024;
-            var changes = Enumerable.Range(2, Math.Max(0, k - 1)).Count(j => Mix(i, j, versionId) % 20 == 0);
+            // The content changes in some versions (≈ 5 % of the nodes each, per document and node): version k keeps the changes of
+            // the versions before it, so a node's content differs from the previous version exactly when it changed in version k.
+            var changes = Enumerable.Range(2, Math.Max(0, k - 1)).Count(j => Mix(i, j, documentId) % 20 == 0);
+            var changedNow = k > 1 && Mix(i, k, documentId) % 20 == 0;
             var template = _templates[(node.Template + changes) % _templates.Count];
-            var modifiedBy = changes > 0 ? people[Mix(i, k, 7) % people.Length] : owner;
-            var modified = changes > 0 ? created.AddHours(1 + (Mix(i, k, 3) % 48)) : created;
+            var modifiedBy = changedNow ? people[Mix(i, k, 7) % people.Length] : owner;
+            var modified = changedNow ? created.AddHours(1 + (Mix(i, k, 3) % 48)) : created;
             t.Nodes.Rows.Add(ids[i], versionId, node.Logical, parentId.HasValue ? parentId.Value : DBNull.Value, node.TypeId, node.Title, sortOrder, created, owner, modified, modifiedBy);
             t.Audit.Add(new(created, 3, "app.DocumentNode", ids[i], documentId, versionId, node.Logical,
                 Json(new { Title = node.Title, ParentNodeId = parentId, NodeTypeId = node.TypeId, SortOrder = sortOrder }), owner, copy, copy is null ? "DataGen" : "CopyVersion"));
@@ -436,7 +476,7 @@ public sealed class DataGenerator(string connectionString, DataGenOptions option
             if (node.HasContent)
             {
                 t.Contents.Rows.Add(ids[i], versionId, node.Logical, (byte)1, template.Json, template.Html, template.PlainText, template.Hash, false, modified, modifiedBy);
-                var copied = copy is not null && changes == 0;
+                var copied = copy is not null && !changedNow;
                 t.Audit.Add(new(modified, 4, "app.NodeContent", ids[i], documentId, versionId, node.Logical, Json(new { ContentJson = template.Json }), modifiedBy,
                     copied ? copy : null, copied ? "CopyVersion" : "DataGen"));
                 foreach (var style in template.Styles)

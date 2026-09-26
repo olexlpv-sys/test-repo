@@ -6,6 +6,12 @@ import { expect, test } from '@playwright/test';
 const apiBase = process.env.DOCHUB_API ?? 'http://localhost:5080';
 const probes = Number(process.env.DOCHUB_PROBES ?? 20);
 const budgetMs = Number(process.env.DOCHUB_PROBE_BUDGET_MS ?? 3000);
+// A "normal office connection" (NFR-L6), emulated in Chromium: round-trip latency and bandwidth, configurable.
+const office = {
+  latencyMs: Number(process.env.DOCHUB_PROBE_LATENCY_MS ?? 40),
+  downMbps: Number(process.env.DOCHUB_PROBE_DOWN_MBPS ?? 20),
+  upMbps: Number(process.env.DOCHUB_PROBE_UP_MBPS ?? 5),
+};
 
 const p95 = (values: number[]) => {
   const sorted = [...values].sort((a, b) => a - b);
@@ -35,6 +41,15 @@ test('main window and first document section are ready within 3 s (p95) under lo
   const documents: number[] = list.items.map((d: { id: number }) => d.id);
   expect(documents.length).toBeGreaterThan(0);
 
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.emulateNetworkConditions', {
+    offline: false,
+    latency: office.latencyMs,
+    downloadThroughput: (office.downMbps * 1_000_000) / 8,
+    uploadThroughput: (office.upMbps * 1_000_000) / 8,
+  });
+
   await page.goto('/');
   await page.evaluate((id) => localStorage.setItem('dochub.actingUserId', id), reader);
   const main: number[] = [];
@@ -53,7 +68,10 @@ test('main window and first document section are ready within 3 s (p95) under lo
     form.push(Date.now() - started);
   }
 
-  console.log(`NFR-L6 probe: main window p95 ${p95(main)} ms, first section p95 ${p95(form)} ms (${probes} probes)`);
+  console.log(
+    `NFR-L6 probe: main window p95 ${p95(main)} ms, first section p95 ${p95(form)} ms (${probes} probes, ` +
+      `${office.latencyMs} ms latency, ${office.downMbps}/${office.upMbps} Mbit/s)`,
+  );
   expect(p95(main), 'main window ready, p95').toBeLessThanOrEqual(budgetMs);
   expect(p95(form), 'document form first section, p95').toBeLessThanOrEqual(budgetMs);
 });

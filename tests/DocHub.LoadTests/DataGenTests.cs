@@ -61,6 +61,74 @@ public sealed class DataGenTests(SmallGeneratedDatabase data, SqlServerContainer
     }
 
     [Fact]
+    public async Task Content_copied_unchanged_into_a_new_version_is_audited_as_a_copy_and_changed_content_is_not()
+    {
+        // The history (T11) reads "copied to the new draft" from CopyVersion rows: they must match the content itself.
+        const string Sql = """
+            SELECT COUNT(*)
+            FROM app.NodeContent c
+            JOIN app.DocumentVersion v ON v.Id = c.DocumentVersionId
+            JOIN app.NodeContent p ON p.DocumentVersionId = v.BasedOnVersionId AND p.LogicalNodeId = c.LogicalNodeId
+            JOIN audit.ChangeLog l ON l.TableName = N'app.NodeContent' AND l.EntityId = c.NodeId
+            WHERE CASE WHEN p.ContentHash = c.ContentHash THEN 1 ELSE 0 END <> CASE WHEN l.OperationContext = N'CopyVersion' THEN 1 ELSE 0 END
+            """;
+
+        Assert.Equal(0, await ScalarAsync<int>(Sql));
+        Assert.True(await ScalarAsync<int>("SELECT COUNT(*) FROM app.NodeContent c JOIN app.DocumentVersion v ON v.Id = c.DocumentVersionId JOIN app.NodeContent p ON p.DocumentVersionId = v.BasedOnVersionId AND p.LogicalNodeId = c.LogicalNodeId WHERE p.ContentHash <> c.ContentHash") > 0);
+    }
+
+    [Fact]
+    public async Task A_failing_loader_ends_the_run_with_its_error()
+    {
+        var database = FreshDatabase();
+        var generator = new DataGenerator(database, new DataGenOptions { Scale = data.Scale, Parallelism = 1, ChunkDocuments = 1 }, _ => { })
+        {
+            BeforeChunkLoad = _ => throw new InvalidOperationException("Transaction log full."),
+        };
+
+        // Without the abort, the producer waits for room in the channel forever.
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => generator.RunAsync(Ct).WaitAsync(TimeSpan.FromMinutes(2), Ct));
+        Assert.Equal("Transaction log full.", error.Message);
+    }
+
+    [Fact]
+    public async Task A_run_over_the_time_limit_fails()
+    {
+        var database = FreshDatabase();
+        var generator = new DataGenerator(database, new DataGenOptions { Scale = data.Scale, MaxDuration = TimeSpan.FromSeconds(3) }, _ => { })
+        {
+            BeforeChunkLoad = _ => Thread.Sleep(TimeSpan.FromSeconds(4)),
+        };
+
+        await Assert.ThrowsAsync<TimeoutException>(() => generator.RunAsync(Ct).WaitAsync(TimeSpan.FromMinutes(2), Ct));
+    }
+
+    private string FreshDatabase()
+    {
+        var database = $"DocHub_Gen_{Guid.NewGuid():N}";
+        DacpacDeployer.Deploy(server.MasterConnectionString, database);
+        return DacpacDeployer.DatabaseConnectionString(server.MasterConnectionString, database);
+    }
+
+    [Fact]
+    public async Task The_top_queries_report_includes_parameterized_statements()
+    {
+        // EF Core sends every query through sp_executesql: the report must see those (their sql_text has no dbid).
+        await using (var connection = new SqlConnection(data.AdminConnectionString))
+        {
+            await connection.OpenAsync(Ct);
+            for (var i = 0; i < 3; i++)
+            {
+                await using var command = new SqlCommand("SELECT COUNT(*) FROM app.Document WHERE Title LIKE @p /* top-queries-probe */", connection);
+                command.Parameters.AddWithValue("@p", "Load document%");
+                await command.ExecuteScalarAsync(Ct);
+            }
+        }
+
+        Assert.Contains("top-queries-probe", await LoadRunTests.TopQueriesAsync(data.AdminConnectionString, count: 100_000), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task New_rows_get_ids_after_the_generated_ones()
     {
         var owner = await ScalarAsync<int>("SELECT MIN(Id) FROM app.[User] WHERE Login LIKE N'load%'");

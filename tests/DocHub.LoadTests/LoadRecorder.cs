@@ -5,8 +5,16 @@ using System.Text;
 
 namespace DocHub.LoadTests;
 
-/// <summary>One API request of the load run.</summary>
-public readonly record struct LoadSample(TimeSpan At, string Endpoint, double Milliseconds, int Status);
+/// <summary>The NFR-L3 traffic class a request belongs to.</summary>
+public enum LoadCategory
+{
+    Reader,
+    Editor,
+    Other,
+}
+
+/// <summary>One API request of the load run (status 0: no response — network error, timeout, or an error in the flow itself).</summary>
+public readonly record struct LoadSample(TimeSpan At, string Endpoint, double Milliseconds, int Status, LoadCategory Category = LoadCategory.Other);
 
 /// <summary>Per-endpoint latency percentiles of a load run.</summary>
 public sealed record EndpointStats(string Endpoint, int Requests, int Failures, int ServerErrors, double P50, double P95, double P99);
@@ -16,12 +24,45 @@ public sealed class LoadRecorder
 {
     private readonly ConcurrentQueue<LoadSample> _samples = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
+    private int _inFlight;
 
     public IReadOnlyCollection<LoadSample> Samples => _samples;
 
     public TimeSpan Elapsed => _clock.Elapsed;
 
-    public void Add(string endpoint, double milliseconds, int status) => _samples.Enqueue(new LoadSample(_clock.Elapsed, endpoint, milliseconds, status));
+    /// <summary>Requests started and not recorded yet: the run waits for them, so a hung request is never lost.</summary>
+    public int InFlight => Volatile.Read(ref _inFlight);
+
+    public void Start() => Interlocked.Increment(ref _inFlight);
+
+    public void Add(string endpoint, double milliseconds, int status, LoadCategory category = LoadCategory.Other) =>
+        _samples.Enqueue(new LoadSample(_clock.Elapsed, endpoint, milliseconds, status, category));
+
+    /// <summary>Records a request started with <see cref="Start"/>.</summary>
+    public void Complete(string endpoint, double milliseconds, int status, LoadCategory category)
+    {
+        Add(endpoint, milliseconds, status, category);
+        Interlocked.Decrement(ref _inFlight);
+    }
+
+    /// <summary>Waits until every started request is recorded (at most <paramref name="limit"/>); false if some never finished.</summary>
+    public async Task<bool> DrainAsync(TimeSpan limit)
+    {
+        var watch = Stopwatch.StartNew();
+        while (InFlight > 0 && watch.Elapsed < limit)
+        {
+            await Task.Delay(100);
+        }
+
+        return InFlight == 0;
+    }
+
+    /// <summary>Share of the requests per traffic class (NFR-L3: 70 / 20 / 10 %).</summary>
+    public IReadOnlyDictionary<LoadCategory, double> Mix()
+    {
+        var total = Math.Max(1, _samples.Count);
+        return Enum.GetValues<LoadCategory>().ToDictionary(c => c, c => 100.0 * _samples.Count(s => s.Category == c) / total);
+    }
 
     public static double Percentile(IReadOnlyList<double> sorted, double percentile)
     {
