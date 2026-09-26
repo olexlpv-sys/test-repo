@@ -606,3 +606,35 @@ body {
 .dh-comment-count {
   cursor: pointer;
 }
+
+/* ---------- Admin tab (T17) ---------- */
+.dh-subtabs {
+  height: 48px;
+}
+.dh-subtabs .dh-tab {
+  font-size: 15px;
+}
+tr[data-inactive] td {
+  color: var(--dh-text-muted);
+}
+.dh-style-preview {
+  margin: 0 !important;
+}
+.dh-style-preview-table {
+  border-collapse: collapse;
+}
+.dh-style-preview-table td {
+  padding: 2px 10px;
+  min-width: 40px;
+}
+.dh-audit-row[data-source='Script'] td {
+  background: var(--dh-chip-amber-bg);
+}
+.dh-json {
+  max-height: 260px;
+  overflow: auto;
+  font-size: 12px;
+}
+.dh-link {
+  color: var(--dh-primary);
+}

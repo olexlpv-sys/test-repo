@@ -24,12 +24,21 @@ const columns: { key: SortBy; label: string }[] = [
 ];
 
 /** The documents of the selected folder (FR-UI1): sort, show deleted, add, delete, restore, move. */
-export function DocumentList({ folderId, folderName }: { folderId: number; folderName: string }) {
+export function DocumentList({
+  folderId,
+  folderName,
+  initialShowDeleted = false,
+}: {
+  folderId: number;
+  folderName: string;
+  /** The Admin tab lists deleted documents too, so a folder can be emptied (FR-F4). */
+  initialShowDeleted?: boolean;
+}) {
   const { me } = useSession();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [sort, setSort] = useState<{ by: SortBy; dir: 'asc' | 'desc' }>({ by: 'title', dir: 'asc' });
-  const [showDeleted, setShowDeleted] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(initialShowDeleted);
   const [selected, setSelected] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');

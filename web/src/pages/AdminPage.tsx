@@ -1,19 +1,60 @@
-import { Box, Text } from '@mantine/core';
-import { useState } from 'react';
+import { Stack, Text } from '@mantine/core';
+import { useSearchParams } from 'react-router-dom';
+import { AuditAdmin, FindingsAdmin } from '../admin/AuditAdmin';
+import { ContentStylesAdmin } from '../admin/ContentStylesAdmin';
+import { FoldersAdmin } from '../admin/FoldersAdmin';
+import { NodeTypesAdmin } from '../admin/NodeTypesAdmin';
+import { UsersAdmin } from '../admin/UsersAdmin';
 import { useSession } from '../app/sessionContext';
-import { FolderTree } from '../components/FolderTree';
 
-/** Admin tab (T17 adds node types, styles, users and the audit log); folders are managed with the shared tree. */
+const tabs = [
+  { value: 'node-types', label: 'Node types' },
+  { value: 'styles', label: 'Content styles' },
+  { value: 'users', label: 'Users' },
+  { value: 'folders', label: 'Folders' },
+  { value: 'audit', label: 'Audit log' },
+] as const;
+
+/** Admin tab (FR-UI3, T17): supporting entities, admins only; the sub-tab is in the URL (?tab=). */
 export function AdminPage() {
   const { me } = useSession();
-  const [selected, setSelected] = useState<number | null>(null);
+  const [params, setParams] = useSearchParams();
   if (!me?.isAdmin) {
-    return <Text className="dh-muted">The Admin tab is for administrators.</Text>;
+    return (
+      <Text c="red" role="alert">
+        Access denied — the Admin tab is for administrators.
+      </Text>
+    );
   }
 
+  const tab = tabs.find((t) => t.value === params.get('tab'))?.value ?? 'node-types';
   return (
-    <Box maw={480}>
-      <FolderTree selectedId={selected} onSelect={setSelected} manage />
-    </Box>
+    <Stack gap={20}>
+      <nav className="dh-tabs dh-subtabs" role="tablist" aria-label="Admin sections">
+        {tabs.map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.value}
+            className="dh-tab"
+            data-active={tab === t.value}
+            onClick={() => setParams({ tab: t.value })}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+      {tab === 'node-types' && <NodeTypesAdmin />}
+      {tab === 'styles' && <ContentStylesAdmin />}
+      {tab === 'users' && <UsersAdmin />}
+      {tab === 'folders' && <FoldersAdmin />}
+      {tab === 'audit' && (
+        <>
+          <FindingsAdmin />
+          <AuditAdmin />
+        </>
+      )}
+    </Stack>
   );
 }

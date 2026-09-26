@@ -104,7 +104,13 @@ const ParagraphFormat = Extension.create<Options>({
           styleId: {
             default: null,
             parseHTML: (element) => styleIdFrom(element, styleIds),
-            renderHTML: (attrs) => (attrs.styleId ? { class: `ds-style-${String(attrs.styleId)}` } : {}),
+            // Like the server renderer: a heading without its own style uses HeadingN of the catalog.
+            renderHTML: (attrs) =>
+              attrs.styleId
+                ? { class: `ds-style-${String(attrs.styleId)}` }
+                : typeof attrs.level === 'number'
+                  ? { class: `ds-style-Heading${attrs.level}` }
+                  : {},
           },
           align: {
             default: null,

@@ -127,7 +127,7 @@ describe('session (test auth mode, FR-UI4)', () => {
     localStorage.setItem('dochub.actingUserId', '3');
     fakeApi({ ...baseRoutes(), ...emptyTree });
     renderApp('/admin');
-    expect(await screen.findByText('The Admin tab is for administrators.')).toBeInTheDocument();
+    expect(await screen.findByText('Access denied — the Admin tab is for administrators.')).toBeInTheDocument();
     expect(within(screen.getByRole('tablist')).queryByRole('tab', { name: 'Admin' })).not.toBeInTheDocument();
   });
 });
