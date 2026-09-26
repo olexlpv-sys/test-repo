@@ -50,6 +50,12 @@ Compare two versions of the same document — any pair of signed versions, or a 
 ## Caching
 Compare results of two **Signed** versions are cached (`HybridCache`, key = both version ids + both `VersionStamp.LastChangeLogId` values; `EnsureCanView` first) — NFR-L9.
 
+## Implementation notes (Q15)
+- `ContentChanged` compares `ContentHash`. For script-edited rows (`DerivedStale`) the hash is recomputed from `ContentJson`, since the stored one may be stale.
+- With `includeUnchanged=false`, unchanged branches are left out, but the ancestors of changes stay so the tree still renders.
+- Removed nodes go at their base index among the merged siblings, under their base parent (also a removed one), else under the nearest ancestor that still exists.
+- `Reordered` uses the shared `SiblingOrder.Stayed` LCS helper, which change-summary moves (T11) also use.
+
 ## Acceptance criteria
 - [ ] v1 vs v2 with: 1 added node, 1 removed subtree, 1 moved node, 1 renamed node, 2 content edits → summary and per-node statuses exactly match.
 - [ ] Inserting one node at the top of 20 siblings does **not** mark the other 19 as `Reordered`.
