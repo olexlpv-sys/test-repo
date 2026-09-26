@@ -264,6 +264,21 @@ public sealed class AttributedDiffTests
     }
 
     [Fact]
+    public void A_later_real_move_beats_being_pushed_out_of_order_by_an_earlier_one()
+    {
+        var baseline = Doc("Xa one.", "Yb two.", "Zc three.", "Wd four.", "Ve five.");
+        var steps = new[]
+        {
+            new ContentStep(Doc("Ve five.", "Xa one.", "Yb two.", "Zc three.", "Wd four."), Alice),
+            new ContentStep(Doc("Ve five.", "Xa one.", "Zc three.", "Wd four.", "Yb two."), Bob),
+        };
+
+        var ops = AttributedDiff.Diff(Service, baseline, steps).Blocks.SelectMany(b => b.Ops ?? []).Where(o => o.Op != "equal").ToList();
+        Assert.All(ops.Where(o => o.Text.Contains("Yb", StringComparison.Ordinal)), o => Assert.Equal("Bob", o.By!.DisplayName));
+        Assert.All(ops.Where(o => o.Text.Contains("Ve", StringComparison.Ordinal)), o => Assert.Equal("Alice", o.By!.DisplayName));
+    }
+
+    [Fact]
     public void Swapping_a_long_paragraph_is_attributed_in_linear_time()
     {
         var words = string.Join(' ', Enumerable.Range(0, 16000).Select(i => $"word{i % 997}"));

@@ -48,6 +48,8 @@ internal static class ApiSetup
         services.ConfigureHttpJsonOptions(options =>
         {
             options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+            // Numbers are numbers (the web defaults also accept "12"): a clean contract for the generated SPA client.
+            options.SerializerOptions.NumberHandling = JsonNumberHandling.Strict;
             // Trees nest two levels per node (object + children) and may be 100 levels deep (TR_DocumentNode_Tree).
             options.SerializerOptions.MaxDepth = 256;
         });

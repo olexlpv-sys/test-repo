@@ -29,11 +29,11 @@ public static class AttributedDiff
 
         public DiffAuthor? FormatBy { get; set; } = formatBy;
 
-        /// <summary>
-        /// Who moved the block this character is in out of baseline order (recomputed after every step, so an undone move
-        /// clears it).
-        /// </summary>
+        /// <summary>Who last actually moved this character's block (cleared when the block is back in baseline order).</summary>
         public DiffAuthor? MovedBy { get; set; }
+
+        /// <summary>Who last moved another block across this one while it is out of order (weaker than an own move).</summary>
+        public DiffAuthor? DisplacedBy { get; set; }
 
         /// <summary>Who last restructured this character's block: split, merged or largely rewrote it.</summary>
         public DiffAuthor? PlacedBy { get; set; }
@@ -50,15 +50,17 @@ public static class AttributedDiff
 
         foreach (var step in steps)
         {
-            state = Apply(state, Flatten(step.Json), step.Author, deletedBy);
-            MarkDisplaced(state, step.Author);
+            var moved = new List<List<CharInfo>>();
+            state = Apply(state, Flatten(step.Json), step.Author, deletedBy, moved);
+            MarkMoves(state, moved, step.Author);
         }
 
         // Baseline characters that survive: who moved / restructured them (for deletes the final diff shows of moved text).
         var movedBy = new Dictionary<int, DiffAuthor>();
         foreach (var c in state.SelectMany(b => b))
         {
-            if (c.BaselineIndex is { } i && Latest(c.MovedBy, c.PlacedBy) is { } by)
+            // Deletes of text that went elsewhere belong to whoever moved it away (before any later split of it).
+            if (c.BaselineIndex is { } i && (c.MovedBy ?? c.DisplacedBy ?? c.PlacedBy) is { } by)
             {
                 movedBy[i] = by;
             }
@@ -162,7 +164,7 @@ public static class AttributedDiff
             // An insert: the deletions it replaces come first (up to the next surviving baseline character).
             FlushDeletes(nextSurvivor[i + 1]);
             var formatBy = c.InsertedBy is not null && c.FormatBy is not null && !Equals(c.FormatBy, c.InsertedBy) ? c.FormatBy : null;
-            chars.Add(("insert", c.C, c.InsertedBy ?? Latest(c.MovedBy, c.PlacedBy), null, formatBy));
+            chars.Add(("insert", c.C, c.InsertedBy ?? Latest(c.MovedBy ?? c.DisplacedBy, c.PlacedBy), null, formatBy));
         }
 
         FlushDeletes(end);
@@ -240,7 +242,8 @@ public static class AttributedDiff
     /// costs nothing); only changed stretches get the character-level token diff.
     /// </summary>
     private static List<List<CharInfo>> Apply(
-        List<List<CharInfo>> olds, List<List<(char C, string Marks)>> news, DiffAuthor author, Dictionary<int, DiffAuthor> deletedBy)
+        List<List<CharInfo>> olds, List<List<(char C, string Marks)>> news, DiffAuthor author, Dictionary<int, DiffAuthor> deletedBy,
+        List<List<CharInfo>> moved)
     {
         static string Key(IEnumerable<(char C, string Marks)> chars)
         {
@@ -300,6 +303,7 @@ public static class AttributedDiff
         }
 
         var usedOld = movedTo.Values.ToHashSet();
+        moved.AddRange(movedTo.Values.Select(i => olds[i]));
 
         var (a, b) = (0, 0);
         foreach (var (oldStart, oldCount, newStart, newCount) in stretches)
@@ -438,11 +442,11 @@ public static class AttributedDiff
     }
 
     /// <summary>
-    /// After a step: a block is moved while it is out of baseline order against any other block (an inversion — both sides
-    /// of a swap count, since the final diff may show either as the moved one), by the author who first put it there;
-    /// blocks back in order lose the mark (an undone move). Linear: prefix maximum and suffix minimum of positions.
+    /// After a step: blocks this step actually moved are moved by its author (a newer move overrides an older one); blocks
+    /// they now jump over are displaced by the author (the final diff may show either side of a swap as the moved one).
+    /// Blocks back in baseline order (no inversion with any other block) lose both marks — an undone move leaves nothing.
     /// </summary>
-    private static void MarkDisplaced(List<List<CharInfo>> state, DiffAuthor author)
+    private static void MarkMoves(List<List<CharInfo>> state, List<List<CharInfo>> moved, DiffAuthor author)
     {
         var positions = new List<(int Block, int Position)>();
         for (var b = 0; b < state.Count; b++)
@@ -453,6 +457,7 @@ public static class AttributedDiff
             }
         }
 
+        // Out of order at all: prefix maximum / suffix minimum (linear).
         var suffixMin = new int[positions.Count + 1];
         suffixMin[positions.Count] = int.MaxValue;
         for (var i = positions.Count - 1; i >= 0; i--)
@@ -460,15 +465,44 @@ public static class AttributedDiff
             suffixMin[i] = Math.Min(suffixMin[i + 1], positions[i].Position);
         }
 
+        var outOfOrder = new HashSet<int>();
         var prefixMax = int.MinValue;
         for (var i = 0; i < positions.Count; i++)
         {
-            var (block, position) = positions[i];
-            var displaced = prefixMax > position || suffixMin[i + 1] < position;
-            prefixMax = Math.Max(prefixMax, position);
-            foreach (var c in state[block].Where(c => c.BaselineIndex is not null))
+            if (prefixMax > positions[i].Position || suffixMin[i + 1] < positions[i].Position)
             {
-                c.MovedBy = displaced ? c.MovedBy ?? author : null;
+                outOfOrder.Add(positions[i].Block);
+            }
+
+            prefixMax = Math.Max(prefixMax, positions[i].Position);
+        }
+
+        var movedSet = new HashSet<List<CharInfo>>(moved, ReferenceEqualityComparer.Instance);
+        for (var k = 0; k < positions.Count; k++)
+        {
+            var (block, position) = positions[k];
+            var chars = state[block].Where(c => c.BaselineIndex is not null).ToList();
+            if (!outOfOrder.Contains(block))
+            {
+                chars.ForEach(c => (c.MovedBy, c.DisplacedBy) = (null, null));
+                continue;
+            }
+
+            if (movedSet.Contains(state[block]))
+            {
+                chars.ForEach(c => c.MovedBy = author);
+            }
+        }
+
+        // Blocks inverted with a block moved in this step were jumped over by this author.
+        foreach (var (movedIndex, movedPosition) in positions.Where(p => movedSet.Contains(state[p.Block])))
+        {
+            foreach (var (block, position) in positions)
+            {
+                if (block != movedIndex && outOfOrder.Contains(block) && (block < movedIndex) != (position < movedPosition))
+                {
+                    state[block].Where(c => c.BaselineIndex is not null).ToList().ForEach(c => c.DisplacedBy = author);
+                }
             }
         }
     }
