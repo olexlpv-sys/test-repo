@@ -52,16 +52,19 @@ export function SectionHistory({
   const oldest = entries.at(-1)?.changedAt;
   const complete = !history.hasNextPage;
 
-  // Version markers ("v2 signed · carol, dave") between the entries of the loaded range.
+  // Version markers ("v2 signed · carol, dave") between the entries of the loaded range, newest first — compared as times, not
+  // text (UTC timestamps have fractions of varying length before the Z).
   const rows: Row[] = [
     ...entries.map((entry): Row => ({ kind: 'entry', at: entry.changedAt, entry })),
     ...versions
       .filter(
         (v): v is VersionHeader & { signedAt: string } =>
-          v.status === 'Signed' && v.signedAt !== null && (complete || (oldest !== undefined && v.signedAt >= oldest)),
+          v.status === 'Signed' &&
+          v.signedAt !== null &&
+          (complete || (oldest !== undefined && Date.parse(v.signedAt) >= Date.parse(oldest))),
       )
       .map((version): Row => ({ kind: 'version', at: version.signedAt, version })),
-  ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 
   return (
     <div className="dh-section-history" data-testid={`history-${logicalNodeId}`}>

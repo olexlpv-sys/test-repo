@@ -50,6 +50,8 @@ internal static class ApiSetup
         services.ConfigureHttpJsonOptions(options =>
         {
             options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+            // Timestamps are UTC; datetime2 reads back without a kind, so they are written with an explicit Z.
+            options.SerializerOptions.Converters.Add(new UtcDateTimeConverter());
             // Numbers are numbers (the web defaults also accept "12"): a clean contract for the generated SPA client.
             options.SerializerOptions.NumberHandling = JsonNumberHandling.Strict;
             // Trees nest two levels per node (object + children) and may be 100 levels deep (TR_DocumentNode_Tree).
@@ -62,7 +64,9 @@ internal static class ApiSetup
             .AllowAnyMethod()));
 
         services.AddHealthChecks().AddDbContextCheck<DocHubDbContext>("database");
-        services.AddOpenApi(options => options.AddDocumentTransformer<TestModeSecuritySchemeTransformer>());
+        services.AddOpenApi(options => options
+            .AddDocumentTransformer<TestModeSecuritySchemeTransformer>()
+            .AddSchemaTransformer<UtcDateTimeSchemaTransformer>());
 
         services.AddSingleton<IEndpointModule, SystemEndpoints>();
         services.AddSingleton<IEndpointModule, MeEndpoints>();

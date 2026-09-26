@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Globalization;
 using System.Text.Json;
 using DocHub.Api.Documents;
@@ -98,7 +99,7 @@ public sealed record HistoryEntry(
     string? Ticket, string? Reason, string Summary, IReadOnlyList<FieldChange> Changes, bool HasContentDiff, bool AfterSigning);
 
 /// <summary>Reads <c>audit.ChangeLog</c> and turns rows into history entries (grouping, kinds, summaries).</summary>
-public sealed class ChangeHistory(DocHubDbContext db, IContentDiffService diff)
+public sealed partial class ChangeHistory(DocHubDbContext db, IContentDiffService diff)
 {
     public const string CopyContext = "CopyVersion";
 
@@ -266,7 +267,7 @@ public sealed class ChangeHistory(DocHubDbContext db, IContentDiffService diff)
     {
         var changes = group.Where(r => r.Operation == "U")
             // The API moves the current-version flag as bookkeeping (new draft, discard); a script doing it is a change.
-            .SelectMany(r => r.Columns.Where(c => !Hidden.Contains(c) && !(c == "IsCurrent" && r.Source == "App")).Select(c => new FieldChange(Field(c), r.Old(c), r.New(c))))
+            .SelectMany(r => r.Columns.Where(c => !Hidden.Contains(c) && !(c == "IsCurrent" && r.Source == "App")).Select(c => new FieldChange(Field(c), Value(c, r.Old(c)), Value(c, r.New(c)))))
             .ToList();
         // The copy into a new draft collapses per node; its version row stays a VersionCreated entry.
         if (group.Any(r => r.OperationContext == CopyContext && r.TableName is "app.DocumentNode" or "app.NodeContent"))
@@ -319,6 +320,16 @@ public sealed class ChangeHistory(DocHubDbContext db, IContentDiffService diff)
             _ => ("Changed", changes),
         };
     }
+
+    /// <summary>
+    /// A column value as recorded in the audit JSON; timestamp columns (<c>…At</c>, stored in UTC as <c>datetime2</c>) are
+    /// marked UTC like every other timestamp of the API.
+    /// </summary>
+    private static string? Value(string column, string? value) =>
+        value is not null && column.EndsWith("At", StringComparison.Ordinal) && UnmarkedTimestamp().IsMatch(value) ? value + "Z" : value;
+
+    [GeneratedRegex(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$")]
+    private static partial Regex UnmarkedTimestamp();
 
     private static string? Role(string? role) => role switch { "1" => "Editor", "2" => "Approver", _ => role };
 
