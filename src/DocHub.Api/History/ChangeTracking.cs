@@ -102,6 +102,7 @@ public sealed class ChangeTracking(DocHubDbContext db, ChangeHistory history, IC
                 SELECT COALESCE(MAX(CASE WHEN [TableName] = N'app.DocumentVersion' AND [EntityId] = @v AND JSON_VALUE([NewValues], N'$.Status') = N'2' THEN [Id] END),
                                 MAX([Id]), 0) AS [Value]
                 FROM [audit].[ChangeLog] WHERE [DocumentId] = @d AND ([DocumentVersionId] = @v OR ([TableName] = N'app.DocumentVersion' AND [EntityId] = @v))
+                  AND [TableName] <> N'app.ExportJob' -- exporting a version is not a change of it
                 """,
                 ChangeHistory.Parameter("@v", baseline.Id), ChangeHistory.Parameter("@d", baseline.DocumentId)).ToListAsync(ct))[0];
         var index = chain.FindIndex(v => v.Id == baseline.Id);

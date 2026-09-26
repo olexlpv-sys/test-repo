@@ -10,8 +10,8 @@ namespace DocHub.Api.Exports;
 /// <summary>
 /// Renders queued PDF exports (T20 "Worker") as the <c>system</c> user: claims jobs with <c>READPAST, UPDLOCK</c> (so several
 /// instances share the queue), runs at most <see cref="ExportWorkerOptions.MaxConcurrentRenders"/> at a time, advances the progress
-/// per stage, stores the file and marks the job Succeeded or Failed. Jobs left Running beyond the timeout (a stopped instance) are
-/// failed, and expired draft files are deleted periodically.
+/// per stage, stores the file and marks the job Succeeded or Failed. A job interrupted by shutdown goes back to the queue; jobs left
+/// Running beyond the timeout (a crashed instance) are failed every minute, and expired draft files are deleted periodically.
 /// </summary>
 internal sealed partial class PdfExportWorker(
     IServiceScopeFactory scopes,
@@ -35,6 +35,7 @@ internal sealed partial class PdfExportWorker(
         using var slots = new SemaphoreSlim(Math.Max(1, settings.MaxConcurrentRenders));
         var running = new List<Task>();
         var nextCleanup = DateTime.MinValue;
+        var nextSweep = DateTime.MinValue;
         try
         {
             while (!stoppingToken.IsCancellationRequested)
@@ -44,10 +45,16 @@ internal sealed partial class PdfExportWorker(
                 try
                 {
                     var now = clock.GetUtcNow().UtcDateTime;
+                    if (now >= nextSweep)
+                    {
+                        nextSweep = now + TimeSpan.FromMinutes(1);
+                        await FailStaleAsync(stoppingToken).ConfigureAwait(false);
+                    }
+
                     if (now >= nextCleanup)
                     {
                         nextCleanup = now + settings.CleanupInterval;
-                        await HousekeepingAsync(stoppingToken).ConfigureAwait(false);
+                        await storage.DeleteExpiredAsync(stoppingToken).ConfigureAwait(false);
                     }
 
                     jobId = await ClaimAsync(stoppingToken).ConfigureAwait(false);
@@ -136,7 +143,12 @@ internal sealed partial class PdfExportWorker(
                 .SetProperty(j => j.FinishedAt, finished), timeout.Token).ConfigureAwait(false);
             LogRendered(jobId, result.PageCount, result.Passes, result.BlockedRequests.Count);
         }
-        catch (Exception exception) when (!stoppingToken.IsCancellationRequested || exception is not OperationCanceledException)
+        catch (Exception) when (stoppingToken.IsCancellationRequested)
+        {
+            // The instance is stopping: back to the queue, so another instance (or this one after its restart) renders it.
+            await RequeueAsync(jobId).ConfigureAwait(false);
+        }
+        catch (Exception exception)
         {
             var message = exception is OperationCanceledException or TimeoutException
                 ? $"The export took longer than {settings.JobTimeout.TotalMinutes:0.#} minutes."
@@ -165,20 +177,36 @@ internal sealed partial class PdfExportWorker(
         }
     }
 
-    /// <summary>Fails jobs left Running past the timeout and deletes expired files.</summary>
-    public async Task HousekeepingAsync(CancellationToken cancellationToken)
+    private async Task RequeueAsync(int jobId)
     {
-        await using (var scope = SystemScope(out var db))
+        try
         {
-            var limit = clock.GetUtcNow().UtcDateTime - options.Value.JobTimeout - TimeSpan.FromMinutes(1);
-            var now = clock.GetUtcNow().UtcDateTime;
-            await db.ExportJobs.Where(j => j.Status == ExportStatus.Running && j.StartedAt < limit).ExecuteUpdateAsync(s => s
-                .SetProperty(j => j.Status, ExportStatus.Failed)
-                .SetProperty(j => j.Error, "The export was interrupted; export again.")
-                .SetProperty(j => j.FinishedAt, now), cancellationToken).ConfigureAwait(false);
+            await using var scope = SystemScope(out var db);
+            await db.ExportJobs.Where(j => j.Id == jobId && j.Status == ExportStatus.Running).ExecuteUpdateAsync(s => s
+                .SetProperty(j => j.Status, ExportStatus.Queued)
+                .SetProperty(j => j.StartedAt, (DateTime?)null)
+                .SetProperty(j => j.Progress, (byte)0)).ConfigureAwait(false);
         }
+        catch (Exception exception)
+        {
+            // Not requeued (e.g. the database is gone too): the stale-job sweep fails it after the timeout.
+            LogQueueFailed(exception);
+        }
+    }
 
-        await storage.DeleteExpiredAsync(cancellationToken).ConfigureAwait(false);
+    /// <summary>
+    /// Fails jobs left Running past the timeout (their instance stopped without requeueing them). Renders are cancelled at the
+    /// timeout, so a job older than that plus a margin is never still rendering.
+    /// </summary>
+    public async Task<int> FailStaleAsync(CancellationToken cancellationToken)
+    {
+        await using var scope = SystemScope(out var db);
+        var now = clock.GetUtcNow().UtcDateTime;
+        var limit = now - options.Value.JobTimeout - TimeSpan.FromMinutes(1);
+        return await db.ExportJobs.Where(j => j.Status == ExportStatus.Running && j.StartedAt < limit).ExecuteUpdateAsync(s => s
+            .SetProperty(j => j.Status, ExportStatus.Failed)
+            .SetProperty(j => j.Error, "The export was interrupted; export again.")
+            .SetProperty(j => j.FinishedAt, now), cancellationToken).ConfigureAwait(false);
     }
 
     private static Task<int> SetProgressAsync(DocHubDbContext db, int jobId, int progress, CancellationToken cancellationToken) =>

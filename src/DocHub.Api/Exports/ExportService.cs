@@ -5,6 +5,7 @@ using DocHub.Domain.Errors;
 using DocHub.Infrastructure.Export;
 using DocHub.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace DocHub.Api.Exports;
 
@@ -59,7 +60,7 @@ public sealed record ExportJobStatus(int JobId, ExportStatus Status, int Progres
 /// <summary>The export API (T20): request (with pending-job reuse and cache hits), status and download.</summary>
 public sealed class ExportService(
     DocHubDbContext db, ExportSource source, IExportStorage storage, IDocumentAuthorization authorization, ICurrentUser user, ExportQueueSignal signal,
-    TimeProvider clock)
+    IOptions<ExportWorkerOptions> worker, TimeProvider clock)
 {
     public async Task<ExportJobStatus> RequestAsync(int versionId, Guid? logicalNodeId, PdfExportOptions options, CancellationToken cancellationToken)
     {
@@ -68,16 +69,18 @@ public sealed class ExportService(
         await authorization.EnsureCanViewAsync(documentId, cancellationToken);
         var key = await source.KeyAsync(versionId, logicalNodeId, options, cancellationToken);
 
-        // The caller's own pending job for the same file.
+        // The caller's own pending job for the same file (a job running past the timeout is dead, e.g. its instance stopped).
+        var now = clock.GetUtcNow().UtcDateTime;
+        var alive = now - worker.Value.JobTimeout;
         var pending = await db.ExportJobs.AsNoTracking()
-            .Where(j => j.RequestedByUserId == user.UserId && j.CacheKey == key.CacheKey && (j.Status == ExportStatus.Queued || j.Status == ExportStatus.Running))
+            .Where(j => j.RequestedByUserId == user.UserId && j.CacheKey == key.CacheKey
+                && (j.Status == ExportStatus.Queued || (j.Status == ExportStatus.Running && j.StartedAt > alive)))
             .OrderByDescending(j => j.Id).FirstOrDefaultAsync(cancellationToken);
         if (pending is not null)
         {
             return Status(pending);
         }
 
-        var now = clock.GetUtcNow().UtcDateTime;
         var job = new ExportJob
         {
             DocumentId = key.DocumentId,

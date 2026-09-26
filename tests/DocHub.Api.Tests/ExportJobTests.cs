@@ -1,7 +1,10 @@
 using System.Net;
 using System.Text.Json;
+using DocHub.Api.Exports;
 using DocHub.Api.Tests.Infrastructure;
 using DocHub.Testing.Database;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace DocHub.Api.Tests;
 
@@ -100,5 +103,88 @@ public sealed class ExportJobTests(DocHubApiFactory factory) : IClassFixture<Doc
         var entries = history.GetProperty("items").EnumerateArray().Where(e => e.GetProperty("kind").GetString() == "PdfExportRequested").ToList();
         var entry = Assert.Single(entries);
         Assert.Equal("PDF export requested", entry.GetProperty("summary").GetString());
+    }
+
+    private PdfExportWorker Worker => factory.Services.GetServices<IHostedService>().OfType<PdfExportWorker>().Single();
+
+    /// <summary>Marks a job Running since <paramref name="minutesAgo"/> minutes, as a worker would have.</summary>
+    private async Task RunningSinceAsync(int job, int minutesAgo)
+    {
+        await using var dbo = await SqlSession.OpenAsync(factory.AdminConnectionString);
+        await dbo.ExecuteAsync(
+            "EXEC sys.sp_set_session_context @key = N'UserId', @value = 0; UPDATE app.ExportJob SET Status = 1, Progress = 40, StartedAt = DATEADD(MINUTE, -@m, SYSUTCDATETIME()) WHERE Id = @j;",
+            ("@j", job), ("@m", minutesAgo));
+    }
+
+    private async Task<(byte Status, string? Error)> JobRowAsync(int job)
+    {
+        var row = (await Db.QueryAsync(factory, "SELECT Status, Error FROM app.ExportJob WHERE Id = @j;", ("@j", job))).Single();
+        return ((byte)row["Status"]!, row["Error"] as string);
+    }
+
+    [Fact]
+    public async Task A_job_left_running_past_the_timeout_is_not_reused_and_the_sweep_fails_it()
+    {
+        var (_, draft) = await _arrange.CreateAsync();
+        var stuck = (await StartAsync(TestUsers.Alice, draft)).GetProperty("jobId").GetInt32();
+        await RunningSinceAsync(stuck, 10);
+
+        var retry = await StartAsync(TestUsers.Alice, draft);
+        Assert.NotEqual(stuck, retry.GetProperty("jobId").GetInt32());
+
+        // A job running within the timeout is still the caller's pending job.
+        var fresh = retry.GetProperty("jobId").GetInt32();
+        await RunningSinceAsync(fresh, 1);
+        Assert.Equal(fresh, (await StartAsync(TestUsers.Alice, draft)).GetProperty("jobId").GetInt32());
+
+        Assert.True(await Worker.FailStaleAsync(TestContext.Current.CancellationToken) >= 1);
+        Assert.Equal((byte)3, (await JobRowAsync(stuck)).Status);
+        Assert.Equal("The export was interrupted; export again.", (await JobRowAsync(stuck)).Error);
+        Assert.Equal((byte)1, (await JobRowAsync(fresh)).Status);
+    }
+
+    [Fact]
+    public async Task A_job_interrupted_by_shutdown_goes_back_to_the_queue()
+    {
+        var (_, draft) = await _arrange.CreateAsync();
+        var job = (await StartAsync(TestUsers.Alice, draft)).GetProperty("jobId").GetInt32();
+        await RunningSinceAsync(job, 0);
+
+        using var stopping = new CancellationTokenSource();
+        await stopping.CancelAsync();
+        await Worker.ProcessAsync(job, stopping.Token);
+
+        var status = await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, $"/api/exports/{job}", null, HttpStatusCode.OK);
+        Assert.Equal(("Queued", 0), (status.GetProperty("status").GetString(), status.GetProperty("progress").GetInt32()));
+    }
+
+    [Fact]
+    public async Task Exporting_a_discarded_draft_does_not_move_it_as_a_change_summary_baseline()
+    {
+        var (documentId, v1, nodes) = await _arrange.SignedAsync();
+        var discarded = (await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Post, $"/api/documents/{documentId}/drafts", null, HttpStatusCode.Created)).GetProperty("id").GetInt32();
+        var rowVersion = Uri.EscapeDataString((await _arrange.VersionAsync(discarded)).GetProperty("rowVersion").GetString()!);
+        await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Delete, $"/api/versions/{discarded}?rowVersion={rowVersion}", null, HttpStatusCode.NoContent);
+        var draft = (await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Post, $"/api/documents/{documentId}/drafts", null, HttpStatusCode.Created)).GetProperty("id").GetInt32();
+        Guid logical;
+        int node;
+        await using (var dbo = await SqlSession.OpenAsync(factory.AdminConnectionString))
+        {
+            logical = await dbo.ScalarAsync<Guid>("SELECT LogicalNodeId FROM app.DocumentNode WHERE Id = @n;", ("@n", nodes[0]));
+            node = await dbo.ScalarAsync<int>("SELECT Id FROM app.DocumentNode WHERE DocumentVersionId = @v AND LogicalNodeId = @l;", ("@v", draft), ("@l", logical));
+        }
+
+        var content = (await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, $"/api/nodes/{node}/content", null, HttpStatusCode.OK)).GetProperty("rowVersion").GetString();
+        await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Put, $"/api/nodes/{node}/content",
+            new { contentJson = System.Text.Json.Nodes.JsonNode.Parse("""{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"edited in the new draft"}]}]}"""), rowVersion = content },
+            HttpStatusCode.OK);
+
+        // Someone exports the discarded draft after the edit.
+        await StartAsync(TestUsers.Bob, discarded);
+
+        var summary = await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/versions/{draft}/change-summary?since=v:{discarded}", null, HttpStatusCode.OK);
+        var entry = summary.GetProperty("nodes").EnumerateArray().Single(n => n.GetProperty("logicalNodeId").GetGuid() == logical);
+        Assert.Equal(1, entry.GetProperty("changeCount").GetInt32());
+        Assert.NotEqual(v1, draft);
     }
 }
