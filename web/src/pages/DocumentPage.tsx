@@ -28,6 +28,7 @@ import { EditorHubContext, type EditorHub } from '../editor/editorHub';
 import { Ribbon } from '../editor/Ribbon';
 import { CommentsPanel } from '../document/CommentsPanel';
 import { PermissionsDialog } from '../document/PermissionsDialog';
+import { ExportPdfDialog } from '../document/ExportPdf';
 
 type Removed = NonNullable<ReturnType<typeof useChangeSummary>['data']>['removed'][number];
 type Item = { kind: 'node'; node: TreeNode; depth: number } | { kind: 'removed'; removed: Removed; depth: number };
@@ -80,6 +81,7 @@ export function DocumentPage() {
   const [active, setActive] = useState<Editor | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [permissionsOpen, setPermissionsOpen] = useState(false);
+  const [exporting, setExporting] = useState<{ section: TreeNode | null; sectionFirst: boolean } | null>(null);
   const [warned] = useState(() => new Set<number>());
   const hub = useMemo<EditorHub>(() => ({ active, setActive, warned }), [active, warned]);
 
@@ -230,9 +232,19 @@ export function DocumentPage() {
             setUrl({ version: String(versionId), node: null });
           }}
           onPermissions={() => setPermissionsOpen(true)}
+          onExportPdf={() =>
+            setExporting({ section: flat.find((f) => f.node.id === selectedId)?.node ?? null, sectionFirst: false })
+          }
           commentsOpen={commentsOpen}
           onToggleComments={() => setCommentsOpen((o) => !o)}
           documentComments={comments.data?.document ?? 0}
+        />
+        <ExportPdfDialog
+          opened={exporting !== null}
+          onClose={() => setExporting(null)}
+          version={version}
+          section={exporting?.section ?? null}
+          sectionFirst={exporting?.sectionFirst ?? false}
         />
         <PermissionsDialog
           documentId={documentId}
@@ -296,6 +308,7 @@ export function DocumentPage() {
             }}
             summary={summaryMap}
             comments={comments.data?.nodes ?? {}}
+            onExportSection={(node) => setExporting({ section: node, sectionFirst: true })}
           />
           <div className="dh-page-scroll" ref={scrollRef} data-testid="page-scroll">
             <div className="dh-paper" style={{ height: virtualizer.getTotalSize() }}>

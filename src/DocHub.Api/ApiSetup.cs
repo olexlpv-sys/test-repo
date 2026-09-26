@@ -5,9 +5,11 @@ using DocHub.Api.Common;
 using DocHub.Api.Documents;
 using DocHub.Api.Endpoints;
 using DocHub.Api.Errors;
+using DocHub.Api.Exports;
 using DocHub.Api.OpenApi;
 using DocHub.Infrastructure;
 using DocHub.Infrastructure.Content;
+using DocHub.Infrastructure.Export;
 using DocHub.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Scalar.AspNetCore;
@@ -77,6 +79,7 @@ internal static class ApiSetup
         services.AddSingleton<IEndpointModule, HistoryEndpoints>();
         services.AddSingleton<IEndpointModule, CommentEndpoints>();
         services.AddSingleton<IEndpointModule, CompareEndpoints>();
+        services.AddSingleton<IEndpointModule, ExportEndpoints>();
 
         // Documents and versions (T07): the authorization seam, guards, signing and read models.
         services.AddScoped<IDocumentAuthorization, DocumentAuthorization>();
@@ -103,6 +106,18 @@ internal static class ApiSetup
         // Tamper evidence (T21 §4): nightly ledger reconciliation.
         services.Configure<ReconciliationOptions>(configuration.GetSection(ReconciliationOptions.SectionName));
         services.AddHostedService<LedgerReconciliationService>();
+
+        // PDF export (T20): composer, Chromium renderer, blob storage, the job API and the worker.
+        services.Configure<PdfRendererOptions>(configuration.GetSection(PdfRendererOptions.Section));
+        services.Configure<ExportStorageOptions>(configuration.GetSection(ExportStorageOptions.Section));
+        services.Configure<ExportWorkerOptions>(configuration.GetSection(ExportWorkerOptions.Section));
+        services.AddSingleton(sp => new PrintHtmlComposer(sp.GetRequiredService<StyleProperties>().FontFamilies));
+        services.AddSingleton<IPdfRenderer, ChromiumPdfRenderer>();
+        services.AddSingleton<IExportStorage, BlobExportStorage>();
+        services.AddSingleton<ExportQueueSignal>();
+        services.AddScoped<ExportSource>();
+        services.AddScoped<ExportService>();
+        services.AddHostedService<PdfExportWorker>();
         return builder;
     }
 

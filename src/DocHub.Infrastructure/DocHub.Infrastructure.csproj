@@ -4,6 +4,13 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="DiffPlex" />
+    <PackageReference Include="Microsoft.Playwright" />
+    <PackageReference Include="PdfPig" />
+    <PackageReference Include="Azure.Storage.Blobs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Export\Fonts\*" CopyToOutputDirectory="PreserveNewest" LinkBase="Export\Fonts" />
   </ItemGroup>
 
   <ItemGroup>

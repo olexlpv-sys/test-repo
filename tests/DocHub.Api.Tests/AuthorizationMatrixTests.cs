@@ -22,7 +22,7 @@ public sealed class AuthorizationMatrixTests(DocHubApiFactory factory) : IClassF
         await AuthorizationMatrix.AssertAsync(factory, cases, TestContext.Current.CancellationToken);
     }
 
-    /// <summary>T05–T11: dictionaries, folders, documents, trees, contents, permissions, history, comments and comparisons are readable by every user; writes are admin-only (non-existing ids/invalid bodies: no side effects).</summary>
+    /// <summary>T05–T11: dictionaries, folders, documents, trees, contents, permissions, history, comments, comparisons and exports are readable by every user; writes are admin-only (non-existing ids/invalid bodies: no side effects).</summary>
     [Fact]
     public async Task Dictionary_endpoints_follow_the_matrix()
     {
@@ -110,6 +110,11 @@ public sealed class AuthorizationMatrixTests(DocHubApiFactory factory) : IClassF
                 // T12 compare (rules: CompareTests).
                 new AccessCase("GET", "/api/documents/999999/compare?base=1&target=2", user, Missing),
                 new AccessCase("GET", $"/api/documents/999999/compare/nodes/{Guid.Empty}?base=1&target=2", user, Missing),
+
+                // T20 PDF export (rules: ExportJobTests, ExportTests).
+                new AccessCase("POST", "/api/versions/999999/exports/pdf", user, Missing, new { }),
+                new AccessCase("GET", "/api/exports/999999", user, Missing),
+                new AccessCase("GET", "/api/exports/999999/file", user, Missing),
             };
         });
 

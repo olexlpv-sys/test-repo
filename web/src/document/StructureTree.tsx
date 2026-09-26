@@ -22,6 +22,8 @@ interface Props {
   onSelect: (node: TreeNode) => void;
   summary: Map<string, NodeChangeSummary>;
   comments: Record<string, number>;
+  /** "Export this section to PDF" (T20), offered to every viewer. */
+  onExportSection: (node: TreeNode) => void;
 }
 
 /** Where a new or moved node goes: parent id and 0-based position among the parent's other children. */
@@ -56,6 +58,7 @@ export function StructureTree({
   onSelect,
   summary,
   comments,
+  onExportSection,
 }: Props) {
   const queryClient = useQueryClient();
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
@@ -401,7 +404,7 @@ export function StructureTree({
                 {(comments[node.logicalNodeId] ?? 0) > 0 && (
                   <span className="dh-tree-comments">💬{comments[node.logicalNodeId]}</span>
                 )}
-                {canEditStructure && (
+                {
                   <Menu position="bottom-end" withinPortal>
                     <Menu.Target>
                       <ActionIcon
@@ -416,67 +419,73 @@ export function StructureTree({
                       </ActionIcon>
                     </Menu.Target>
                     <Menu.Dropdown>
-                      <Menu.Item
-                        onClick={() =>
-                          setAdding({
-                            parentId: node.id,
-                            position: null,
-                            title: '',
-                            typeId: firstType ? String(firstType.id) : null,
-                          })
-                        }
-                      >
-                        Add child
-                      </Menu.Item>
-                      <Menu.Item
-                        onClick={() =>
-                          setAdding({
-                            parentId: f.parent?.id ?? null,
-                            position: f.index + 1,
-                            title: '',
-                            typeId: String(node.nodeTypeId),
-                          })
-                        }
-                      >
-                        Add sibling below
-                      </Menu.Item>
-                      <Menu.Item onClick={() => setRenaming({ id: node.id, title: node.title })}>Rename</Menu.Item>
-                      <Menu.Sub>
-                        <Menu.Sub.Target>
-                          <Menu.Sub.Item>Change type</Menu.Sub.Item>
-                        </Menu.Sub.Target>
-                        <Menu.Sub.Dropdown>
-                          {activeTypes.map((t) => (
-                            <Menu.Item
-                              key={t.id}
-                              disabled={t.id === node.nodeTypeId}
-                              onClick={() => update.mutate({ node, typeId: t.id })}
-                            >
-                              {t.name}
-                            </Menu.Item>
-                          ))}
-                        </Menu.Sub.Dropdown>
-                      </Menu.Sub>
-                      <Menu.Divider />
-                      <Menu.Item disabled={f.index === 0} onClick={() => moveBy(f, 'up')}>
-                        Move up
-                      </Menu.Item>
-                      <Menu.Item disabled={f.index === f.siblings.length - 1} onClick={() => moveBy(f, 'down')}>
-                        Move down
-                      </Menu.Item>
-                      <Menu.Item disabled={f.index === 0} onClick={() => moveBy(f, 'indent')}>
-                        Indent
-                      </Menu.Item>
-                      <Menu.Item disabled={!f.parent} onClick={() => moveBy(f, 'outdent')}>
-                        Outdent
-                      </Menu.Item>
-                      <Menu.Divider />
-                      <Menu.Item color="red" onClick={() => confirmDelete(node)}>
-                        Delete
-                      </Menu.Item>
+                      <Menu.Item onClick={() => onExportSection(node)}>Export this section to PDF</Menu.Item>
+                      {canEditStructure && (
+                        <>
+                          <Menu.Divider />
+                          <Menu.Item
+                            onClick={() =>
+                              setAdding({
+                                parentId: node.id,
+                                position: null,
+                                title: '',
+                                typeId: firstType ? String(firstType.id) : null,
+                              })
+                            }
+                          >
+                            Add child
+                          </Menu.Item>
+                          <Menu.Item
+                            onClick={() =>
+                              setAdding({
+                                parentId: f.parent?.id ?? null,
+                                position: f.index + 1,
+                                title: '',
+                                typeId: String(node.nodeTypeId),
+                              })
+                            }
+                          >
+                            Add sibling below
+                          </Menu.Item>
+                          <Menu.Item onClick={() => setRenaming({ id: node.id, title: node.title })}>Rename</Menu.Item>
+                          <Menu.Sub>
+                            <Menu.Sub.Target>
+                              <Menu.Sub.Item>Change type</Menu.Sub.Item>
+                            </Menu.Sub.Target>
+                            <Menu.Sub.Dropdown>
+                              {activeTypes.map((t) => (
+                                <Menu.Item
+                                  key={t.id}
+                                  disabled={t.id === node.nodeTypeId}
+                                  onClick={() => update.mutate({ node, typeId: t.id })}
+                                >
+                                  {t.name}
+                                </Menu.Item>
+                              ))}
+                            </Menu.Sub.Dropdown>
+                          </Menu.Sub>
+                          <Menu.Divider />
+                          <Menu.Item disabled={f.index === 0} onClick={() => moveBy(f, 'up')}>
+                            Move up
+                          </Menu.Item>
+                          <Menu.Item disabled={f.index === f.siblings.length - 1} onClick={() => moveBy(f, 'down')}>
+                            Move down
+                          </Menu.Item>
+                          <Menu.Item disabled={f.index === 0} onClick={() => moveBy(f, 'indent')}>
+                            Indent
+                          </Menu.Item>
+                          <Menu.Item disabled={!f.parent} onClick={() => moveBy(f, 'outdent')}>
+                            Outdent
+                          </Menu.Item>
+                          <Menu.Divider />
+                          <Menu.Item color="red" onClick={() => confirmDelete(node)}>
+                            Delete
+                          </Menu.Item>
+                        </>
+                      )}
                     </Menu.Dropdown>
                   </Menu>
-                )}
+                }
               </div>
             );
           })}

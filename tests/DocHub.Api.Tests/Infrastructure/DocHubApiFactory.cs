@@ -40,7 +40,7 @@ public class DocHubApiFactory(SqlServerContainerFixture server) : WebApplication
     /// <summary>Extra endpoint modules only the tests use (see <see cref="TestEndpoints"/>).</summary>
     protected virtual IEnumerable<IEndpointModule> AdditionalModules => [];
 
-    public async ValueTask InitializeAsync()
+    public virtual async ValueTask InitializeAsync()
     {
         DacpacDeployer.Deploy(server.MasterConnectionString, DatabaseName);
         await using var connection = new SqlConnection(AdminConnectionString);
@@ -74,6 +74,8 @@ public class DocHubApiFactory(SqlServerContainerFixture server) : WebApplication
         builder.UseSetting("Audit:Reconciliation:Enabled", "false");
         // Tests run the refresher explicitly (RunOnceAsync), so script-edited rows stay stale until they do.
         builder.UseSetting("Content:DerivedRefresh:Enabled", "false");
+        // PDF exports are rendered only by the export tests (ExportApiFactory); elsewhere jobs stay queued.
+        builder.UseSetting("Export:Worker:Enabled", "false");
         builder.ConfigureTestServices(ConfigureServices);
         builder.ConfigureTestServices(services =>
         {
@@ -84,7 +86,7 @@ public class DocHubApiFactory(SqlServerContainerFixture server) : WebApplication
         });
     }
 
-    async ValueTask IAsyncDisposable.DisposeAsync()
+    public override async ValueTask DisposeAsync()
     {
         await base.DisposeAsync().ConfigureAwait(false);
         GC.SuppressFinalize(this);

@@ -17,6 +17,7 @@ interface Props {
   signatures: SignatureStatus | undefined;
   onSelectVersion: (versionId: number) => void;
   onPermissions: () => void;
+  onExportPdf: () => void;
   commentsOpen: boolean;
   onToggleComments: () => void;
   /** Open comments on the whole document (badge on the Comments button). */
@@ -31,6 +32,7 @@ export function VersionBar({
   signatures,
   onSelectVersion,
   onPermissions,
+  onExportPdf,
   commentsOpen,
   onToggleComments,
   documentComments,
@@ -237,6 +239,9 @@ export function VersionBar({
             aria-pressed={commentsOpen}
           >
             💬 Comments{documentComments > 0 ? ` (${documentComments})` : ''}
+          </Button>
+          <Button variant="soft" color="gray" onClick={onExportPdf}>
+            Export PDF
           </Button>
           <Button variant="soft" color="gray" onClick={() => setActivity(true)}>
             Activity

@@ -8,6 +8,8 @@
     <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Testcontainers.Azurite" />
+    <PackageReference Include="PDFtoImage" />
   </ItemGroup>
 
   <ItemGroup>

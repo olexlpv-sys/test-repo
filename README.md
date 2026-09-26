@@ -39,7 +39,7 @@ Prerequisites: .NET SDK 10.0.100+ (see `global.json`), Docker (for SQL Server an
 
 ```bash
 cp .env.example .env               # then set a strong MSSQL_SA_PASSWORD
-docker compose up -d               # SQL Server 2022 on localhost:1433
+docker compose up -d               # SQL Server 2022 on localhost:1433, Azurite (blob storage for PDF exports) on :10000
 dotnet build DocHub.slnx
 dotnet test --solution DocHub.slnx
 dotnet run --project src/DocHub.Api   # http://localhost:5080  (/health, /openapi/v1.json, /scalar)
@@ -49,6 +49,12 @@ Local connection string override (never commit secrets):
 ```bash
 dotnet user-secrets --project src/DocHub.Api set "ConnectionStrings:DocHub" "Server=localhost,1433;Database=DocHub;User Id=sa;Password=<your password>;TrustServerCertificate=True"
 ```
+
+PDF export (T20) renders with headless Chromium through Playwright and stores files in Azure Blob Storage
+(`Export:Storage:ConnectionString`, default `UseDevelopmentStorage=true` = the Azurite container). Chromium comes from
+`pwsh src/DocHub.Api/bin/Debug/net10.0/playwright.ps1 install chromium`, or point `Export:Renderer:ChromiumExecutablePath` at an
+installed one. Where Chromium can't create its sandbox (a container running as root), set `Export:Renderer:Sandbox=false`.
+The export tests use `PLAYWRIGHT_CHROMIUM` (default `/opt/pw-browsers/chromium` when present) and start their own Azurite container.
 
 ## Documentation
 

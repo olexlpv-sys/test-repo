@@ -18,5 +18,16 @@ services:
       retries: 10
       start_period: 20s
 
+  azurite:
+    # Blob storage for PDF exports (T20); the API's default connection string is UseDevelopmentStorage=true.
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: dochub-azurite
+    command: azurite-blob --blobHost 0.0.0.0 --blobPort 10000 --skipApiVersionCheck --location /data
+    ports:
+      - "10000:10000"
+    volumes:
+      - dochub-azurite-data:/data
+
 volumes:
   dochub-sql-data:
+  dochub-azurite-data:

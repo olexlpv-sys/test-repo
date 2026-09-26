@@ -149,7 +149,10 @@ test('a node-scoped editor edits only their node and its descendants, with no st
   await expect(sectionText(page, theirs ?? 0)).toHaveAttribute('contenteditable', 'false');
   await expect(page.getByTestId(`tree-node-${theirs}`)).toHaveAttribute('data-muted', 'true');
   await expect(page.getByRole('button', { name: '+ Node' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Actions for/ })).toHaveCount(0);
+  // The node menu offers only the PDF export (T20), no structure actions.
+  await page.getByRole('button', { name: 'Actions for Theirs' }).click();
+  await expect(page.getByRole('menuitem')).toHaveText(['Export this section to PDF']);
+  await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Discard draft' })).toHaveCount(0);
 
   await sectionText(page, child ?? 0).click();

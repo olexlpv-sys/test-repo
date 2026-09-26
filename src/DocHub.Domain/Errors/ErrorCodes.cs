@@ -28,4 +28,5 @@ public static class ErrorCodes
     public const string NotDeleted = "not-deleted";
     public const string FolderMissing = "folder-missing";
     public const string BuiltInStyle = "built-in-style";
+    public const string ExportNotReady = "export-not-ready";
 }

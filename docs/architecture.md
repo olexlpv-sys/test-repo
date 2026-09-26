@@ -86,6 +86,7 @@ flowchart LR
 | `internal-error` | 500 | Unexpected error (no internal details are returned) |
 | `in-use` | 409 | Deleting a node type/style/folder that is referenced |
 | `built-in-style` | 409 | Deleting a built-in content style (deactivate it instead) |
+| `export-not-ready` | 409 | Downloading an export that is queued, running or failed |
 | `document-deleted` | 409 | Mutating a soft-deleted document |
 | `not-deleted` | 409 | Restoring a document that is not deleted |
 | `folder-missing` | 409 | Restoring without `folderId` when the original folder is gone |

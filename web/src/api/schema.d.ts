@@ -417,6 +417,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/versions/{versionId}/exports/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Starts a PDF export of a version (or of a node with its subtree); returns the caller's job — at once Succeeded when the file is cached. */
+        post: operations["CreatePdfExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/exports/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status and progress (0–100) of an export job of the caller. */
+        get: operations["GetExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/exports/{jobId}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The PDF of a succeeded export job (attachment); 409 export-not-ready before, 404 once a draft's file has expired. */
+        get: operations["DownloadExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/audit/reconcile": {
         parameters: {
             query?: never;
@@ -1014,6 +1065,15 @@ export interface components {
             /** Format: int32 */
             sortOrder?: number;
         };
+        CreatePdfExport: {
+            /** Format: uuid */
+            logicalNodeId?: null | string;
+            pageSize?: null | components["schemas"]["PdfPageSize"];
+            titlePage?: null | boolean;
+            toc?: null | boolean;
+            headerFooter?: null | boolean;
+            signaturePage?: null | boolean;
+        };
         DeletedNodes: {
             /** Format: int32 */
             deletedCount: number;
@@ -1098,6 +1158,19 @@ export interface components {
         };
         /** @enum {unknown} */
         DocumentRole: "Editor" | "Approver";
+        ExportJobStatus: {
+            /** Format: int32 */
+            jobId: number;
+            status: components["schemas"]["ExportStatus"];
+            /** Format: int32 */
+            progress: number;
+            error: null | string;
+            fileName: null | string;
+            /** Format: int64 */
+            fileSize: null | number;
+        };
+        /** @enum {unknown} */
+        ExportStatus: "Queued" | "Running" | "Succeeded" | "Failed";
         FieldChange: {
             field: string;
             old: null | string;
@@ -1389,6 +1462,8 @@ export interface components {
             /** Format: int32 */
             totalCount: number;
         };
+        /** @enum {unknown} */
+        PdfPageSize: "A4" | "Letter" | null;
         ReconciliationRunResponse: {
             /** Format: date-time */
             fromUtc: string;
@@ -1458,6 +1533,8 @@ export interface components {
         SignRequest: {
             comment?: null | string;
         };
+        /** Format: binary */
+        Stream: string;
         StructuralChange: {
             kind: string;
             oldNumber: null | string;
@@ -2395,6 +2472,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContentDiff"];
+                };
+            };
+        };
+    };
+    CreatePdfExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                versionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["CreatePdfExport"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportJobStatus"];
+                };
+            };
+        };
+    };
+    GetExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportJobStatus"];
+                };
+            };
+        };
+    };
+    DownloadExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": components["schemas"]["Stream"];
                 };
             };
         };

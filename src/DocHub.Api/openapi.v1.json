@@ -1445,6 +1445,118 @@
         }
       }
     },
+    "/api/versions/{versionId}/exports/pdf": {
+      "post": {
+        "tags": [
+          "Exports"
+        ],
+        "summary": "Starts a PDF export of a version (or of a node with its subtree); returns the caller's job — at once Succeeded when the file is cached.",
+        "operationId": "CreatePdfExport",
+        "parameters": [
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CreatePdfExport"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportJobStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exports/{jobId}": {
+      "get": {
+        "tags": [
+          "Exports"
+        ],
+        "summary": "Status and progress (0–100) of an export job of the caller.",
+        "operationId": "GetExport",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportJobStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exports/{jobId}/file": {
+      "get": {
+        "tags": [
+          "Exports"
+        ],
+        "summary": "The PDF of a succeeded export job (attachment); 409 export-not-ready before, 404 once a draft's file has expired.",
+        "operationId": "DownloadExport",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/audit/reconcile": {
       "post": {
         "tags": [
@@ -3564,6 +3676,52 @@
           }
         }
       },
+      "CreatePdfExport": {
+        "type": "object",
+        "properties": {
+          "logicalNodeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "pageSize": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PdfPageSize"
+              }
+            ]
+          },
+          "titlePage": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "toc": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "headerFooter": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "signaturePage": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
       "DeletedNodes": {
         "required": [
           "deletedCount"
@@ -3913,6 +4071,57 @@
         "enum": [
           "Editor",
           "Approver"
+        ]
+      },
+      "ExportJobStatus": {
+        "required": [
+          "jobId",
+          "status",
+          "progress",
+          "error",
+          "fileName",
+          "fileSize"
+        ],
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ExportStatus"
+          },
+          "progress": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fileSize": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "ExportStatus": {
+        "enum": [
+          "Queued",
+          "Running",
+          "Succeeded",
+          "Failed"
         ]
       },
       "FieldChange": {
@@ -4984,6 +5193,13 @@
           }
         }
       },
+      "PdfPageSize": {
+        "enum": [
+          "A4",
+          "Letter",
+          null
+        ]
+      },
       "ReconciliationRunResponse": {
         "required": [
           "fromUtc",
@@ -5242,6 +5458,10 @@
             ]
           }
         }
+      },
+      "Stream": {
+        "type": "string",
+        "format": "binary"
       },
       "StructuralChange": {
         "required": [
@@ -5709,6 +5929,9 @@
     },
     {
       "name": "Compare"
+    },
+    {
+      "name": "Exports"
     },
     {
       "name": "Node types"
