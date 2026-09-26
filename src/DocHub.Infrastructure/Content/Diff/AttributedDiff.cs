@@ -133,13 +133,23 @@ public static class AttributedDiff
         var next = baseStart; // next baseline index not yet emitted
         void FlushDeletes(int until)
         {
+            // One stretch of deleted baseline text. Characters carried elsewhere (text moved between blocks) take who moved or
+            // restructured them — unless the stretch was mostly deleted outright: then the leftovers the token diff happened to
+            // carry along belong to that deletion too, so one deleted passage has one author.
+            var stretch = new List<(char C, DiffAuthor? Deleted, DiffAuthor? Moved)>();
             for (; baseStart >= 0 && next < until && next < end; next++)
             {
                 if (!surviving.Contains(next))
                 {
-                    // Deleted here but carried elsewhere (text moved between blocks): the author comes from its neighbours.
-                    chars.Add(("delete", baseBlock[next - baseStart].C, deletedBy.GetValueOrDefault(next) ?? movedBy.GetValueOrDefault(next), null, null));
+                    stretch.Add((baseBlock[next - baseStart].C, deletedBy.GetValueOrDefault(next), movedBy.GetValueOrDefault(next)));
                 }
+            }
+
+            var explicitCount = stretch.Count(d => d.Deleted is not null);
+            var dominant = explicitCount * 2 > stretch.Count ? stretch.Where(d => d.Deleted is not null).Select(d => d.Deleted).MaxBy(a => a!.EntryId) : null;
+            foreach (var (c, deleted, moved) in stretch)
+            {
+                chars.Add(("delete", c, deleted ?? dominant ?? moved, null, null));
             }
         }
 
@@ -166,7 +176,8 @@ public static class AttributedDiff
             // An insert: the deletions it replaces come first (up to the next surviving baseline character).
             FlushDeletes(nextSurvivor[i + 1]);
             var formatBy = c.InsertedBy is not null && c.FormatBy is not null && !Equals(c.FormatBy, c.InsertedBy) ? c.FormatBy : null;
-            chars.Add(("insert", c.C, c.InsertedBy ?? Latest(c.MovedBy ?? c.DisplacedBy, c.PlacedBy), null, formatBy));
+            // Carried text: the later of an own move and a restructure; being pushed out of order is the weakest reason (as for deletes).
+            chars.Add(("insert", c.C, c.InsertedBy ?? Latest(c.MovedBy, c.PlacedBy) ?? c.DisplacedBy, null, formatBy));
         }
 
         FlushDeletes(end);

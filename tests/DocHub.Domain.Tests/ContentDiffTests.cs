@@ -313,6 +313,42 @@ public sealed class AttributedDiffTests
         Assert.Contains(first.Ops!, o => o.Op == "delete" && o.Text.Contains("Xa one.", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void A_split_or_merge_keeps_its_author_when_someone_later_pushes_it_out_of_order()
+    {
+        // Entry ids in the order the changes were made: Bob restructures first, Alice pushes later.
+        var bob = new DiffAuthor(5, 3, "Bob", "App", null, new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc));
+        var alice = new DiffAuthor(6, 2, "Alice", "App", null, new DateTime(2026, 9, 6, 0, 0, 0, DateTimeKind.Utc));
+        var baseline = Doc("Xa one.", "Yb two.", "Zc three.", "Wd four.", "Ve five.");
+        var cases = new[]
+        {
+            (Restructured: Doc("Xa", "one.", "Yb two.", "Zc three.", "Wd four.", "Ve five."), Pushed: Doc("Ve five.", "Xa", "one.", "Yb two.", "Zc three.", "Wd four.")),
+            (Restructured: Doc("Xa one. Yb two.", "Zc three.", "Wd four.", "Ve five."), Pushed: Doc("Ve five.", "Xa one. Yb two.", "Zc three.", "Wd four.")),
+        };
+        foreach (var (restructured, pushed) in cases)
+        {
+            var ops = AttributedDiff.Diff(Service, baseline, [new ContentStep(restructured, bob), new ContentStep(pushed, alice)])
+                .Blocks.SelectMany(b => b.Ops ?? []).Where(o => o.Op != "equal").ToList();
+            Assert.All(ops.Where(o => o.Text.Contains("Xa", StringComparison.Ordinal) || o.Text.Contains("one", StringComparison.Ordinal)),
+                o => Assert.Equal("Bob", o.By!.DisplayName));
+        }
+    }
+
+    [Fact]
+    public void A_moved_paragraph_merged_elsewhere_and_mostly_retyped_has_one_author_for_its_delete()
+    {
+        var baseline = Doc("Xa one.", "Yb two.", "Zc three.", "Wd four.", "Ve five.");
+        var steps = new[]
+        {
+            new ContentStep(Doc("Yb two.", "Zc three.", "Wd four.", "Ve five.", "Xa one."), Alice),
+            new ContentStep(Doc("Yb two.", "Zc three.", "Wd four.", "Xa one. Ve five."), Bob),
+        };
+
+        var first = AttributedDiff.Diff(Service, baseline, steps).Blocks.First(b => b.Ops is not null && b.Status != "equal");
+        var delete = Assert.Single(first.Ops!, o => o.Op == "delete");
+        Assert.Equal("Xa one.", delete.Text);
+    }
+
     [Theory]
     [InlineData("swap")]
     [InlineData("reverse")]
