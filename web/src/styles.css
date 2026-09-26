@@ -1,0 +1,198 @@
+/* DocHub visual language: light surfaces, soft tinted chips, blue primary (reference: product style images). */
+:root {
+  --dh-page-bg: #f5f7fa;
+  --dh-surface: #ffffff;
+  --dh-surface-muted: #f7f9fc;
+  --dh-border: #e4e7ec;
+  --dh-text: #2b3441;
+  --dh-text-body: #3a4350;
+  --dh-text-muted: #6b7280;
+  --dh-tab: #4a5565;
+  --dh-primary: #1e5bdc;
+  --dh-primary-hover: #1a4fc0;
+  --dh-primary-soft-bg: #eaf1fb;
+  --dh-primary-soft-text: #1b4fc4;
+  --dh-danger-soft-bg: #fdecec;
+  --dh-danger-soft-text: #b42318;
+  --dh-chip-gray-bg: #f2f4f7;
+  --dh-chip-gray-text: #3d4655;
+  --dh-chip-green-bg: #ecf8ee;
+  --dh-chip-green-text: #1f9d3a;
+  --dh-chip-amber-bg: #fef4e6;
+  --dh-chip-amber-text: #b45309;
+  --dh-input-border: #d0d5dd;
+  --dh-input-filled: #f2f4f7;
+  --dh-radius: 8px;
+  --dh-card-radius: 10px;
+}
+
+body {
+  background: var(--dh-page-bg);
+  color: var(--dh-text);
+}
+
+/* Top navigation: white bar, underline tabs. */
+.dh-topbar {
+  height: 60px;
+  background: var(--dh-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 46px 0 16px;
+}
+.dh-tabs {
+  display: flex;
+  height: 100%;
+  border-bottom: 1px solid var(--dh-border);
+}
+.dh-tab {
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  font-size: 17px;
+  color: var(--dh-tab);
+  text-decoration: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  background: none;
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+}
+.dh-tab[data-active='true'] {
+  color: var(--dh-primary);
+  border-bottom-color: var(--dh-primary);
+}
+.dh-page {
+  padding: 30px 46px 40px 16px;
+}
+
+/* Cards: white header row, muted body, hairline borders. */
+.dh-card {
+  background: var(--dh-surface-muted);
+  border: 1px solid var(--dh-border);
+  border-radius: var(--dh-card-radius);
+  overflow: hidden;
+}
+.dh-card + .dh-card {
+  margin-top: 20px;
+}
+.dh-card[data-selected='true'] {
+  border-color: var(--dh-primary);
+  box-shadow: 0 0 0 1px var(--dh-primary);
+}
+.dh-card-header {
+  background: var(--dh-surface);
+  border-bottom: 1px solid var(--dh-border);
+  min-height: 64px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dh-card-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--dh-text);
+}
+.dh-card-body {
+  padding: 20px 18px 18px;
+  color: var(--dh-text-body);
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+/* Soft chips (status, flags). */
+.dh-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 16px;
+  line-height: 1.4;
+  background: var(--dh-chip-gray-bg);
+  color: var(--dh-chip-gray-text);
+  white-space: nowrap;
+}
+.dh-chip[data-tone='green'] {
+  background: var(--dh-chip-green-bg);
+  color: var(--dh-chip-green-text);
+}
+.dh-chip[data-tone='amber'] {
+  background: var(--dh-chip-amber-bg);
+  color: var(--dh-chip-amber-text);
+}
+
+/* Labelled values on the right of a card body. */
+.dh-field-label {
+  font-size: 13px;
+  color: var(--dh-text-muted);
+  text-align: right;
+}
+.dh-field-value {
+  font-size: 17px;
+  color: var(--dh-text);
+  text-align: right;
+  margin-top: 8px;
+  white-space: nowrap;
+}
+
+.dh-counter {
+  font-size: 12px;
+  color: var(--dh-text-muted);
+  text-align: right;
+  margin-top: 4px;
+}
+
+.dh-brand {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--dh-text);
+  margin-right: 24px;
+}
+.dh-section-title {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--dh-text);
+}
+.dh-muted {
+  color: var(--dh-text-muted);
+}
+.dh-sort {
+  font-size: 13px;
+  color: var(--dh-text-muted);
+  background: none;
+  border: 0;
+  padding: 0 6px;
+  cursor: pointer;
+}
+.dh-sort[data-active='true'] {
+  color: var(--dh-primary);
+}
+.dh-deleted .dh-card-title {
+  text-decoration: line-through;
+  color: var(--dh-text-muted);
+}
+.dh-folder-row {
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+.dh-folder-row:hover {
+  background: var(--dh-surface-muted);
+}
+.dh-folder-row[data-selected] {
+  background: var(--dh-primary-soft-bg);
+  color: var(--dh-primary-soft-text);
+}
+.dh-modal-footer {
+  display: flex;
+  gap: 12px;
+  border-top: 1px solid var(--dh-border);
+  margin: 24px -20px -20px;
+  padding: 16px 20px;
+}
+.dh-modal-footer > * {
+  flex: 1;
+}
