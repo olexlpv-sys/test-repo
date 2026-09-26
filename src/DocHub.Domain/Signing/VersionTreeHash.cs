@@ -15,9 +15,16 @@ public sealed record TreeHashNode(int Id, int? ParentId, Guid LogicalNodeId, int
 /// </summary>
 public static class VersionTreeHash
 {
-    public static byte[] Compute(IReadOnlyCollection<TreeHashNode> nodes)
+    public static byte[] Compute(IReadOnlyCollection<TreeHashNode> nodes) => Compute(nodes, CanonicalJson.Hash);
+
+    /// <summary>
+    /// <see cref="Compute(IReadOnlyCollection{TreeHashNode})"/> with the content part taken from <paramref name="contentHash"/>,
+    /// which must return <see cref="CanonicalJson.Hash"/> of the JSON — for bulk tools that already know it.
+    /// </summary>
+    public static byte[] Compute(IReadOnlyCollection<TreeHashNode> nodes, Func<string, byte[]> contentHash)
     {
         ArgumentNullException.ThrowIfNull(nodes);
+        ArgumentNullException.ThrowIfNull(contentHash);
         var byId = nodes.ToDictionary(n => n.Id);
         var children = nodes.ToLookup(n => n.ParentId is { } p && byId.ContainsKey(p) ? p : (int?)null);
         var text = new StringBuilder();
@@ -46,7 +53,7 @@ public static class VersionTreeHash
                 }
 
                 var parent = node.ParentId is { } p && byId.TryGetValue(p, out var parentNode) ? parentNode.LogicalNodeId.ToString("D") : "";
-                var content = node.ContentJson is null ? "" : Convert.ToHexString(CanonicalJson.Hash(node.ContentJson));
+                var content = node.ContentJson is null ? "" : Convert.ToHexString(contentHash(node.ContentJson));
                 // A JSON array per line: titles may contain any character, so fields are encoded, not just joined.
                 text.Append(System.Text.Json.JsonSerializer.Serialize(new object[] { node.LogicalNodeId.ToString("D"), parent, node.NodeTypeId, node.Title, content }))
                     .Append('\n');

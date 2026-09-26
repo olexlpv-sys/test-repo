@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Production-scale test data (T19): bulk-loads the NFR-L2 volume into a deployed DocHub database. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DocHub.Domain\DocHub.Domain.csproj" />
+    <ProjectReference Include="..\..\src\DocHub.Infrastructure\DocHub.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Node content is built from the Content Schema fixtures (T09). -->
+    <None Include="..\..\tests\DocHub.Domain.Tests\ContentFixtures\*.json" LinkBase="ContentFixtures" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

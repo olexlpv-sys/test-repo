@@ -4,6 +4,9 @@
     <Project Path="src/DocHub.Domain/DocHub.Domain.csproj" />
     <Project Path="src/DocHub.Infrastructure/DocHub.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/DocHub.DataGen/DocHub.DataGen.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DocHub.Api.Tests/DocHub.Api.Tests.csproj" />
     <Project Path="tests/DocHub.Database.Tests/DocHub.Database.Tests.csproj" />
