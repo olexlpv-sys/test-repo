@@ -7,6 +7,7 @@ import { fromSchema, type ContentSchemaInfo } from '../editor/contentSchema';
 import { SectionEditor, type SaveStatus } from '../editor/SectionEditor';
 import { keys, type HistoryEntry, type NodeChangeSummary, type TreeNode, type VersionHeader } from './api';
 import { SectionHistory } from './SectionHistory';
+import { sinceText } from './historyText';
 import { TrackChanges } from './TrackChanges';
 
 type NodeType = Schemas['NodeTypeResponse'];
@@ -74,18 +75,6 @@ function structuralText(
         return s.kind;
     }
   });
-}
-
-function sinceText(since: string, versions: VersionHeader[]): string {
-  if (since === 'latestSigned') {
-    return 'the latest signed version';
-  }
-
-  if (since.startsWith('v:')) {
-    return versions.find((v) => v.id === Number(since.slice(2)))?.label ?? 'the chosen version';
-  }
-
-  return since.startsWith('d:') ? new Date(since.slice(2)).toLocaleDateString() : 'the chosen change';
 }
 
 /** One section of the page: numbered heading, change indicators, inline history, and the text (editor, historical view or track changes). */

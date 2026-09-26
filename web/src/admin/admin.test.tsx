@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { baseRoutes, fakeApi, Reply } from '../test/fakeApi';
 import { renderApp } from '../test/render';
 
@@ -60,11 +60,39 @@ describe('admin tab (T17)', () => {
     expect(await screen.findByText('No findings — the ledger and the audit log agree.')).toBeInTheDocument();
 
     const before = calls.filter((c) => c.path === '/api/admin/audit').length;
-    const from = screen.getByLabelText('From (UTC)');
+    const from = screen.getByLabelText('From');
     await userEvent.clear(from);
     await userEvent.type(from, '2020-01-01');
     expect(await screen.findByText('The date range can be at most 31 days.')).toBeInTheDocument();
     expect(calls.filter((c) => c.path === '/api/admin/audit').length).toBe(before);
+  });
+});
+
+describe('audit log in a time zone east of UTC', () => {
+  const originalTz = process.env.TZ;
+  afterEach(() => {
+    process.env.TZ = originalTz;
+  });
+
+  it('asks for the chosen local days, which match the local times the table shows', async () => {
+    process.env.TZ = 'Europe/Berlin';
+    const { calls } = fakeApi({
+      ...baseRoutes(),
+      'GET /api/admin/audit': () => ({ items: [], page: 1, pageSize: 50, totalCount: 0 }),
+      'GET /api/admin/audit/findings': () => ({ items: [], page: 1, pageSize: 50, totalCount: 0 }),
+    });
+    renderApp('/admin?tab=audit');
+    const from = await screen.findByLabelText('From');
+    const to = screen.getByLabelText('To');
+    await userEvent.clear(to);
+    await userEvent.type(to, '2026-09-26');
+    await userEvent.clear(from);
+    await userEvent.type(from, '2026-09-26');
+
+    await waitFor(() => {
+      const query = calls.filter((c) => c.path === '/api/admin/audit').at(-1)?.query;
+      expect([query?.get('from'), query?.get('to')]).toEqual(['2026-09-25T22:00:00.000Z', '2026-09-26T21:59:59.999Z']);
+    });
   });
 });
 

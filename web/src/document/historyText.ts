@@ -1,4 +1,4 @@
-import type { HistoryEntry } from './api';
+import type { HistoryEntry, VersionHeader } from './api';
 
 const kindLabels: Record<string, string> = {
   ContentChanged: 'content',
@@ -30,3 +30,16 @@ export function sourceLabel(entry: Pick<HistoryEntry, 'source' | 'user' | 'dbLog
 
 /** The server's one-line summary (e.g. "Content changed (+12 / −3 words)"). */
 export const describeEntry = (entry: HistoryEntry) => entry.summary;
+
+/** The baseline of "changes since" in words; a date baseline is the start of a local day, sent as a UTC instant. */
+export function sinceText(since: string, versions: VersionHeader[]): string {
+  if (since === 'latestSigned') {
+    return 'the latest signed version';
+  }
+
+  if (since.startsWith('v:')) {
+    return versions.find((v) => v.id === Number(since.slice(2)))?.label ?? 'the chosen version';
+  }
+
+  return since.startsWith('d:') ? new Date(since.slice(2)).toLocaleDateString() : 'the chosen change';
+}

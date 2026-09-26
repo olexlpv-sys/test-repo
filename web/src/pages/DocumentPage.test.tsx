@@ -273,6 +273,34 @@ describe('document form (T15)', () => {
     expect(await within(section).findByLabelText('Section text')).toBeInTheDocument();
   });
 
+  it('a "changes since" date means the start of that local day', async () => {
+    const originalTz = process.env.TZ;
+    process.env.TZ = 'Europe/Berlin';
+    try {
+      localStorage.setItem('dochub.actingUserId', String(alice.id));
+      const { calls } = fakeApi(
+        routes({ versions: [versionHeader(10, 'Signed', 1)], myRoles: { isEditor: true, canEditAllContent: true } }),
+      );
+      renderApp('/documents/7');
+      await screen.findByTestId('section-101');
+
+      await userEvent.click(screen.getAllByLabelText('Changes since')[0] as HTMLElement);
+      await userEvent.click(await screen.findByRole('option', { name: 'A date…' }));
+      await userEvent.type(screen.getByLabelText('Since date'), '2026-09-26');
+
+      await waitFor(() =>
+        expect(
+          calls.some(
+            (c) => c.path.endsWith('/change-summary') && c.query.get('since') === 'd:2026-09-25T22:00:00.000Z',
+          ),
+        ).toBe(true),
+      );
+      expect(calls.some((c) => c.query.get('since') === 'd:2026-09-26')).toBe(false);
+    } finally {
+      process.env.TZ = originalTz;
+    }
+  });
+
   it('offers Sign to an approver only; the last signature switches the view to the new version', async () => {
     localStorage.setItem('dochub.actingUserId', '4');
     let signed = false;

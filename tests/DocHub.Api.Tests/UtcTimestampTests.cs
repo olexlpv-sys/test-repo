@@ -76,6 +76,42 @@ public sealed partial class UtcTimestampTests(DocHubApiFactory factory) : IClass
         Assert.DoesNotContain(earlier.GetProperty("items").EnumerateArray(), r => r.TryGetProperty("documentId", out var d) && d.ValueKind == JsonValueKind.Number && d.GetInt32() == documentId);
     }
 
+    [Fact]
+    public async Task The_audit_range_allows_31_local_days_across_a_daylight_saving_change()
+    {
+        // 1–31 October in Berlin: local midnight to local midnight is 31 days and one hour.
+        var from = new DateTime(2026, 9, 30, 22, 0, 0, DateTimeKind.Utc);
+        string Path(TimeSpan span) =>
+            $"/api/admin/audit?from={Uri.EscapeDataString(from.ToString("o", CultureInfo.InvariantCulture))}&to={Uri.EscapeDataString((from + span).ToString("o", CultureInfo.InvariantCulture))}";
+
+        await ApiClient.ExpectAsync(factory, TestUsers.Admin, HttpMethod.Get, Path(TimeSpan.FromDays(31) + TimeSpan.FromHours(1) - TimeSpan.FromMilliseconds(1)), null, HttpStatusCode.OK);
+        await ApiClient.ExpectAsync(factory, TestUsers.Admin, HttpMethod.Get, Path(TimeSpan.FromDays(31) + TimeSpan.FromHours(2)), null, HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Changes_since_a_date_take_the_start_of_the_callers_local_day_as_a_utc_instant()
+    {
+        var (_, draft) = await _arrange.CreateAsync();
+        var node = (await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Post, $"/api/versions/{draft}/nodes", new { nodeTypeId = 1, title = "Scope" }, HttpStatusCode.Created)).GetProperty("id").GetInt32();
+        var logical = (await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, $"/api/nodes/{node}", null, HttpStatusCode.OK)).GetProperty("logicalNodeId").GetGuid();
+        var edited = DateTime.UtcNow;
+        var rowVersion = (await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, $"/api/nodes/{node}/content", null, HttpStatusCode.OK)).GetProperty("rowVersion").GetString();
+        await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Put, $"/api/nodes/{node}/content",
+            new { contentJson = System.Text.Json.Nodes.JsonNode.Parse("""{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"edited"}]}]}"""), rowVersion }, HttpStatusCode.OK);
+
+        async Task<int> ChangesSince(string since)
+        {
+            var summary = await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, $"/api/versions/{draft}/change-summary?since={Uri.EscapeDataString(since)}", null, HttpStatusCode.OK);
+            return summary.GetProperty("nodes").EnumerateArray().Where(n => n.GetProperty("logicalNodeId").GetGuid() == logical).Select(n => n.GetProperty("changeCount").GetInt32()).SingleOrDefault();
+        }
+
+        // The web sends local midnight as an instant (e.g. 26 Sep in Berlin = 2026-09-25T22:00:00.000Z).
+        Assert.True(await ChangesSince($"d:{edited.AddMinutes(-90):yyyy-MM-ddTHH:mm:ss.fff}Z") >= 1);
+        Assert.Equal(0, await ChangesSince($"d:{DateTime.UtcNow.AddMinutes(90):yyyy-MM-ddTHH:mm:ss.fff}Z"));
+        // A plain date still means that UTC day.
+        await ChangesSince($"d:{edited:yyyy-MM-dd}");
+    }
+
     [Theory]
     [InlineData(DateTimeKind.Unspecified, "\"2026-09-26T10:15:00Z\"")]
     [InlineData(DateTimeKind.Utc, "\"2026-09-26T10:15:00Z\"")]

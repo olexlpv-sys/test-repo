@@ -15,6 +15,7 @@ import { notifications } from '@mantine/notifications';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api, unwrap } from '../api/client';
+import { localDate, localDayEnd, localDayStart } from '../app/localDays';
 import { rangeError } from './auditRange';
 
 const PageSize = 50;
@@ -43,9 +44,6 @@ interface Filters {
   to: string;
 }
 
-/** A UTC calendar day relative to today, as yyyy-mm-dd. */
-const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
-
 /** The API needs a date range of at most 31 days: the last 7 days by default. */
 const initial = (): Filters => ({
   table: null,
@@ -54,8 +52,8 @@ const initial = (): Filters => ({
   userId: '',
   dbLogin: '',
   ticket: '',
-  from: day(-7),
-  to: day(0),
+  from: localDate(-7),
+  to: localDate(0),
 });
 
 function pretty(json: string | null | undefined): string {
@@ -94,9 +92,9 @@ export function AuditAdmin() {
               userId: filters.userId ? Number(filters.userId) : undefined,
               dbLogin: filters.dbLogin || undefined,
               ticket: filters.ticket || undefined,
-              // Whole UTC days: the API's 31-day limit is then exact (local days would gain an hour across a DST change).
-              from: `${filters.from}T00:00:00.000Z`,
-              to: `${filters.to}T23:59:59.999Z`,
+              // Local days, like the times shown in the table (the API allows the extra hour of a DST change).
+              from: localDayStart(filters.from),
+              to: localDayEnd(filters.to),
               Page: page,
               PageSize,
             },
@@ -162,14 +160,14 @@ export function AuditAdmin() {
             onChange={(e) => change({ ticket: e.currentTarget.value })}
           />
           <TextInput
-            label="From (UTC)"
+            label="From"
             type="date"
             value={filters.from}
             onChange={(e) => change({ from: e.currentTarget.value })}
             error={invalidRange ?? undefined}
           />
           <TextInput
-            label="To (UTC)"
+            label="To"
             type="date"
             value={filters.to}
             onChange={(e) => change({ to: e.currentTarget.value })}

@@ -135,7 +135,8 @@ internal sealed class HistoryEndpoints : IEndpointModule
                 DateTime? from, DateTime? to, string? table, string? operation, string? source, int? userId, string? dbLogin, string? ticket,
                 [AsParameters] PageRequest paging, DocHubDbContext db, CancellationToken ct) =>
             {
-                if (from is null || to is null || to <= from || to.Value - from.Value > TimeSpan.FromDays(MaxAuditDays))
+                // 31 calendar days of the caller's time zone: a daylight-saving change adds up to an hour.
+                if (from is null || to is null || to <= from || to.Value - from.Value > TimeSpan.FromDays(MaxAuditDays) + TimeSpan.FromHours(1))
                 {
                     throw DomainException.Validation($"from and to are required and at most {MaxAuditDays} days apart.");
                 }
