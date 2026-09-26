@@ -269,7 +269,7 @@ test('the audit log shows a support-script change with login and ticket, and fil
   await expect(page.locator('.dh-json').first()).toBeVisible();
 
   // The API allows at most 31 days: a longer range is explained, not sent.
-  await page.getByRole('textbox', { name: 'From' }).fill('2020-01-01');
+  await page.getByRole('textbox', { name: 'From (UTC)' }).fill('2020-01-01');
   await expect(page.getByText('The date range can be at most 31 days.')).toBeVisible();
 });
 
@@ -380,4 +380,18 @@ test('deleting the selected folder clears the Folders view without an error', as
     .click();
   await expect(page.getByTestId('folder-details')).toHaveCount(0);
   await expect(page.getByText(/was not found/)).toHaveCount(0);
+});
+
+test.describe('audit log in a time zone with daylight saving', () => {
+  test.use({ timezoneId: 'Europe/Berlin' });
+
+  test('a 31-day range across the October change is accepted by the API', async ({ page }) => {
+    await openAs(page, Admin, '/admin?tab=audit');
+    const answers: number[] = [];
+    page.on('response', (r) => r.url().includes('/api/admin/audit?') && answers.push(r.status()));
+    await page.getByRole('textbox', { name: 'From (UTC)' }).fill('2026-10-01');
+    await page.getByRole('textbox', { name: 'To (UTC)' }).fill('2026-10-31');
+    await expect.poll(() => answers.at(-1)).toBe(200);
+    await expect(page.getByText(/at most 31 days/)).toHaveCount(0);
+  });
 });

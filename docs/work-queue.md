@@ -31,7 +31,7 @@ Q22 is placed right after Q04 (it hardens the Q03 schema before feature work bui
 | Q09 | [T10](tasks/T10-permissions.md) Permissions | CODE + TEST | Q07 | B | done | **GREEN** (2 rounds) |
 | Q10 | [T08](tasks/T08-document-tree-api.md) Tree | CODE + TEST | Q05, Q07 | A | done | **GREEN** (3 rounds) |
 | Q11 | [T09](tasks/T09-node-content-api.md) Styled content | CODE + TEST | Q05, Q10 | A | done | **GREEN** (3 rounds) |
-| Q12 | [T17](tasks/T17-web-admin-tab.md) Web admin | CODE + TEST | Q05, Q08, Q14, Q22 | C | in-review | round 2 |
+| Q12 | [T17](tasks/T17-web-admin-tab.md) Web admin | CODE + TEST | Q05, Q08, Q14, Q22 | C | in-review | round 3 |
 | Q13 | [T13](tasks/T13-comments-api.md) Comments | CODE + TEST | Q07, Q09 | B | done | **GREEN** (1 round) |
 | Q14 | [T11](tasks/T11-change-history-api.md) History + diff engine | CODE + TEST | Q03, Q11, Q22 | A | done | **GREEN** (9 rounds; R9-1 accepted — decisions log Q20) |
 | Q15 | [T12](tasks/T12-version-comparison-api.md) Compare | CODE + TEST | Q11, Q14 (diff engine) | B | done | **GREEN** (2 rounds) |

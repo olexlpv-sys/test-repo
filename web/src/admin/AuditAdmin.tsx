@@ -43,11 +43,8 @@ interface Filters {
   to: string;
 }
 
-const day = (offset: number) => {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+/** A UTC calendar day relative to today, as yyyy-mm-dd. */
+const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 
 /** The API needs a date range of at most 31 days: the last 7 days by default. */
 const initial = (): Filters => ({
@@ -97,8 +94,9 @@ export function AuditAdmin() {
               userId: filters.userId ? Number(filters.userId) : undefined,
               dbLogin: filters.dbLogin || undefined,
               ticket: filters.ticket || undefined,
-              from: new Date(`${filters.from}T00:00:00`).toISOString(),
-              to: new Date(`${filters.to}T23:59:59.999`).toISOString(),
+              // Whole UTC days: the API's 31-day limit is then exact (local days would gain an hour across a DST change).
+              from: `${filters.from}T00:00:00.000Z`,
+              to: `${filters.to}T23:59:59.999Z`,
               Page: page,
               PageSize,
             },
@@ -164,14 +162,14 @@ export function AuditAdmin() {
             onChange={(e) => change({ ticket: e.currentTarget.value })}
           />
           <TextInput
-            label="From"
+            label="From (UTC)"
             type="date"
             value={filters.from}
             onChange={(e) => change({ from: e.currentTarget.value })}
             error={invalidRange ?? undefined}
           />
           <TextInput
-            label="To"
+            label="To (UTC)"
             type="date"
             value={filters.to}
             onChange={(e) => change({ to: e.currentTarget.value })}

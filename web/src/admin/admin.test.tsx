@@ -60,7 +60,7 @@ describe('admin tab (T17)', () => {
     expect(await screen.findByText('No findings — the ledger and the audit log agree.')).toBeInTheDocument();
 
     const before = calls.filter((c) => c.path === '/api/admin/audit').length;
-    const from = screen.getByLabelText('From');
+    const from = screen.getByLabelText('From (UTC)');
     await userEvent.clear(from);
     await userEvent.type(from, '2020-01-01');
     expect(await screen.findByText('The date range can be at most 31 days.')).toBeInTheDocument();
