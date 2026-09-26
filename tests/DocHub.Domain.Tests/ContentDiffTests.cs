@@ -223,6 +223,22 @@ public sealed class AttributedDiffTests
     }
 
     [Fact]
+    public void An_undone_move_does_not_claim_a_later_rewrite()
+    {
+        var baseline = Doc("Zeta intro.", "Alpha beta gamma delta.", "Second paragraph stays here.", "Omega end.");
+        var steps = new[]
+        {
+            new ContentStep(Doc("Omega end.", "Zeta intro.", "Alpha beta gamma delta.", "Second paragraph stays here."), Alice),
+            new ContentStep(baseline, Alice),
+            new ContentStep(Doc("Zeta intro.", "Completely new wording now.", "Another fresh sentence, too.", "Omega end."), Bob),
+        };
+
+        var ops = AttributedDiff.Diff(Service, baseline, steps).Blocks.SelectMany(b => b.Ops ?? []).Where(o => o.Op != "equal").ToList();
+        Assert.NotEmpty(ops);
+        Assert.All(ops, o => Assert.Equal("Bob", o.By!.DisplayName));
+    }
+
+    [Fact]
     public void Swapping_a_long_paragraph_is_attributed_in_linear_time()
     {
         var words = string.Join(' ', Enumerable.Range(0, 16000).Select(i => $"word{i % 997}"));
