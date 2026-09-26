@@ -8,7 +8,8 @@ export interface Session {
   userId: number | null;
   me: Schemas['MeResponse'] | undefined;
   recentUserIds: number[];
-  actAs: (userId: number) => void;
+  /** Switch to a user after the API confirmed them (an unavailable user is dropped from the recent list with a message). */
+  actAs: (userId: number) => Promise<void>;
 }
 
 export const SessionContext = createContext<Session | null>(null);

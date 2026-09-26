@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { Center, Loader, Text } from '@mantine/core';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, ApiError, describeError, setActingUserId, unwrap } from '../api/client';
+import { notifications } from '@mantine/notifications';
+import { api, ApiError, describeError, setActingUserId, unwrap, type Schemas } from '../api/client';
 import { SessionContext, type Session } from './sessionContext';
 
 const StorageKey = 'dochub.actingUserId';
@@ -58,8 +59,36 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   });
   const testMode = info.data?.authMode === 'Test';
 
+  const forgetRecent = useCallback((id: number) => {
+    setRecent((previous) => {
+      const next = previous.filter((r) => r !== id);
+      write(RecentKey, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  // The API confirms the user first: a deactivated or removed one (e.g. still in the recent list) is dropped with a message
+  // instead of every screen failing with 401.
   const actAs = useCallback(
-    (id: number) => {
+    async (id: number) => {
+      let confirmed: Schemas['MeResponse'];
+      try {
+        confirmed = await unwrap(api.GET('/api/me', { headers: { 'X-User-Id': String(id) } }));
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          forgetRecent(id);
+          notifications.show({
+            color: 'red',
+            title: 'User not available',
+            message: 'The user is inactive or no longer exists.',
+          });
+        } else {
+          notifications.show({ color: 'red', ...describeError(error) });
+        }
+
+        return;
+      }
+
       setActingUserId(id);
       setUserId(id);
       write(StorageKey, String(id));
@@ -70,8 +99,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       });
       // Every screen re-renders with the new user's rights.
       queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== 'system-info' });
+      queryClient.setQueryData(['me', id], confirmed);
     },
-    [queryClient],
+    [queryClient, forgetRecent],
   );
 
   // Until a user is chosen, the API's default test user acts (set synchronously so every request carries the header).

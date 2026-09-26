@@ -97,6 +97,26 @@ describe('session (test auth mode, FR-UI4)', () => {
     expect(screen.queryByText(/Unauthorized|Authentication/)).not.toBeInTheDocument();
   });
 
+  it('drops a recent user who is no longer available instead of switching to them (Ctrl+Shift+U)', async () => {
+    localStorage.setItem('dochub.actingUserId', '1');
+    localStorage.setItem('dochub.recentUserIds', '[1,999]');
+    const { calls } = fakeApi({
+      ...baseRoutes(),
+      'GET /api/folders/tree': () => [{ id: 10, name: 'Contracts', sortOrder: 0, documentCount: 0, children: [] }],
+      'GET /api/folders/(\\d+)/documents': () => ({ items: [], page: 1, pageSize: 200, totalCount: 0 }),
+    });
+    renderApp();
+    await screen.findByTestId('folder-10');
+
+    await userEvent.keyboard('{Control>}{Shift>}U{/Shift}{/Control}');
+    expect(await screen.findByText('User not available')).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('dochub.recentUserIds') ?? '[]')).toEqual([1]);
+    expect(localStorage.getItem('dochub.actingUserId')).toBe('1');
+    expect(calls.filter((c) => c.headers.get('X-User-Id') === '999').map((c) => c.path)).toEqual(['/api/me']);
+    expect(screen.getByTestId('folder-10')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Admin' })).toBeInTheDocument();
+  });
+
   it('says so when the API is not reachable', async () => {
     fakeApi({ 'GET /api/system/info': () => new Reply(503, { title: 'Unavailable' }) });
     renderApp();

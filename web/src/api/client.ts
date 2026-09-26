@@ -32,7 +32,8 @@ export const api = createClient<paths>({
 
 api.use({
   onRequest({ request }) {
-    if (actingUserId !== null) {
+    // A request may name its user itself (checking a user before switching to them).
+    if (actingUserId !== null && !request.headers.has('X-User-Id')) {
       request.headers.set('X-User-Id', String(actingUserId));
     }
 

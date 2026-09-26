@@ -54,7 +54,7 @@ export function ActingAs() {
         if (recentUserIds.length > 1 && userId !== null) {
           const next = recentUserIds[(recentUserIds.indexOf(userId) + 1) % recentUserIds.length];
           if (next !== undefined) {
-            actAs(next);
+            void actAs(next);
           }
         }
       },
@@ -85,7 +85,7 @@ export function ActingAs() {
       onChange={(value, option) => {
         if (value) {
           setShownLabels(me ? [labelOf(me), option.label] : [option.label]);
-          actAs(Number(value));
+          void actAs(Number(value));
         }
       }}
       searchValue={search}
