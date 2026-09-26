@@ -78,6 +78,36 @@ public sealed class DataGenTests(SmallGeneratedDatabase data, SqlServerContainer
     }
 
     [Fact]
+    public async Task A_node_added_in_a_later_version_is_audited_as_added_not_copied()
+    {
+        // History shows "Section added" for it, like a node the API creates in a draft.
+        const string Sql = """
+            SELECT COUNT(*)
+            FROM app.DocumentNode n
+            JOIN app.DocumentVersion v ON v.Id = n.DocumentVersionId AND v.BasedOnVersionId IS NOT NULL
+            JOIN audit.ChangeLog l ON l.EntityId = n.Id AND l.TableName IN (N'app.DocumentNode', N'app.NodeContent')
+            WHERE NOT EXISTS (SELECT 1 FROM app.DocumentNode p WHERE p.DocumentVersionId = v.BasedOnVersionId AND p.LogicalNodeId = n.LogicalNodeId)
+              AND (l.OperationContext = N'CopyVersion' OR l.CorrelationId IS NOT NULL)
+            """;
+
+        Assert.Equal(0, await ScalarAsync<int>(Sql));
+        Assert.True(await ScalarAsync<int>("SELECT COUNT(*) FROM app.DocumentNode n JOIN app.DocumentVersion v ON v.Id = n.DocumentVersionId AND v.BasedOnVersionId IS NOT NULL WHERE NOT EXISTS (SELECT 1 FROM app.DocumentNode p WHERE p.DocumentVersionId = v.BasedOnVersionId AND p.LogicalNodeId = n.LogicalNodeId)") > 0);
+    }
+
+    [Fact]
+    public async Task Every_data_set_has_the_budget_size_documents_and_counts_its_whole_volume()
+    {
+        var catalog = await LoadCatalog.ReadAsync(data.AdminConnectionString, Ct);
+
+        // NFR-L5 budgets are at 2 000 nodes: one such document with a draft (history, compare) and one without (new draft).
+        Assert.Contains(catalog.Large, d => d.HasDraft && d.LatestSignedVersionId is not null);
+        Assert.Contains(catalog.Large, d => !d.HasDraft && d.LatestSignedVersionId is not null);
+        // The volume check counts deleted documents too: a scale-1.0 database has the full 10 000.
+        Assert.Equal(data.Report.Documents, catalog.GeneratedDocuments);
+        Assert.Equal(LoadProfile.FullScaleDocuments, new DataGenOptions { Scale = 1.0 }.Documents);
+    }
+
+    [Fact]
     public async Task A_failing_loader_ends_the_run_with_its_error()
     {
         var database = FreshDatabase();

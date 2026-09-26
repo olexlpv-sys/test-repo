@@ -9,7 +9,9 @@ dotnet sqlpackage /Action:Publish /SourceFile:database/DocHub.Database/bin/Debug
 dotnet run --project tools/DocHub.DataGen -- --connection "<same database, db_owner>" --scale 0.1 --seed 42 --max-minutes 5
 ```
 - `--scale 1.0` is the NFR-L2 volume (50 500 users, 100 folders, 10 000 documents × 5 versions, ~300 nodes each, max 2 000,
-  depth ≤ 15, 10 grants per document, 20 comments per version); `0.1` is the nightly size. The same seed gives the same data.
+  depth ≤ 15, 10 grants per document, 20 comments per version; every 100th document deleted); `0.1` is the nightly size. The same
+  seed gives the same data. Two of every 500 documents — from the first ones on, so every data set has them — have the maximum
+  2 000 nodes, one with a draft and one without: the NFR-L5 budgets are defined at that size.
 - Bulk copies bypass the audit triggers. The generator writes one synthetic audit row per entity, the version stamps and the
   cached version hashes, validates every constraint once (they stay trusted) and inserts the **reconciliation baseline** — so it
   refuses a database that already has one (generate right after the deployment).
@@ -35,7 +37,8 @@ DOCHUB_LOAD_PROFILE=production DOCHUB_LOAD_TARGET=https://api.example DOCHUB_LOA
 | `soak` | 20 req/s, 1 h (≥ 30 min) | as production, and — after a 1-minute warm-up — p95 of the last 10 min ≤ 1.1 × the first 10 min, API memory trend ≤ +10 % |
 
 `DOCHUB_LOAD_DURATION` (seconds) shortens a profile (a soak not below 30 min). The full profiles refuse a database with fewer than
-10 000 documents (the NFR-L2 volume); `DOCHUB_LOAD_ALLOW_SMALL_DATA=1` allows it and the report is marked **REHEARSAL**.
+10 000 generated documents (the NFR-L2 volume, deleted ones included); `DOCHUB_LOAD_ALLOW_SMALL_DATA=1` allows it and the report is
+marked **REHEARSAL**.
 
 The mix (NFR-L3) is a share of the **requests**, so flows are picked with weights (≈ 52 % reader, 8 % editor, 40 % other flows):
 readers (folder list with title filter → open → tree → 5 nodes), editors (open draft → 10 autosaves every 3 s → add and delete a node →
@@ -48,11 +51,12 @@ deployed API count too) — and the requests around it must stay within the limi
 - **The API must connect with an `app_api` login** (as in production). Connected as `sa`/db_owner, its audit rows are reported
   as forged (`ForgedAuditRow`) by the reconciliation.
 - Reports (`DOCHUB_LOAD_REPORTS`, default `load-reports/` next to the test binaries): NBomber HTML/CSV/MD, `endpoints.csv`
-  (requests, failures, 5xx, p50/p95/p99 per endpoint), `budgets.csv` (NFR-L5: the API operations from the recorded requests,
-  `usp_CheckPermission` and `usp_ListDocuments` timed directly against the database once a second), `memory.csv` (the API's
-  memory every 30 s) and `top-queries.csv` (the 10 slowest statements incl. EF Core's parameterized ones, needs VIEW SERVER STATE).
-- Memory: in process, the API's managed heap; against a deployed stack set `DOCHUB_LOAD_API_PROCESS` to the API's process id (same
-  machine). The soak fails without a memory source.
+  (requests, failures, 5xx, p50/p95/p99 per endpoint), `budgets.csv` (NFR-L5: list, content and autosave from the mix; open
+  (header + tree as one operation), history, compare and new draft from a probe on the 2 000-node documents every 15 s, outside
+  the mix; `usp_CheckPermission` and `usp_ListDocuments` timed directly against the database once a second), `memory.csv` (the
+  managed heap of the answering API instance every 30 s, through the admin endpoint `GET /api/admin/runtime`) and `top-queries.csv` (the 10 slowest statements incl. EF Core's parameterized ones, needs VIEW SERVER STATE).
+- Memory: behind the load balancer each sample answers for one instance, so every instance gets its own trend; the soak fails when
+  any instance grows by more than 10 % after the warm-up, or when there are no samples.
   Keep them as build artifacts. On Azure SQL, also read Query Store.
 - NBomber is free for personal use; running it for an organization needs an NBomber license (`NBomberRunner.WithLicense`).
 

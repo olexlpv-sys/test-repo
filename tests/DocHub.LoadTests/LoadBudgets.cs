@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text;
 using Microsoft.Data.SqlClient;
 
@@ -17,17 +19,24 @@ public sealed record LoadBudget(string Operation, double P95Milliseconds, double
 /// </summary>
 public static class LoadBudgets
 {
-    /// <summary>Recorded endpoint → budget (p95, ms).</summary>
+    public const string LargeOpen = "open document + tree (2 000 nodes)";
+    public const string LargeHistory = "node history (2 000 nodes)";
+    public const string LargeCompare = "compare (2 000 nodes)";
+    public const string LargeNewDraft = "new draft (2 000 nodes)";
+
+    /// <summary>
+    /// Recorded endpoint → NFR-L5 budget (p95, ms). The document-size budgets come from the probe on the largest documents
+    /// (<see cref="LoadFlows.LargeDocumentAsync"/>), the others from the traffic mix.
+    /// </summary>
     public static readonly IReadOnlyDictionary<string, (string Operation, double Budget)> Endpoints = new Dictionary<string, (string, double)>(StringComparer.Ordinal)
     {
         ["list documents"] = ("document list page", 300),
-        ["open document"] = ("open document (header)", 800),
-        ["tree"] = ("open document (tree)", 800),
         ["node content"] = ("node content read", 300),
         ["autosave"] = ("autosave", 300),
-        ["node history"] = ("history page", 1500),
-        ["compare"] = ("compare", 1500),
-        ["new draft"] = ("new draft (deep copy)", 2500),
+        [LargeOpen] = ("open document (header + tree, 2 000 nodes)", 800),
+        [LargeHistory] = ("history page (2 000 nodes)", 1500),
+        [LargeCompare] = ("compare (2 000 nodes)", 1500),
+        [LargeNewDraft] = ("new draft (deep copy, 2 000 nodes)", 2500),
     };
 
     public const double CheckPermission = 20;
@@ -117,47 +126,36 @@ public sealed class ProcedureProbe(string connectionString, LoadCatalog catalog)
 }
 
 /// <summary>
-/// The API's memory during the run (soak: "no memory growth trend"): the managed heap of the in-process API, or the working set
-/// of the external API process given by <c>DOCHUB_LOAD_API_PROCESS</c> (its process id, on this machine).
+/// The API's memory during the run (soak: "no memory growth trend in the API"), sampled through <c>GET /api/admin/runtime</c>:
+/// each call answers for one API instance (behind a load balancer, a random one), so every instance gets its own trend.
 /// </summary>
-public sealed class MemorySampler(Func<long>? source)
+public sealed class MemorySampler(Func<CancellationToken, Task<(string Instance, long Bytes)>> source)
 {
-    private readonly List<(TimeSpan At, long Bytes)> _samples = [];
+    private readonly List<(TimeSpan At, string Instance, long Bytes)> _samples = [];
 
-    public bool Available => source is not null;
+    public IReadOnlyList<(TimeSpan At, string Instance, long Bytes)> Samples => _samples;
 
-    public IReadOnlyList<(TimeSpan At, long Bytes)> Samples => _samples;
-
-    public static MemorySampler FromEnvironment(bool inProcess)
+    /// <summary>Samples the managed heap of the answering instance (admin call).</summary>
+    public static MemorySampler ForApi(HttpClient http) => new(async ct =>
     {
-        if (inProcess)
-        {
-            // The heap size after the last GC: stable enough for a trend, without forcing collections into the measured run.
-            return new MemorySampler(() => GC.GetGCMemoryInfo().HeapSizeBytes);
-        }
-
-        return int.TryParse(Environment.GetEnvironmentVariable("DOCHUB_LOAD_API_PROCESS"), NumberStyles.None, CultureInfo.InvariantCulture, out var pid)
-            ? new MemorySampler(() =>
-            {
-                using var process = Process.GetProcessById(pid);
-                return process.WorkingSet64;
-            })
-            : new MemorySampler(null);
-    }
+        ArgumentNullException.ThrowIfNull(http);
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("/api/admin/runtime", UriKind.Relative));
+        request.Headers.Add("X-User-Id", LoadFlows.AdminUserId.ToString(CultureInfo.InvariantCulture));
+        using var response = await http.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+        var sample = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
+        return (sample.GetProperty("instance").GetString()!, sample.GetProperty("managedHeapBytes").GetInt64());
+    });
 
     public async Task RunAsync(LoadRecorder recorder, TimeSpan interval, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recorder);
-        if (source is null)
-        {
-            return;
-        }
-
         try
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                _samples.Add((recorder.Elapsed, source()));
+                var (instance, bytes) = await source(cancellationToken);
+                _samples.Add((recorder.Elapsed, instance, bytes));
                 await Task.Delay(interval, cancellationToken);
             }
         }
@@ -166,10 +164,15 @@ public sealed class MemorySampler(Func<long>? source)
         }
     }
 
-    /// <summary>The least-squares growth over the window after <paramref name="from"/>, as a fraction of the mean.</summary>
-    public double GrowthAfter(TimeSpan from)
+    /// <summary>The largest least-squares growth of any instance over the window after <paramref name="from"/>, as a fraction of its mean.</summary>
+    public double GrowthAfter(TimeSpan from) =>
+        _samples.Where(s => s.At >= from).GroupBy(s => s.Instance).Select(g => Growth([.. g.Select(s => (s.At.TotalSeconds, (double)s.Bytes))])).DefaultIfEmpty(0).Max();
+
+    /// <summary>Instances with enough samples after <paramref name="from"/> for a trend.</summary>
+    public int InstancesWithTrend(TimeSpan from) => _samples.Where(s => s.At >= from).GroupBy(s => s.Instance).Count(g => g.Count() >= 3);
+
+    private static double Growth(List<(double X, double Y)> points)
     {
-        var points = _samples.Where(s => s.At >= from).Select(s => (X: s.At.TotalSeconds, Y: (double)s.Bytes)).ToList();
         if (points.Count < 3)
         {
             return 0;
@@ -182,10 +185,10 @@ public sealed class MemorySampler(Func<long>? source)
 
     public string Csv()
     {
-        var csv = new StringBuilder("elapsed_s,bytes\n");
-        foreach (var (at, bytes) in _samples)
+        var csv = new StringBuilder("elapsed_s,instance,managed_heap_bytes\n");
+        foreach (var (at, instance, bytes) in _samples)
         {
-            csv.Append(CultureInfo.InvariantCulture, $"{at.TotalSeconds:0},{bytes}\n");
+            csv.Append(CultureInfo.InvariantCulture, $"{at.TotalSeconds:0},{instance},{bytes}\n");
         }
 
         return csv.ToString();

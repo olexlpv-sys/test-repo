@@ -97,6 +97,7 @@ public sealed class AuthorizationMatrixTests(DocHubApiFactory factory) : IClassF
                 new AccessCase("GET", "/api/history/entries/999999999/diff", user, Missing),
                 new AccessCase("GET", "/api/history/entries/999999999/content", user, Missing),
                 new AccessCase("GET", "/api/admin/audit", user, Admin(HttpStatusCode.BadRequest)),
+                new AccessCase("GET", "/api/admin/runtime", user, Admin(HttpStatusCode.OK)), // T19 soak memory source
 
                 // T13 comments (per-role rules: CommentTests).
                 new AccessCase("GET", "/api/versions/999999/comments", user, Missing),

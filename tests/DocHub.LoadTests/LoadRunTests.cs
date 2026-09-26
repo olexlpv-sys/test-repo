@@ -105,15 +105,13 @@ public sealed class LoadRunTests(LoadRunDatabase data) : IClassFixture<LoadRunDa
         Assert.NotEmpty(catalog.Documents);
 
         // The full profiles only mean something on the NFR-L2 volume; a smaller data set is a rehearsal and says so.
-        var rehearsal = profile.IsFull && catalog.Documents.Count < LoadProfile.FullScaleDocuments;
+        var rehearsal = profile.IsFull && catalog.GeneratedDocuments < LoadProfile.FullScaleDocuments;
         Assert.False(rehearsal && Environment.GetEnvironmentVariable("DOCHUB_LOAD_ALLOW_SMALL_DATA") != "1",
-            $"Profile {profile.Name} needs the NFR-L2 volume ({LoadProfile.FullScaleDocuments} documents, generator scale 1.0); the database has {catalog.Documents.Count}. " +
+            $"Profile {profile.Name} needs the NFR-L2 volume ({LoadProfile.FullScaleDocuments} documents, generator scale 1.0); the database has {catalog.GeneratedDocuments}. " +
             "Set DOCHUB_LOAD_ALLOW_SMALL_DATA=1 for a rehearsal on less data.");
         Assert.False(profile.Name == "soak" && profile.Duration < LoadProfile.MinimumSoak,
             $"The soak needs at least {LoadProfile.MinimumSoak.TotalMinutes} min (two separate 10-minute windows after the warm-up); DOCHUB_LOAD_DURATION is {profile.Duration}.");
-        var memory = MemorySampler.FromEnvironment(inProcess: target is null);
-        Assert.False(profile.Name == "soak" && !memory.Available,
-            "The soak checks the API's memory: run it in process, or set DOCHUB_LOAD_API_PROCESS to the process id of the API under test.");
+        var memory = MemorySampler.ForApi(http);
 
         var recorder = new LoadRecorder();
         var flows = new LoadFlows(http, catalog, recorder, exports: target is not null, autosaveInterval: TimeSpan.FromSeconds(3), LoadProfile.RequestTimeout);
@@ -139,6 +137,22 @@ public sealed class LoadRunTests(LoadRunDatabase data) : IClassFixture<LoadRunDa
         var probe = new ProcedureProbe(connection, catalog);
         var probing = probe.RunAsync(sampling.Token);
         var memorySampling = memory.RunAsync(recorder, TimeSpan.FromSeconds(30), sampling.Token);
+        var largeProbing = Task.Run(async () =>
+        {
+            // NFR-L5 budgets at 2 000 nodes: one probe round on the largest documents every 15 s, next to the mix.
+            var random = new Random(5);
+            try
+            {
+                while (!sampling.IsCancellationRequested)
+                {
+                    await flows.LargeDocumentAsync(random, sampling.Token);
+                    await Task.Delay(TimeSpan.FromSeconds(15), sampling.Token);
+                }
+            }
+            catch (OperationCanceledException) when (sampling.IsCancellationRequested)
+            {
+            }
+        }, ct);
 
         var scenario = Scenario.Create("nfr-l3-mix", async context =>
             {
@@ -168,9 +182,9 @@ public sealed class LoadRunTests(LoadRunDatabase data) : IClassFixture<LoadRunDa
             .WithReportFolder(reports)
             .WithReportFormats(ReportFormat.Html, ReportFormat.Csv, ReportFormat.Md)
             .Run();
-        var drained = await recorder.DrainAsync(LoadProfile.RequestTimeout + TimeSpan.FromSeconds(10));
         await sampling.CancelAsync();
-        await Task.WhenAll(probing, memorySampling);
+        await Task.WhenAll(probing, memorySampling, largeProbing);
+        var drained = await recorder.DrainAsync(LoadProfile.RequestTimeout + TimeSpan.FromSeconds(10));
         var reconciled = await reconciliation;
         var findingsAfter = await FindingCountAsync(connection);
 
@@ -183,7 +197,7 @@ public sealed class LoadRunTests(LoadRunDatabase data) : IClassFixture<LoadRunDa
         await File.WriteAllTextAsync(Path.Combine(reports, "top-queries.csv"), await TopQueriesAsync(connection), ct);
         var failedFlows = nbomber.ScenarioStats.Sum(s => s.Fail.Request.Count);
         var summary = new StringBuilder(
-            $"Profile {profile.Name}{(rehearsal ? " (REHEARSAL: less than the NFR-L2 volume)" : "")}, {profile.Duration}, {catalog.Documents.Count} documents, {recorder.Samples.Count} requests, failed flows {failedFlows}.\n");
+            $"Profile {profile.Name}{(rehearsal ? " (REHEARSAL: less than the NFR-L2 volume)" : "")}, {profile.Duration}, {catalog.GeneratedDocuments} documents ({catalog.Large.Count()} of 2 000 nodes), {recorder.Samples.Count} requests, failed flows {failedFlows}.\n");
         summary.Append(CultureInfo.InvariantCulture, $"Mix: readers {mix[LoadCategory.Reader]:0.0} %, editors {mix[LoadCategory.Editor]:0.0} %, other {mix[LoadCategory.Other]:0.0} % (NFR-L3: 70 / 20 / 10).\n");
         summary.Append(CultureInfo.InvariantCulture, $"Reconciliation {reconciled.Elapsed.TotalSeconds:0.0} s, {reconciled.Findings} new findings, {findingsAfter - findingsBefore} finding rows added, {findingsAfter} in total.\n");
         summary.Append(LoadRecorder.Csv(stats)).Append(LoadBudgets.Csv(budgets));
@@ -228,8 +242,9 @@ public sealed class LoadRunTests(LoadRunDatabase data) : IClassFixture<LoadRunDa
             var last = recorder.Samples.Where(s => s.At > profile.Duration - TimeSpan.FromMinutes(10)).Select(s => s.Milliseconds).Order().ToList();
             Assert.True(LoadRecorder.Percentile(last, 95) <= LoadRecorder.Percentile(first, 95) * 1.1,
                 $"p95 drifted by more than 10 %: {LoadRecorder.Percentile(first, 95):0} ms → {LoadRecorder.Percentile(last, 95):0} ms.");
+            Assert.True(memory.InstancesWithTrend(LoadProfile.WarmUp) > 0, "No API memory samples (GET /api/admin/runtime).");
             var growth = memory.GrowthAfter(LoadProfile.WarmUp);
-            Assert.True(growth <= 0.10, $"API memory grew by {growth:P0} over the soak (trend of memory.csv).");
+            Assert.True(growth <= 0.10, $"API memory grew by {growth:P0} over the soak (trend of an instance in memory.csv).");
         }
     }
 

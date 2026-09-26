@@ -114,31 +114,61 @@ public sealed class LoadHarnessTests
         var recorder = new LoadRecorder();
         for (var i = 1; i <= 100; i++)
         {
-            recorder.Add("new draft", i * 30, 201);
-            recorder.Add("tree", 100, 200);
+            recorder.Add(LoadBudgets.LargeNewDraft, i * 30, 201);
+            recorder.Add("node content", 100, 200);
         }
 
-        recorder.Add("tree", 50_000, 0); // a failure counts as a failure, not in the budget
+        recorder.Add("node content", 50_000, 0); // a failure counts as a failure, not in the budget
         var budgets = LoadBudgets.Evaluate(recorder, new ProcedureProbe("unused", Catalog));
 
-        var draft = Assert.Single(budgets, b => b.Operation.Contains("[new draft]", StringComparison.Ordinal));
+        var draft = Assert.Single(budgets, b => b.Operation.Contains(LoadBudgets.LargeNewDraft, StringComparison.Ordinal));
         Assert.Equal((2850, false), (draft.MeasuredP95, draft.Met));
-        Assert.True(Assert.Single(budgets, b => b.Operation.Contains("[tree]", StringComparison.Ordinal)).Met);
+        Assert.True(Assert.Single(budgets, b => b.Operation.Contains("[node content]", StringComparison.Ordinal)).Met);
         // Not measured is not met.
         Assert.False(Assert.Single(budgets, b => b.Operation.Contains("usp_CheckPermission", StringComparison.Ordinal)).Met);
     }
 
     [Fact]
-    public async Task Memory_growth_is_the_trend_after_the_warm_up()
+    public async Task The_document_size_budgets_are_measured_on_the_largest_documents_only()
+    {
+        var withDraft = new LoadDocument(7, 1, 10, 700, HasDraft: true, LatestSignedVersionId: 699, [11], [12], Nodes(7000), LoadCatalog.LargeDocumentNodes);
+        var withoutDraft = new LoadDocument(8, 1, 10, 800, HasDraft: false, LatestSignedVersionId: 800, [11], [12], Nodes(8000), LoadCatalog.LargeDocumentNodes + 20);
+        var catalog = Catalog with { Documents = [.. Catalog.Documents, withDraft, withoutDraft] };
+        var recorder = new LoadRecorder();
+        // Small documents open fast, but that says nothing about a 2 000-node one.
+        recorder.Add("open document", 10, 200);
+        recorder.Add("tree", 10, 200);
+        Assert.False(Assert.Single(LoadBudgets.Evaluate(recorder, new ProcedureProbe("unused", catalog)), b => b.Operation.Contains(LoadBudgets.LargeOpen, StringComparison.Ordinal)).Met);
+
+        var flows = new LoadFlows(new HttpClient(new FakeApi()) { BaseAddress = new Uri("http://api.test") }, catalog, recorder, exports: false, TimeSpan.Zero, TimeSpan.FromSeconds(30));
+        await flows.LargeDocumentAsync(new Random(3), Ct);
+
+        var budgets = LoadBudgets.Evaluate(recorder, new ProcedureProbe("unused", catalog));
+        foreach (var operation in new[] { LoadBudgets.LargeOpen, LoadBudgets.LargeHistory, LoadBudgets.LargeCompare, LoadBudgets.LargeNewDraft })
+        {
+            Assert.True(Assert.Single(budgets, b => b.Operation.Contains(operation, StringComparison.Ordinal)).Samples > 0, operation);
+        }
+
+        // Header and tree are one operation: the combined sample is timed across both requests.
+        Assert.Equal(2, recorder.Samples.Count(s => s.Endpoint == LoadBudgets.LargeOpen));
+        Assert.DoesNotContain(recorder.Samples, s => s.Category == LoadCategory.Probe && s.Endpoint.StartsWith("new draft (", StringComparison.Ordinal) && s.Status == 0);
+        Assert.Equal(0, recorder.Mix()[LoadCategory.Reader]); // the probe is outside the mix
+    }
+
+    [Fact]
+    public async Task Memory_growth_is_the_trend_of_each_instance_after_the_warm_up()
     {
         var clock = new LoadRecorder();
-        long value = 1_000;
-        var growing = new MemorySampler(() => value += 20);
+        long growing = 1_000;
+        var calls = 0;
+        // Two instances behind a load balancer: one flat, one growing — the growing one fails the soak.
+        var sampler = new MemorySampler(_ => Task.FromResult(Interlocked.Increment(ref calls) % 2 == 0 ? ("a", 1_000L) : ("b", growing += 20)));
         using var stop = new CancellationTokenSource(TimeSpan.FromMilliseconds(600));
-        await growing.RunAsync(clock, TimeSpan.FromMilliseconds(20), stop.Token);
+        await sampler.RunAsync(clock, TimeSpan.FromMilliseconds(20), stop.Token);
 
-        Assert.True(growing.GrowthAfter(TimeSpan.Zero) > 0.10);
-        var flat = new MemorySampler(() => 1_000);
+        Assert.Equal(2, sampler.InstancesWithTrend(TimeSpan.Zero));
+        Assert.True(sampler.GrowthAfter(TimeSpan.Zero) > 0.10);
+        var flat = new MemorySampler(_ => Task.FromResult(("a", 1_000L)));
         using var stop2 = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
         await flat.RunAsync(clock, TimeSpan.FromMilliseconds(20), stop2.Token);
         Assert.Equal(0, flat.GrowthAfter(TimeSpan.Zero), 3);

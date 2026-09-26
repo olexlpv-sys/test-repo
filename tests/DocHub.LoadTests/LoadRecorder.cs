@@ -11,6 +11,9 @@ public enum LoadCategory
     Reader,
     Editor,
     Other,
+
+    /// <summary>The NFR-L5 budget probe on the largest documents (outside the mix).</summary>
+    Probe,
 }
 
 /// <summary>One API request of the load run (status 0: no response — network error, timeout, or an error in the flow itself).</summary>
@@ -60,8 +63,9 @@ public sealed class LoadRecorder
     /// <summary>Share of the requests per traffic class (NFR-L3: 70 / 20 / 10 %).</summary>
     public IReadOnlyDictionary<LoadCategory, double> Mix()
     {
-        var total = Math.Max(1, _samples.Count);
-        return Enum.GetValues<LoadCategory>().ToDictionary(c => c, c => 100.0 * _samples.Count(s => s.Category == c) / total);
+        LoadCategory[] mix = [LoadCategory.Reader, LoadCategory.Editor, LoadCategory.Other];
+        var total = Math.Max(1, _samples.Count(s => mix.Contains(s.Category)));
+        return mix.ToDictionary(c => c, c => 100.0 * _samples.Count(s => s.Category == c) / total);
     }
 
     public static double Percentile(IReadOnlyList<double> sorted, double percentile)

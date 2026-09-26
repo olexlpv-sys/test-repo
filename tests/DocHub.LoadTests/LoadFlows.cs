@@ -195,15 +195,59 @@ public sealed class LoadFlows(HttpClient http, LoadCatalog catalog, LoadRecorder
 
         try
         {
-            if (await SendAsync(LoadCategory.Other, "new draft", HttpMethod.Post, document.OwnerId, $"/api/documents/{document.Id}/drafts", null, cancellationToken) is { } draft)
-            {
-                var version = Uri.EscapeDataString(draft.GetProperty("rowVersion").GetString()!);
-                await SendAsync(LoadCategory.Other, "discard draft", HttpMethod.Delete, document.OwnerId, $"/api/versions/{draft.GetProperty("id").GetInt32()}?rowVersion={version}", null, cancellationToken);
-            }
+            await DraftAndDiscardAsync(LoadCategory.Other, "new draft", document, cancellationToken);
         }
         finally
         {
             _drafting.TryRemove(document.Id, out _);
+        }
+    }
+
+    private async Task DraftAndDiscardAsync(LoadCategory category, string endpoint, LoadDocument document, CancellationToken cancellationToken)
+    {
+        if (await SendAsync(category, endpoint, HttpMethod.Post, document.OwnerId, $"/api/documents/{document.Id}/drafts", null, cancellationToken) is { } draft)
+        {
+            var version = Uri.EscapeDataString(draft.GetProperty("rowVersion").GetString()!);
+            await SendAsync(category, "discard draft", HttpMethod.Delete, document.OwnerId, $"/api/versions/{draft.GetProperty("id").GetInt32()}?rowVersion={version}", null, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// The NFR-L5 budget probe (not part of the mix): the budgets are defined at 2 000 nodes, which the random traffic hardly ever
+    /// hits, so one probe iteration opens a largest document (header + tree, timed as one operation), reads a node's history,
+    /// compares its draft with the latest signed version and makes a new draft of the largest document without one (then discards it).
+    /// </summary>
+    public async Task LargeDocumentAsync(Random random, CancellationToken cancellationToken)
+    {
+        const LoadCategory C = LoadCategory.Probe;
+        foreach (var document in catalog.Large)
+        {
+            var user = document.OwnerId;
+            var watch = Stopwatch.StartNew();
+            var header = await SendAsync(C, "open document", HttpMethod.Get, user, $"/api/documents/{document.Id}", null, cancellationToken);
+            var tree = await SendAsync(C, "tree", HttpMethod.Get, user, $"/api/versions/{document.CurrentVersionId}/tree", null, cancellationToken);
+            recorder.Add(LoadBudgets.LargeOpen, watch.Elapsed.TotalMilliseconds, header is not null && tree is not null ? 200 : 0, C);
+            if (document.Nodes.Length > 0)
+            {
+                var logical = document.Nodes[random.Next(document.Nodes.Length)].LogicalNodeId;
+                await SendAsync(C, LoadBudgets.LargeHistory, HttpMethod.Get, user, $"/api/documents/{document.Id}/nodes/{logical}/history?PageSize=20", null, cancellationToken);
+            }
+
+            if (document.HasDraft && document.LatestSignedVersionId is not null)
+            {
+                await SendAsync(C, LoadBudgets.LargeCompare, HttpMethod.Get, user, $"/api/documents/{document.Id}/compare?base=latestSigned&target=draft", null, cancellationToken);
+            }
+            else if (!document.HasDraft && document.LatestSignedVersionId is not null && _drafting.TryAdd(document.Id, true))
+            {
+                try
+                {
+                    await DraftAndDiscardAsync(C, LoadBudgets.LargeNewDraft, document, cancellationToken);
+                }
+                finally
+                {
+                    _drafting.TryRemove(document.Id, out _);
+                }
+            }
         }
     }
 

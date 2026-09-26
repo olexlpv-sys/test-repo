@@ -52,6 +52,27 @@
         }
       }
     },
+    "/api/admin/runtime": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Admin: memory of the answering API instance (working set, managed heap after the last GC) for soak tests.",
+        "operationId": "GetRuntimeSample",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeSample"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/folders/{folderId}/documents": {
       "get": {
         "tags": [
@@ -5329,6 +5350,32 @@
           }
         }
       },
+      "RuntimeSample": {
+        "required": [
+          "instance",
+          "workingSetBytes",
+          "managedHeapBytes",
+          "startedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "instance": {
+            "type": "string"
+          },
+          "workingSetBytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "managedHeapBytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "SaveContent": {
         "required": [
           "contentJson",
@@ -5910,6 +5957,9 @@
       "name": "Users"
     },
     {
+      "name": "Admin"
+    },
+    {
       "name": "Documents"
     },
     {
@@ -5920,9 +5970,6 @@
     },
     {
       "name": "History"
-    },
-    {
-      "name": "Admin"
     },
     {
       "name": "Comments"

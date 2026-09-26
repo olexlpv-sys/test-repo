@@ -363,6 +363,11 @@ public sealed class DataGenerator(string connectionString, DataGenOptions option
         var versionCount = options.VersionsPerDocument;
         var span = (_now.AddDays(-1) - created) / versionCount;
         var lastIsDraft = random.NextDouble() < 0.7;
+        if (IsLargest(index))
+        {
+            lastIsDraft = index % 500 == 0;
+        }
+
         int? previous = null;
         var number = 0;
         for (var k = 1; k <= versionCount; k++)
@@ -428,9 +433,15 @@ public sealed class DataGenerator(string connectionString, DataGenOptions option
         return nodes;
     }
 
+    /// <summary>
+    /// The NFR-L5 budgets are defined at the maximum document size: two of every 500 documents have it, from the first ones on (so
+    /// every data set has them) — one with a draft, one without (for the new-draft budget); never deleted.
+    /// </summary>
+    public static bool IsLargest(int index) => index % 500 is 0 or 1;
+
     private int NodeCount(Random random, int index)
     {
-        if (index % 500 == 499)
+        if (IsLargest(index))
         {
             return options.MaxNodes;
         }
@@ -470,13 +481,15 @@ public sealed class DataGenerator(string connectionString, DataGenOptions option
             var modifiedBy = changedNow ? people[Mix(i, k, 7) % people.Length] : owner;
             var modified = changedNow ? created.AddHours(1 + (Mix(i, k, 3) % 48)) : created;
             t.Nodes.Rows.Add(ids[i], versionId, node.Logical, parentId.HasValue ? parentId.Value : DBNull.Value, node.TypeId, node.Title, sortOrder, created, owner, modified, modifiedBy);
+            // A node that first appears in this version was added to it, not copied (history: "Section added").
+            var nodeCopy = node.IntroducedIn < k ? copy : null;
             t.Audit.Add(new(created, 3, "app.DocumentNode", ids[i], documentId, versionId, node.Logical,
-                Json(new { Title = node.Title, ParentNodeId = parentId, NodeTypeId = node.TypeId, SortOrder = sortOrder }), owner, copy, copy is null ? "DataGen" : "CopyVersion"));
+                Json(new { Title = node.Title, ParentNodeId = parentId, NodeTypeId = node.TypeId, SortOrder = sortOrder }), owner, nodeCopy, nodeCopy is null ? "DataGen" : "CopyVersion"));
             _nodes++;
             if (node.HasContent)
             {
                 t.Contents.Rows.Add(ids[i], versionId, node.Logical, (byte)1, template.Json, template.Html, template.PlainText, template.Hash, false, modified, modifiedBy);
-                var copied = copy is not null && !changedNow;
+                var copied = nodeCopy is not null && !changedNow;
                 t.Audit.Add(new(modified, 4, "app.NodeContent", ids[i], documentId, versionId, node.Logical, Json(new { ContentJson = template.Json }), modifiedBy,
                     copied ? copy : null, copied ? "CopyVersion" : "DataGen"));
                 foreach (var style in template.Styles)
