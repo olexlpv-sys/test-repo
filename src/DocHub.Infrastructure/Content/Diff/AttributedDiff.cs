@@ -29,8 +29,14 @@ public static class AttributedDiff
 
         public DiffAuthor? FormatBy { get; set; } = formatBy;
 
-        /// <summary>Who last moved the block this character is in (a move carries text unchanged to another place).</summary>
+        /// <summary>
+        /// Who moved the block this character is in out of baseline order (recomputed after every step, so an undone move
+        /// clears it).
+        /// </summary>
         public DiffAuthor? MovedBy { get; set; }
+
+        /// <summary>Who last restructured this character's block: split, merged or largely rewrote it.</summary>
+        public DiffAuthor? PlacedBy { get; set; }
     }
 
     public static ContentDiff Diff(IContentDiffService diff, string baselineJson, IReadOnlyList<ContentStep> steps)
@@ -41,11 +47,21 @@ public static class AttributedDiff
         var index = 0;
         var state = baseline.Select(block => block.Select(p => new CharInfo(p.C, p.Marks, index++, null, null)).ToList()).ToList();
         var deletedBy = new Dictionary<int, DiffAuthor>();
-        var movedBy = new Dictionary<int, DiffAuthor>();
 
         foreach (var step in steps)
         {
-            state = Apply(state, Flatten(step.Json), step.Author, deletedBy, movedBy);
+            state = Apply(state, Flatten(step.Json), step.Author, deletedBy);
+            MarkDisplaced(state, step.Author);
+        }
+
+        // Baseline characters that survive: who moved / restructured them (for deletes the final diff shows of moved text).
+        var movedBy = new Dictionary<int, DiffAuthor>();
+        foreach (var c in state.SelectMany(b => b))
+        {
+            if (c.BaselineIndex is { } i && Latest(c.MovedBy, c.PlacedBy) is { } by)
+            {
+                movedBy[i] = by;
+            }
         }
 
         var finalJson = steps.Count == 0 ? baselineJson : steps[^1].Json;
@@ -146,7 +162,7 @@ public static class AttributedDiff
             // An insert: the deletions it replaces come first (up to the next surviving baseline character).
             FlushDeletes(nextSurvivor[i + 1]);
             var formatBy = c.InsertedBy is not null && c.FormatBy is not null && !Equals(c.FormatBy, c.InsertedBy) ? c.FormatBy : null;
-            chars.Add(("insert", c.C, c.InsertedBy ?? c.MovedBy, null, formatBy));
+            chars.Add(("insert", c.C, c.InsertedBy ?? Latest(c.MovedBy, c.PlacedBy), null, formatBy));
         }
 
         FlushDeletes(end);
@@ -224,7 +240,7 @@ public static class AttributedDiff
     /// costs nothing); only changed stretches get the character-level token diff.
     /// </summary>
     private static List<List<CharInfo>> Apply(
-        List<List<CharInfo>> olds, List<List<(char C, string Marks)>> news, DiffAuthor author, Dictionary<int, DiffAuthor> deletedBy, Dictionary<int, DiffAuthor> movedBy)
+        List<List<CharInfo>> olds, List<List<(char C, string Marks)>> news, DiffAuthor author, Dictionary<int, DiffAuthor> deletedBy)
     {
         static string Key(IEnumerable<(char C, string Marks)> chars)
         {
@@ -251,7 +267,7 @@ public static class AttributedDiff
         var result = new List<List<CharInfo>>();
         if (olds.Count == 0 || news.Count == 0)
         {
-            return ApplyStretch(olds, news, author, deletedBy, movedBy);
+            return ApplyStretch(olds, news, author, deletedBy);
         }
 
         var diff = Differ.Instance.CreateDiffs(Lines(oldKeys), Lines(newKeys), false, false, DiffPlex.Chunkers.LineChunker.Instance);
@@ -285,51 +301,6 @@ public static class AttributedDiff
 
         var usedOld = movedTo.Values.ToHashSet();
 
-        // A move changes the relative order of the moved block and every in-place block it jumps over: all of them count as
-        // placed by this step's author (the final diff may show either side of the swap as the moved one).
-        var inPlace = new List<(int Old, int New)>();
-        {
-            var (x, y) = (0, 0);
-            foreach (var (oldStart, oldCount, newStart, newCount) in stretches)
-            {
-                for (; x < oldStart; x++, y++)
-                {
-                    inPlace.Add((x, y));
-                }
-
-                (x, y) = (oldStart + oldCount, newStart + newCount);
-            }
-
-            for (; x < olds.Count && y < news.Count; x++, y++)
-            {
-                inPlace.Add((x, y));
-            }
-        }
-
-        void Placed(List<CharInfo> block)
-        {
-            foreach (var c in block)
-            {
-                c.MovedBy = author;
-                if (c.BaselineIndex is { } index)
-                {
-                    movedBy[index] = author;
-                }
-            }
-        }
-
-        foreach (var (j, i) in movedTo)
-        {
-            Placed(olds[i]);
-            foreach (var (o, n) in inPlace)
-            {
-                if ((o < i) != (n < j))
-                {
-                    Placed(olds[o]);
-                }
-            }
-        }
-
         var (a, b) = (0, 0);
         foreach (var (oldStart, oldCount, newStart, newCount) in stretches)
         {
@@ -341,7 +312,7 @@ public static class AttributedDiff
             var changed = ApplyStretch(
                 Enumerable.Range(oldStart, oldCount).Where(i => !usedOld.Contains(i)).Select(i => olds[i]).ToList(),
                 Enumerable.Range(newStart, newCount).Where(j => !movedTo.ContainsKey(j)).Select(j => news[j]).ToList(),
-                author, deletedBy, movedBy);
+                author, deletedBy);
             var k = 0;
             for (var j = newStart; j < newStart + newCount; j++)
             {
@@ -362,7 +333,7 @@ public static class AttributedDiff
 
     /// <summary>One changed stretch: characters are carried over (keeping their origin), inserted, deleted or reformatted.</summary>
     private static List<List<CharInfo>> ApplyStretch(
-        List<List<CharInfo>> olds, List<List<(char C, string Marks)>> news, DiffAuthor author, Dictionary<int, DiffAuthor> deletedBy, Dictionary<int, DiffAuthor> movedBy)
+        List<List<CharInfo>> olds, List<List<(char C, string Marks)>> news, DiffAuthor author, Dictionary<int, DiffAuthor> deletedBy)
     {
         var oldChars = Join(olds, c => c.C);
         var newChars = Join(news, p => p.C);
@@ -437,21 +408,73 @@ public static class AttributedDiff
             }
         }
 
-        // Characters reused inside a largely rewritten block (spaces, punctuation matched by the diff) belong to the rewriter.
-        foreach (var block in blocks.Where(b => b.Count > 0 && b.Count(c => c.InsertedBy is null) * 2 < b.Count))
+        // Restructured blocks — split (an old block feeds several new ones), merged (a new block draws from several old ones) or
+        // largely rewritten (less than half carried) — are placed by this step's author: their carried characters are his.
+        var sourceOf = new Dictionary<CharInfo, int>(ReferenceEqualityComparer.Instance);
+        for (var i = 0; i < olds.Count; i++)
         {
-            foreach (var c in block.Where(c => c.InsertedBy is null))
+            foreach (var c in olds[i])
             {
-                c.MovedBy = author;
-                if (c.BaselineIndex is { } index)
+                sourceOf[c] = i;
+            }
+        }
+
+        var sources = blocks.Select(b => b.Where(sourceOf.ContainsKey).Select(c => sourceOf[c]).Distinct().ToList()).ToList();
+        var feeds = sources.SelectMany(x => x).GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count());
+        for (var i = 0; i < blocks.Count; i++)
+        {
+            var carried = blocks[i].Where(c => sourceOf.ContainsKey(c)).ToList();
+            var restructured = sources[i].Count > 1 || sources[i].Any(x => feeds[x] > 1) || (blocks[i].Count > 0 && carried.Count * 2 < blocks[i].Count);
+            if (restructured)
+            {
+                foreach (var c in carried)
                 {
-                    movedBy[index] = author;
+                    c.PlacedBy = author;
                 }
             }
         }
 
         return news.Count == 0 ? [] : blocks;
     }
+
+    /// <summary>
+    /// After a step: a block is moved while it is out of baseline order against any other block (an inversion — both sides
+    /// of a swap count, since the final diff may show either as the moved one), by the author who first put it there;
+    /// blocks back in order lose the mark (an undone move). Linear: prefix maximum and suffix minimum of positions.
+    /// </summary>
+    private static void MarkDisplaced(List<List<CharInfo>> state, DiffAuthor author)
+    {
+        var positions = new List<(int Block, int Position)>();
+        for (var b = 0; b < state.Count; b++)
+        {
+            if (state[b].FirstOrDefault(c => c.BaselineIndex is not null) is { BaselineIndex: { } position })
+            {
+                positions.Add((b, position));
+            }
+        }
+
+        var suffixMin = new int[positions.Count + 1];
+        suffixMin[positions.Count] = int.MaxValue;
+        for (var i = positions.Count - 1; i >= 0; i--)
+        {
+            suffixMin[i] = Math.Min(suffixMin[i + 1], positions[i].Position);
+        }
+
+        var prefixMax = int.MinValue;
+        for (var i = 0; i < positions.Count; i++)
+        {
+            var (block, position) = positions[i];
+            var displaced = prefixMax > position || suffixMin[i + 1] < position;
+            prefixMax = Math.Max(prefixMax, position);
+            foreach (var c in state[block].Where(c => c.BaselineIndex is not null))
+            {
+                c.MovedBy = displaced ? c.MovedBy ?? author : null;
+            }
+        }
+    }
+
+    /// <summary>The more recent of two marks (audit entry ids grow with time).</summary>
+    private static DiffAuthor? Latest(DiffAuthor? a, DiffAuthor? b) => a is null ? b : b is null ? a : a.EntryId >= b.EntryId ? a : b;
 
     private static string Join<T>(IEnumerable<List<T>> blocks, Func<T, char> selector) =>
         string.Join(BlockSeparator, blocks.Select(b => new string(b.Select(selector).ToArray())));

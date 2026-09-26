@@ -238,6 +238,31 @@ public sealed class AttributedDiffTests
         Assert.All(ops, o => Assert.Equal("Bob", o.By!.DisplayName));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_split_after_an_undone_move_is_the_splitters(bool carolEditsLater)
+    {
+        var carol = new DiffAuthor(4, 4, "Carol", "App", null, new DateTime(2026, 9, 4, 0, 0, 0, DateTimeKind.Utc));
+        var baseline = Doc("Xray paragraph moves around.", "Yankee one two three. Four five six seven.", "Zulu tail paragraph here.");
+        var split = Doc("Xray paragraph moves around.", "Yankee one two three.", "Four five six seven.", "Zulu tail paragraph here.");
+        var steps = new List<ContentStep>
+        {
+            new(Doc("Yankee one two three. Four five six seven.", "Xray paragraph moves around.", "Zulu tail paragraph here."), Alice),
+            new(baseline, Alice),
+            new(split, Bob),
+        };
+        if (carolEditsLater)
+        {
+            steps.Add(new ContentStep(Doc("Xray paragraph moves around.", "Yankee one two three.", "Four five six seven.", "Zulu tail paragraph now."), carol));
+        }
+
+        var ops = AttributedDiff.Diff(Service, baseline, steps).Blocks.SelectMany(b => b.Ops ?? []).Where(o => o.Op != "equal").ToList();
+        Assert.All(ops.Where(o => !o.Text.Contains("here", StringComparison.Ordinal) && !o.Text.Contains("now", StringComparison.Ordinal)),
+            o => Assert.Equal("Bob", o.By!.DisplayName));
+        Assert.DoesNotContain(ops, o => o.By!.DisplayName == "Alice");
+    }
+
     [Fact]
     public void Swapping_a_long_paragraph_is_attributed_in_linear_time()
     {
