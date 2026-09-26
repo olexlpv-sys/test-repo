@@ -217,10 +217,11 @@ internal sealed class CommentEndpoints : IEndpointModule
         var previous = includePreviousVersions
             ? versions.Where(v => v.Id != version.Id && v.CreatedAt <= version.CreatedAt && v.Status != VersionStatus.Deleted).Select(v => v.Id).ToList()
             : [];
-        var nodes = titles.Keys.ToList();
+        // Nodes of this version by join (a version can have thousands — too many for an id list parameter).
         var query = db.Comments.AsNoTracking().Where(c =>
             c.DocumentVersionId == version.Id
-            || (previous.Contains(c.DocumentVersionId) && c.LogicalNodeId != null && nodes.Contains(c.LogicalNodeId.Value)));
+            || (previous.Contains(c.DocumentVersionId) && c.LogicalNodeId != null
+                && db.DocumentNodes.Any(n => n.DocumentVersionId == version.Id && n.LogicalNodeId == c.LogicalNodeId)));
         if (onlyId is { } only)
         {
             query = query.Where(c => c.Id == only || c.ParentCommentId == only);

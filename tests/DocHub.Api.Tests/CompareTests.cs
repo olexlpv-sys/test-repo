@@ -122,6 +122,83 @@ public sealed class CompareTests(DocHubApiFactory factory) : IClassFixture<DocHu
     }
 
     [Fact]
+    public async Task Removed_nodes_keep_their_base_order_among_added_and_later_siblings()
+    {
+        var (documentId, v1) = await _arrange.CreateAsync();
+        for (var i = 1; i <= 11; i++)
+        {
+            await AddAsync(v1, null, $"R{i}");
+        }
+
+        await _arrange.GrantAsync(documentId, TestUsers.Carol);
+        await _arrange.SignAsync(v1, TestUsers.Carol);
+        var draft = (await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Post, $"/api/documents/{documentId}/drafts", null, HttpStatusCode.Created)).GetProperty("id").GetInt32();
+        var tree = await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, $"/api/versions/{draft}/tree", null, HttpStatusCode.OK);
+        int Id(string title) => tree.EnumerateArray().Single(n => n.GetProperty("title").GetString() == title).GetProperty("id").GetInt32();
+        foreach (var title in new[] { "R2", "R10" })
+        {
+            await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Delete, $"/api/nodes/{Id(title)}?rowVersion={Uri.EscapeDataString(await RowVersionAsync(Id(title)))}", null, HttpStatusCode.OK);
+        }
+
+        await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Post, $"/api/versions/{draft}/nodes", new { nodeTypeId = 1, title = "X", position = 0 }, HttpStatusCode.Created);
+        var comparison = await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/documents/{documentId}/compare?base=latestSigned&target=draft&includeUnchanged=true", null, HttpStatusCode.OK);
+        Assert.Equal(["X", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11"],
+            comparison.GetProperty("tree").EnumerateArray().Select(n => (n.GetProperty("target").ValueKind == JsonValueKind.Null ? n.GetProperty("base") : n.GetProperty("target")).GetProperty("title").GetString()));
+    }
+
+    [Fact]
+    public async Task Cached_comparisons_show_current_node_type_codes()
+    {
+        var (documentId, v1, _) = await _arrange.SignedAsync();
+        var typeId = (await ApiClient.ExpectAsync(factory, TestUsers.Admin, HttpMethod.Post, "/api/node-types", new { code = $"T{Guid.NewGuid():N}"[..12].ToUpperInvariant(), name = "Temp", sortOrder = 99, isActive = true }, HttpStatusCode.Created));
+        var tree = await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, $"/api/versions/{v1}/tree", null, HttpStatusCode.OK);
+        _ = tree;
+        await using (var dbo = await SqlSession.OpenAsync(factory.AdminConnectionString))
+        {
+            await dbo.ExecuteAsync("UPDATE app.DocumentNode SET NodeTypeId = @t WHERE DocumentVersionId = @v;", ("@t", typeId.GetProperty("id").GetInt32()), ("@v", v1));
+        }
+
+        var path = $"/api/documents/{documentId}/compare?base={v1}&target={v1}&includeUnchanged=true";
+        var first = await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, path, null, HttpStatusCode.OK);
+        Assert.Equal(typeId.GetProperty("code").GetString(), first.GetProperty("tree")[0].GetProperty("base").GetProperty("nodeType").GetString());
+        var renamed = $"R{Guid.NewGuid():N}"[..12].ToUpperInvariant();
+        await ApiClient.ExpectAsync(factory, TestUsers.Admin, HttpMethod.Put, $"/api/node-types/{typeId.GetProperty("id").GetInt32()}",
+            new { code = renamed, name = "Temp", sortOrder = 99, isActive = true, rowVersion = typeId.GetProperty("rowVersion").GetString() }, HttpStatusCode.OK);
+        var second = await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, path, null, HttpStatusCode.OK);
+        Assert.Equal(renamed, second.GetProperty("tree")[0].GetProperty("base").GetProperty("nodeType").GetString());
+    }
+
+    [Fact]
+    public async Task Thousands_of_changed_and_script_edited_nodes_compare()
+    {
+        var (documentId, v1) = await _arrange.CreateAsync();
+        await using (var dbo = await SqlSession.OpenAsync(factory.AdminConnectionString))
+        {
+            await dbo.ExecuteAsync(
+                """
+                WITH n AS (SELECT TOP (2200) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i FROM sys.all_objects a CROSS JOIN sys.all_objects b)
+                INSERT INTO app.DocumentNode (DocumentVersionId, LogicalNodeId, NodeTypeId, Title, SortOrder, CreatedByUserId, ModifiedByUserId)
+                SELECT @v, NEWID(), 1, CONCAT(N'Node ', i), i * 1024, 2, 2 FROM n;
+                INSERT INTO app.NodeContent (NodeId, DocumentVersionId, LogicalNodeId, ContentJson, ContentHash, ModifiedByUserId)
+                SELECT Id, DocumentVersionId, LogicalNodeId, N'{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"old"}]}]}', HASHBYTES('SHA2_256', N'old'), 2
+                FROM app.DocumentNode WHERE DocumentVersionId = @v;
+                """,
+                ("@v", v1));
+        }
+
+        await _arrange.GrantAsync(documentId, TestUsers.Carol);
+        await _arrange.SignAsync(v1, TestUsers.Carol);
+        var draft = (await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Post, $"/api/documents/{documentId}/drafts", null, HttpStatusCode.Created)).GetProperty("id").GetInt32();
+        await using (var dbo = await SqlSession.OpenAsync(factory.AdminConnectionString))
+        {
+            await dbo.ExecuteAsync("""UPDATE app.NodeContent SET ContentJson = N'{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"new"}]}]}' WHERE DocumentVersionId = @d;""", ("@d", draft));
+        }
+
+        var comparison = await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/documents/{documentId}/compare?base={v1}&target=draft", null, HttpStatusCode.OK);
+        Assert.Equal(2200, comparison.GetProperty("summary").GetProperty("contentChanged").GetInt32());
+    }
+
+    [Fact]
     public async Task Parameters_are_validated_and_deleted_documents_hidden()
     {
         var (documentId, v1, _) = await _arrange.SignedAsync();

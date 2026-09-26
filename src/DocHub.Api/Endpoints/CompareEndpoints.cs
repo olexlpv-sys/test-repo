@@ -36,7 +36,14 @@ internal sealed class CompareEndpoints : IEndpointModule
                 // Signed versions change only by tampering, which advances their stamps (NFR-L9).
                 var (baseStamp, targetStamp) = (await VersionETag.StampAsync(db, baseVersion.Id, ct), await VersionETag.StampAsync(db, targetVersion.Id, ct));
                 var key = string.Create(CultureInfo.InvariantCulture, $"compare:{baseVersion.Id}:{baseStamp}:{targetVersion.Id}:{targetStamp}:{includeUnchanged ?? false}");
-                return TypedResults.Ok(await cache.GetOrCreateAsync(key, async token => await Compute(token), cancellationToken: ct));
+                var cached = await cache.GetOrCreateAsync(key, async token => await Compute(token), cancellationToken: ct);
+
+                // Node-type codes are admin data outside the versions (their changes don't advance the stamps): resolve them fresh.
+                var types = await db.NodeTypes.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Code, ct);
+                NodeSide? Fresh(NodeSide? side) => side is null ? null : side with { NodeType = types.GetValueOrDefault(side.NodeTypeId, "?") };
+                IReadOnlyList<CompareNode> Refresh(IReadOnlyList<CompareNode> nodes) =>
+                    nodes.Select(n => n with { Base = Fresh(n.Base), Target = Fresh(n.Target), Children = Refresh(n.Children) }).ToList();
+                return TypedResults.Ok(cached with { Tree = Refresh(cached.Tree) });
             })
             .WithTags("Compare")
             .WithName("CompareVersions")
@@ -100,13 +107,27 @@ internal sealed class CompareEndpoints : IEndpointModule
 
         // A script-edited row's stored hash may be stale: hash its JSON instead.
         var staleIds = rows.Where(r => r.Stale).Select(r => r.Node.Id).ToList();
-        var fresh = staleIds.Count == 0 ? [] : await db.NodeContents.AsNoTracking().Where(c => staleIds.Contains(c.NodeId))
-            .ToDictionaryAsync(c => c.NodeId, c => CanonicalJson.Hash(c.ContentJson), ct);
+        var fresh = (await ContentJsonAsync(db, staleIds, ct)).ToDictionary(c => c.Key, c => CanonicalJson.Hash(c.Value));
         return rows.GroupBy(r => r.Node.LogicalNodeId).ToDictionary(g => g.Key, g =>
         {
             var r = g.First();
             return new Loaded(r.Node, fresh.TryGetValue(r.Node.Id, out var h) ? h : r.Hash ?? CanonicalJson.Hash(ContentSchema.EmptyDocument));
         });
+    }
+
+    /// <summary>ContentJson of nodes, in chunks (one query with thousands of ids exceeds the parameter limit).</summary>
+    private static async Task<Dictionary<int, string>> ContentJsonAsync(DocHubDbContext db, List<int> nodeIds, CancellationToken ct)
+    {
+        var result = new Dictionary<int, string>();
+        foreach (var chunk in nodeIds.Chunk(500))
+        {
+            foreach (var row in await db.NodeContents.AsNoTracking().Where(c => chunk.Contains(c.NodeId)).Select(c => new { c.NodeId, c.ContentJson }).ToListAsync(ct))
+            {
+                result[row.NodeId] = row.ContentJson;
+            }
+        }
+
+        return result;
     }
 
     private static async Task<Comparison> CompareAsync(DocHubDbContext db, IContentDiffService diff, DocumentVersion baseVersion, DocumentVersion targetVersion, bool includeUnchanged, CancellationToken ct)
@@ -133,11 +154,11 @@ internal sealed class CompareEndpoints : IEndpointModule
         // Content stats only for changed contents.
         var changedContent = before.Keys.Where(after.ContainsKey).Where(l => !before[l].Hash.AsSpan().SequenceEqual(after[l].Hash)).ToHashSet();
         var ids = changedContent.SelectMany(l => new[] { before[l].Node.Id, after[l].Node.Id }).ToList();
-        var json = ids.Count == 0 ? [] : await db.NodeContents.AsNoTracking().Where(c => ids.Contains(c.NodeId)).ToDictionaryAsync(c => c.NodeId, c => c.ContentJson, ct);
+        var json = await ContentJsonAsync(db, ids, ct);
         var stats = changedContent.ToDictionary(l => l, l => diff.Diff(json.GetValueOrDefault(before[l].Node.Id) ?? ContentSchema.EmptyDocument, json.GetValueOrDefault(after[l].Node.Id) ?? ContentSchema.EmptyDocument).Stats);
 
         NodeSide Side(Dictionary<Guid, Loaded> tree, (Dictionary<Guid, string> Numbers, Dictionary<Guid, Guid?> Parent, Dictionary<Guid, List<Guid>> Children) layout, Guid l) =>
-            new(tree[l].Node.Title, layout.Numbers.GetValueOrDefault(l, ""), types.GetValueOrDefault(tree[l].Node.NodeTypeId, "?"), layout.Parent.GetValueOrDefault(l));
+            new(tree[l].Node.Title, layout.Numbers.GetValueOrDefault(l, ""), tree[l].Node.NodeTypeId, types.GetValueOrDefault(tree[l].Node.NodeTypeId, "?"), layout.Parent.GetValueOrDefault(l));
 
         CompareNode Node(Guid l, List<CompareNode> children)
         {
@@ -160,9 +181,11 @@ internal sealed class CompareEndpoints : IEndpointModule
 
         // Merged tree: target structure; removed nodes at their base position (under their base parent, else the nearest ancestor that still exists).
         var merged = afterLayout.Children.ToDictionary(c => c.Key, c => c.Value.ToList());
-        foreach (var removed in before.Keys.Where(l => !after.ContainsKey(l)).OrderBy(l => beforeLayout.Numbers.GetValueOrDefault(l, ""), StringComparer.Ordinal))
+        // In base order ("1.2" before "1.10"), so earlier removed siblings are placed first and later ones can follow them.
+        foreach (var removed in before.Keys.Where(l => !after.ContainsKey(l)).OrderBy(l => beforeLayout.Numbers.GetValueOrDefault(l, ""), NumberComparer.Instance))
         {
-            Guid? parent = beforeLayout.Parent.GetValueOrDefault(removed);
+            var baseParent = beforeLayout.Parent.GetValueOrDefault(removed);
+            Guid? parent = baseParent;
             while (parent is { } p && !after.ContainsKey(p) && before.ContainsKey(p) && !merged.Values.Any(list => list.Contains(p)))
             {
                 parent = beforeLayout.Parent.GetValueOrDefault(p);
@@ -170,8 +193,23 @@ internal sealed class CompareEndpoints : IEndpointModule
 
             var key = parent ?? Guid.Empty;
             var list = merged.TryGetValue(key, out var existing) ? existing : merged[key] = [];
-            var basePosition = (beforeLayout.Children.GetValueOrDefault(beforeLayout.Parent.GetValueOrDefault(removed) ?? Guid.Empty) ?? []).IndexOf(removed);
-            list.Insert(Math.Clamp(basePosition, 0, list.Count), removed);
+
+            // After the nearest preceding base sibling that is in the list, else before the nearest following one.
+            var baseSiblings = beforeLayout.Children.GetValueOrDefault(baseParent ?? Guid.Empty) ?? [];
+            var index = baseSiblings.IndexOf(removed);
+            var position = -1;
+            for (var i = index - 1; i >= 0 && position < 0; i--)
+            {
+                var at = list.IndexOf(baseSiblings[i]);
+                position = at >= 0 ? at + 1 : -1;
+            }
+
+            for (var i = index + 1; i < baseSiblings.Count && position < 0; i++)
+            {
+                position = list.IndexOf(baseSiblings[i]);
+            }
+
+            list.Insert(position >= 0 ? position : Math.Clamp(index, 0, list.Count), removed);
         }
 
         List<CompareNode> Build(Guid parent) =>
@@ -198,11 +236,32 @@ internal sealed class CompareEndpoints : IEndpointModule
         return (numbers, parent, children);
     }
 
+    /// <summary>Orders "1.2" before "1.10".</summary>
+    private sealed class NumberComparer : IComparer<string>
+    {
+        public static readonly NumberComparer Instance = new();
+
+        public int Compare(string? x, string? y)
+        {
+            var (a, b) = ((x ?? "").Split('.'), (y ?? "").Split('.'));
+            for (var i = 0; i < Math.Min(a.Length, b.Length); i++)
+            {
+                var c = int.TryParse(a[i], out var ai) && int.TryParse(b[i], out var bi) ? ai.CompareTo(bi) : string.CompareOrdinal(a[i], b[i]);
+                if (c != 0)
+                {
+                    return c;
+                }
+            }
+
+            return a.Length.CompareTo(b.Length);
+        }
+    }
+
     public sealed record VersionRef(int VersionId, string Label);
 
     public sealed record CompareSummary(int Added, int Removed, int Moved, int Renamed, int TypeChanged, int ContentChanged, int Unchanged);
 
-    public sealed record NodeSide(string Title, string Number, string NodeType, Guid? ParentLogicalNodeId);
+    public sealed record NodeSide(string Title, string Number, int NodeTypeId, string NodeType, Guid? ParentLogicalNodeId);
 
     public sealed record CompareNode(
         Guid LogicalNodeId, string Status, IReadOnlyList<string> Changes, NodeSide? Base, NodeSide? Target, DiffStats? ContentStats, IReadOnlyList<CompareNode> Children);
