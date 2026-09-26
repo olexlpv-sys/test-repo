@@ -255,13 +255,29 @@ public sealed class AuditTriggerTests(DocHubDatabaseFixture database) : IClassFi
         var support = await db.Data.DatabaseUserInRoleAsync("support_writer");
 
         await AsUserAsync(db, support);
-        await db.ExecuteAsync(SupportTemplate(nodeId));
+        await RunScriptAsync(db, SupportTemplate(nodeId));
         await db.ExecuteAsync("REVERT;");
 
         var row = Assert.Single(await ChangesAsync(db, "app.NodeContent", nodeId, "U"));
         Assert.Equal("Script", row["Source"]);
         Assert.Equal("INC-7", row["Ticket"]);
         Assert.Equal("Template test", row["Reason"]);
+    }
+
+    [Fact]
+    public async Task Support_template_runs_on_a_sqlcmd_connection_with_quoted_identifier_off()
+    {
+        await using var db = await database.OpenRolledBackTransactionAsync(Ct);
+        var (_, nodeId) = await ContentNodeAsync(db);
+        var support = await db.Data.DatabaseUserInRoleAsync("support_writer");
+
+        // sqlcmd connects with QUOTED_IDENTIFIER OFF; app.NodeContent has indexes that need it ON (error 1934 otherwise).
+        await AsUserAsync(db, support, "SET QUOTED_IDENTIFIER OFF; SET ANSI_NULLS OFF;");
+        await RunScriptAsync(db, SupportTemplate(nodeId));
+        await db.ExecuteAsync("REVERT;");
+
+        var row = Assert.Single(await ChangesAsync(db, "app.NodeContent", nodeId, "U"));
+        Assert.Equal(("Script", "INC-7"), ((string)row["Source"]!, (string)row["Ticket"]!));
     }
 
     [Fact]
@@ -272,7 +288,7 @@ public sealed class AuditTriggerTests(DocHubDatabaseFixture database) : IClassFi
         var reader = await db.Data.DatabaseUserInRoleAsync("readonly");
         await AsUserAsync(db, reader);
 
-        var exception = await Assert.ThrowsAsync<SqlException>(() => db.ExecuteAsync(SupportTemplate(nodeId)));
+        var exception = await Assert.ThrowsAsync<SqlException>(() => RunScriptAsync(db, SupportTemplate(nodeId)));
 
         Assert.Equal(PermissionDenied, exception.Number);
     }
@@ -637,6 +653,18 @@ public sealed class AuditTriggerTests(DocHubDatabaseFixture database) : IClassFi
 
     private static IReadOnlyDictionary<string, object?> Row(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, string table) =>
         Assert.Single(rows, r => (string)r["TableName"]! == table);
+
+    /// <summary>Runs a script batch by batch, splitting on <c>GO</c> lines as sqlcmd and SSMS do.</summary>
+    private static async Task RunScriptAsync(RolledBackScope db, string script)
+    {
+        foreach (var batch in System.Text.RegularExpressions.Regex.Split(script, @"^\s*GO\s*$", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(batch))
+            {
+                await db.ExecuteAsync(batch);
+            }
+        }
+    }
 
     private static string SupportTemplate(int nodeId) =>
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Support", "_TEMPLATE.sql"))

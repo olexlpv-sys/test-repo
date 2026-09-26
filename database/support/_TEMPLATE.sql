@@ -12,6 +12,12 @@ signed version (the version is then flagged "modified after signing").
 */
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
+-- sqlcmd connects with QUOTED_IDENTIFIER OFF; app tables have filtered/computed-column indexes that need both options ON
+-- (otherwise: Msg 1934 "UPDATE failed because the following SET options have incorrect settings"). They must be set in a
+-- batch of their own: a statement is compiled with the options its batch started with.
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
 
 EXEC audit.usp_SetSupportContext @Ticket = N'$(Ticket)', @Reason = N'$(Reason)';
 

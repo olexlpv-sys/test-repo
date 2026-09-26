@@ -39,6 +39,7 @@ CREATE USER dochub_api FOR LOGIN dochub_api; ALTER ROLE app_api ADD MEMBER dochu
 
 ## Support scripts
 Start from `database/support/_TEMPLATE.sql`: it sets the ticket and reason (`audit.usp_SetSupportContext`) and edits only `ContentJson`. Every change is audited by triggers whether or not the context is set (`Source = 'Script'`, database login).
+The template sets `QUOTED_IDENTIFIER ON` and `ANSI_NULLS ON` in its own first batch (before `GO`): `sqlcmd` connects with `QUOTED_IDENTIFIER OFF`, and updates of tables with filtered or computed-column indexes (e.g. `app.NodeContent`) then fail with Msg 1934. Keep that first batch in every support script (or run `sqlcmd -I`).
 
 ## Build
 ```bash
