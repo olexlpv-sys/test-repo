@@ -562,9 +562,10 @@ function RibbonFor({
             >
               ⤓ Page break
             </Button>
-            <LinkTool editor={ed} />
           </>
         )}
+        {/* Links are allowed everywhere text is, cells and list items included. */}
+        {!disabled && <LinkTool editor={ed} />}
         {!disabled && state?.inTable && (
           <>
             <Divider orientation="vertical" />

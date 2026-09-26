@@ -111,6 +111,7 @@ test('the editor only builds content the schema accepts: no table or page break 
   // Inside the cell there is nothing to insert a table or a page break with.
   await expect(page.getByRole('button', { name: '⊞ Table' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '⤓ Page break' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '🔗 Link' })).toBeVisible(); // links are allowed in cells
   // Pasting a table into a cell still yields valid content (ProseMirror places it where the schema allows).
   await page
     .getByTestId(`section-${node.id}`)
