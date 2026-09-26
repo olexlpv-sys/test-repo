@@ -63,6 +63,7 @@ public sealed class DataGenerator(string connectionString, DataGenOptions option
     private int _nextSignature;
     private int _nextComment;
     private long _nextChangeLog;
+    private readonly HashSet<string> _unusedIdentities = new(StringComparer.Ordinal);
 
     public async Task<DataGenReport> RunAsync(CancellationToken cancellationToken = default)
     {
@@ -491,8 +492,20 @@ public sealed class DataGenerator(string connectionString, DataGenOptions option
     /// current value updates it in the catalog and holds that lock to the end of the transaction, which would serialize the
     /// parallel chunks; below it, nothing is updated. <see cref="FinishAsync"/> sets them back to the largest id.
     /// </summary>
-    private static async Task ReserveIdentitiesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    private async Task ReserveIdentitiesAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
+        // An identity that never generated a value hands out the RESEED value itself next (not value + 1): FinishAsync must know.
+        await using (var used = new SqlCommand(
+            "SELECT QUOTENAME(OBJECT_SCHEMA_NAME([object_id])) + N'.' + QUOTENAME(OBJECT_NAME([object_id])) FROM sys.identity_columns WHERE [last_value] IS NULL",
+            connection))
+        await using (var reader = await used.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                _unusedIdentities.Add(reader.GetString(0));
+            }
+        }
+
         var sql = string.Concat(IdentityTables.Select(t => $"DBCC CHECKIDENT ('{t}', RESEED, {(t.Contains("ChangeLog", StringComparison.Ordinal) ? "4000000000000" : "2000000000")}) WITH NO_INFOMSGS;\n"));
         await using var command = new SqlCommand(sql, connection) { CommandTimeout = 0 };
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -502,7 +515,7 @@ public sealed class DataGenerator(string connectionString, DataGenOptions option
     private async Task FinishAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var reseed = string.Concat(IdentityTables.Select(t =>
-            $"SELECT @max = ISNULL(MAX([Id]), 0) FROM {t}; DBCC CHECKIDENT ('{t}', RESEED, @max) WITH NO_INFOMSGS;\n"));
+            $"SELECT @max = ISNULL(MAX([Id]), 0) + {(_unusedIdentities.Contains(t) ? 1 : 0)} FROM {t}; DBCC CHECKIDENT ('{t}', RESEED, @max) WITH NO_INFOMSGS;\n"));
         var sql = $"""
             DECLARE @max BIGINT;
             {reseed}

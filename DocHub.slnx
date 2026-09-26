@@ -11,6 +11,7 @@
     <Project Path="tests/DocHub.Api.Tests/DocHub.Api.Tests.csproj" />
     <Project Path="tests/DocHub.Database.Tests/DocHub.Database.Tests.csproj" />
     <Project Path="tests/DocHub.Domain.Tests/DocHub.Domain.Tests.csproj" />
+    <Project Path="tests/DocHub.LoadTests/DocHub.LoadTests.csproj" />
     <Project Path="tests/DocHub.Testing/DocHub.Testing.csproj" />
   </Folder>
 </Solution>

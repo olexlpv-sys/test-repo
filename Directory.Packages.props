@@ -22,6 +22,8 @@
     <PackageVersion Include="Testcontainers.MsSql" Version="4.15.0" />
     <PackageVersion Include="Testcontainers.Azurite" Version="4.15.0" />
     <PackageVersion Include="PDFtoImage" Version="5.4.0" />
+    <!-- Load tests (T19) -->
+    <PackageVersion Include="NBomber" Version="6.6.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
     <PackageVersion Include="xunit.v3" Version="4.0.1" />
     <PackageVersion Include="xunit.v3.extensibility.core" Version="4.0.1" />
