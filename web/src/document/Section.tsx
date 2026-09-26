@@ -29,6 +29,8 @@ export interface SectionProps {
   signaturesToOutdate: number;
   selected: boolean;
   onActivate: (node: TreeNode) => void;
+  /** Opens the comments panel (the section is activated first, so its threads show). */
+  onOpenComments: () => void;
 }
 
 type Mode = { kind: 'edit' } | { kind: 'view'; entry: HistoryEntry } | { kind: 'compare'; entry: HistoryEntry };
@@ -105,6 +107,7 @@ export const Section = memo(function Section(props: SectionProps) {
     signaturesToOutdate,
     selected,
     onActivate,
+    onOpenComments,
   } = props;
   const [historyOpen, setHistoryOpen] = useState(false);
   const [mode, setMode] = useState<Mode>({ kind: 'edit' });
@@ -208,7 +211,18 @@ export const Section = memo(function Section(props: SectionProps) {
               🕘 {summary?.changeCount ?? 0} {historyOpen ? '▲' : ''}
             </UnstyledButton>
           </Tooltip>
-          {comments > 0 && <span className="dh-comment-count">💬 {comments}</span>}
+          <Tooltip label={comments > 0 ? `${comments} comment(s) — open` : 'Comments'}>
+            <UnstyledButton
+              className="dh-section-tool dh-comment-count"
+              aria-label={`Comments on ${node.title}`}
+              onClick={() => {
+                onActivate(node);
+                onOpenComments();
+              }}
+            >
+              💬 {comments > 0 ? comments : ''}
+            </UnstyledButton>
+          </Tooltip>
         </Group>
       </div>
       {structural.length > 0 && <div className="dh-structural">{structural.join(' · ')}</div>}

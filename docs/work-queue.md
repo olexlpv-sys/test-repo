@@ -36,7 +36,7 @@ Q22 is placed right after Q04 (it hardens the Q03 schema before feature work bui
 | Q14 | [T11](tasks/T11-change-history-api.md) History + diff engine | CODE + TEST | Q03, Q11, Q22 | A | done | **GREEN** (9 rounds; R9-1 accepted — decisions log Q20) |
 | Q15 | [T12](tasks/T12-version-comparison-api.md) Compare | CODE + TEST | Q11, Q14 (diff engine) | B | done | **GREEN** (2 rounds) |
 | Q16 | [T15](tasks/T15-web-document-editor.md) Web section editor + inline history | CODE + TEST | Q08, Q09, Q10, Q11, Q14 | C | done | **GREEN** (3 rounds) |
-| Q17 | [T16](tasks/T16-web-compare-comments-permissions.md) Web compare/comments/permissions | CODE + TEST | Q09, Q13, Q15, Q16 | C | todo | – |
+| Q17 | [T16](tasks/T16-web-compare-comments-permissions.md) Web compare/comments/permissions | CODE + TEST | Q09, Q13, Q15, Q16 | C | in-review | round 1 |
 | Q18 | ~~T18 Search~~ — out of scope (decisions log Q13) | – | – | – | dropped | – |
 | Q21 | [T20](tasks/T20-pdf-export.md) PDF export (API, worker, UI) | CODE + TEST | Q05, Q07, Q09, Q11, Q16 | B | todo | – |
 | Q19 | [T19](tasks/T19-load-and-performance.md) Load & performance harness + tuning | TEST + CODE | Q11 (harness), Q13, Q14, Q15, Q16, Q21 (full mix) | B | todo | – |

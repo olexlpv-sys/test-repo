@@ -9,7 +9,10 @@ function Op({ op }: { op: DiffOp }) {
   }
 
   const color = authorColor(op.by);
-  const title = `${op.op === 'insert' ? 'Inserted' : op.op === 'delete' ? 'Deleted' : `Formatting (${(op.changes ?? []).join(', ')})`} by ${authorText(op.by)}${
+  const what =
+    op.op === 'insert' ? 'Inserted' : op.op === 'delete' ? 'Deleted' : `Formatting (${(op.changes ?? []).join(', ')})`;
+  // Version comparison has no authors: then the kind of change alone.
+  const title = `${what}${op.by ? ` by ${authorText(op.by)}` : ''}${
     op.formatBy ? `; formatted by ${authorText(op.formatBy)}` : ''
   }`;
   const common = {
@@ -108,7 +111,13 @@ function Block({ block }: { block: DiffBlock }): ReactNode {
  * Track changes of one section (T15 §4): insertions underlined in the author's colour, deletions struck through,
  * formatting changes dotted-underlined; hover names author, time and source. Display only — never stored.
  */
-export function TrackChanges({ blocks }: { blocks: DiffBlock[] }) {
+export function TrackChanges({
+  blocks,
+  emptyText = 'No text changes since the baseline.',
+}: {
+  blocks: DiffBlock[];
+  emptyText?: string;
+}) {
   const changed = blocks.some(function hasChange(b: DiffBlock): boolean {
     return (
       b.status !== 'equal' ||
@@ -122,7 +131,7 @@ export function TrackChanges({ blocks }: { blocks: DiffBlock[] }) {
       {blocks.map((block, i) => (
         <Block key={i} block={block} />
       ))}
-      {!changed && <p className="dh-muted dh-tc-none">No text changes since the baseline.</p>}
+      {!changed && <p className="dh-muted dh-tc-none">{emptyText}</p>}
     </div>
   );
 }

@@ -26,6 +26,8 @@ import { VersionBar } from '../document/VersionBar';
 import { createExtensions } from '../editor/extensions';
 import { EditorHubContext, type EditorHub } from '../editor/editorHub';
 import { Ribbon } from '../editor/Ribbon';
+import { CommentsPanel } from '../document/CommentsPanel';
+import { PermissionsDialog } from '../document/PermissionsDialog';
 
 type Removed = NonNullable<ReturnType<typeof useChangeSummary>['data']>['removed'][number];
 type Item = { kind: 'node'; node: TreeNode; depth: number } | { kind: 'removed'; removed: Removed; depth: number };
@@ -73,6 +75,8 @@ export function DocumentPage() {
   });
 
   const [active, setActive] = useState<Editor | null>(null);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [permissionsOpen, setPermissionsOpen] = useState(false);
   const [warned] = useState(() => new Set<number>());
   const hub = useMemo<EditorHub>(() => ({ active, setActive, warned }), [active, warned]);
 
@@ -188,6 +192,8 @@ export function DocumentPage() {
     [selectedParam, setUrl],
   );
 
+  const openComments = useCallback(() => setCommentsOpen(true), []);
+
   if (document.isError) {
     return <Text c="red">The document could not be opened.</Text>;
   }
@@ -220,6 +226,17 @@ export function DocumentPage() {
             setTrackOn(false);
             setUrl({ version: String(versionId), node: null });
           }}
+          onPermissions={() => setPermissionsOpen(true)}
+          commentsOpen={commentsOpen}
+          onToggleComments={() => setCommentsOpen((o) => !o)}
+          documentComments={comments.data?.document ?? 0}
+        />
+        <PermissionsDialog
+          documentId={documentId}
+          opened={permissionsOpen}
+          onClose={() => setPermissionsOpen(false)}
+          canManage={myRoles?.canManage ?? false}
+          tree={tree.data ?? []}
         />
         <Group className="dh-toolbar-row" justify="space-between" wrap="nowrap" align="flex-start">
           <Ribbon
@@ -260,7 +277,7 @@ export function DocumentPage() {
             />
           </Group>
         </Group>
-        <div className="dh-document-body">
+        <div className="dh-document-body" data-comments={commentsOpen}>
           <StructureTree
             documentId={documentId}
             versionId={version.id}
@@ -318,6 +335,7 @@ export function DocumentPage() {
                         signaturesToOutdate={validSignatures}
                         selected={item.node.id === selectedId}
                         onActivate={onActivate}
+                        onOpenComments={openComments}
                       />
                     ) : (
                       <RemovedSection removed={item.removed} depth={item.depth} />
@@ -327,6 +345,15 @@ export function DocumentPage() {
               })}
             </div>
           </div>
+          {commentsOpen && (
+            <CommentsPanel
+              documentId={documentId}
+              version={version}
+              roles={myRoles}
+              node={flat.find((f) => f.node.id === selectedId)?.node ?? null}
+              onClose={() => setCommentsOpen(false)}
+            />
+          )}
         </div>
       </div>
     </EditorHubContext.Provider>

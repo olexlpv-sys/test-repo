@@ -9,6 +9,7 @@ import { SessionProvider } from './session';
 import { Shell } from './Shell';
 import { MainPage } from '../pages/MainPage';
 import { DocumentPage } from '../pages/DocumentPage';
+import { ComparePage } from '../pages/ComparePage';
 import { AdminPage } from '../pages/AdminPage';
 import { theme } from '../theme';
 
@@ -26,6 +27,7 @@ export function App({ queryClient, env }: { queryClient?: QueryClient; env?: 'de
                 <Routes>
                   <Route path="/" element={<MainPage />} />
                   <Route path="/documents/:id" element={<DocumentPage />} />
+                  <Route path="/documents/:id/compare" element={<ComparePage />} />
                   <Route path="/admin" element={<AdminPage />} />
                 </Routes>
               </Shell>

@@ -16,10 +16,25 @@ interface Props {
   roles: MyRoles | undefined;
   signatures: SignatureStatus | undefined;
   onSelectVersion: (versionId: number) => void;
+  onPermissions: () => void;
+  commentsOpen: boolean;
+  onToggleComments: () => void;
+  /** Open comments on the whole document (badge on the Comments button). */
+  documentComments: number;
 }
 
 /** Version selector, read-only and ⚠ banners, signing panel, New draft / Discard draft, activity feed (T15 §1). */
-export function VersionBar({ document, version, roles, signatures, onSelectVersion }: Props) {
+export function VersionBar({
+  document,
+  version,
+  roles,
+  signatures,
+  onSelectVersion,
+  onPermissions,
+  commentsOpen,
+  onToggleComments,
+  documentComments,
+}: Props) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { me } = useSession();
@@ -201,11 +216,20 @@ export function VersionBar({ document, version, roles, signatures, onSelectVersi
               Discard draft
             </Button>
           )}
-          <Tooltip label="Version comparison arrives with T16">
-            <Button variant="soft" color="gray" disabled>
-              Compare…
-            </Button>
-          </Tooltip>
+          <Button variant="soft" color="gray" onClick={() => navigate(`/documents/${document.id}/compare`)}>
+            Compare…
+          </Button>
+          <Button variant="soft" color="gray" onClick={onPermissions}>
+            {roles?.canManage ? 'Share / Permissions' : 'Permissions'}
+          </Button>
+          <Button
+            variant={commentsOpen ? 'soft' : 'subtle'}
+            color={commentsOpen ? 'brand' : 'gray'}
+            onClick={onToggleComments}
+            aria-pressed={commentsOpen}
+          >
+            💬 Comments{documentComments > 0 ? ` (${documentComments})` : ''}
+          </Button>
           <Button variant="soft" color="gray" onClick={() => setActivity(true)}>
             Activity
           </Button>

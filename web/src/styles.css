@@ -371,13 +371,15 @@ body {
   flex-shrink: 0;
   font-size: 13px;
 }
-.dh-history-toggle {
+.dh-history-toggle,
+.dh-section-tool {
   font-size: 13px;
   color: var(--dh-tab);
   padding: 2px 6px;
   border-radius: 6px;
 }
 .dh-history-toggle:hover,
+.dh-section-tool:hover,
 .dh-history-toggle[aria-expanded='true'] {
   background: var(--dh-primary-soft-bg);
   color: var(--dh-primary-soft-text);
@@ -531,4 +533,76 @@ body {
 }
 .dh-removed-section {
   opacity: 0.75;
+}
+
+/* ---------- Compare, comments, permissions (T16) ---------- */
+.dh-compare-row[data-status='Added'] .dh-tree-title {
+  color: var(--dh-chip-green-text);
+}
+.dh-compare-row[data-status='Removed'] .dh-tree-title {
+  color: var(--dh-danger-soft-text);
+  text-decoration: line-through;
+}
+.dh-compare-row[data-status='Modified'] .dh-tree-title {
+  color: var(--dh-chip-amber-text);
+}
+.dh-compare-summary {
+  align-items: center;
+}
+.dh-side-by-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.dh-document-body[data-comments='true'] {
+  grid-template-columns: minmax(240px, 300px) 1fr minmax(280px, 340px);
+}
+@media (max-width: 1200px) {
+  .dh-document-body[data-comments='true'] {
+    grid-template-columns: minmax(220px, 260px) 1fr;
+  }
+  .dh-document-body[data-comments='true'] .dh-comments {
+    grid-column: 1 / -1;
+  }
+}
+.dh-comments {
+  position: sticky;
+  top: 70px;
+  max-height: calc(100vh - 250px);
+  display: flex;
+  flex-direction: column;
+}
+.dh-comments-body {
+  background: var(--dh-surface);
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px;
+}
+.dh-thread {
+  border: 1px solid var(--dh-border);
+  border-radius: var(--dh-radius);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: var(--dh-surface);
+}
+.dh-thread[data-resolved] {
+  background: var(--dh-surface-muted);
+}
+.dh-reply {
+  border-left: 2px solid var(--dh-border);
+  padding-left: 10px;
+  margin-top: 8px;
+}
+.dh-comment-meta {
+  font-size: 12px;
+  color: var(--dh-text-muted);
+}
+.dh-comment-body {
+  font-size: 14px;
+  white-space: pre-wrap;
+  margin: 4px 0;
+}
+.dh-comment-count {
+  cursor: pointer;
 }
