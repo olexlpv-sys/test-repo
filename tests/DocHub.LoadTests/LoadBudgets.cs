@@ -168,6 +168,22 @@ public sealed class MemorySampler(Func<CancellationToken, Task<(string Instance,
     public double GrowthAfter(TimeSpan from) =>
         _samples.Where(s => s.At >= from).GroupBy(s => s.Instance).Select(g => Growth([.. g.Select(s => (s.At.TotalSeconds, (double)s.Bytes))])).DefaultIfEmpty(0).Max();
 
+    /// <summary>
+    /// The soak's memory verdict: null when each of the <paramref name="instances"/> expected API instances has a trend after
+    /// <paramref name="from"/> and none grew by more than 10 %; else why not (an instance never sampled can't pass unseen).
+    /// </summary>
+    public string? Verdict(TimeSpan from, int instances)
+    {
+        var sampled = InstancesWithTrend(from);
+        if (sampled < instances)
+        {
+            return $"Memory trends for {sampled} of {instances} API instances (DOCHUB_LOAD_API_INSTANCES): every instance must be sampled (GET /api/admin/runtime).";
+        }
+
+        var growth = GrowthAfter(from);
+        return growth > 0.10 ? $"API memory grew by {growth:P0} over the soak (trend of an instance in memory.csv)." : null;
+    }
+
     /// <summary>Instances with enough samples after <paramref name="from"/> for a trend.</summary>
     public int InstancesWithTrend(TimeSpan from) => _samples.Where(s => s.At >= from).GroupBy(s => s.Instance).Count(g => g.Count() >= 3);
 

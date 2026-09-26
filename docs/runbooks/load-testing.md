@@ -55,8 +55,10 @@ deployed API count too) — and the requests around it must stay within the limi
   (header + tree as one operation), history, compare and new draft from a probe on the 2 000-node documents every 15 s, outside
   the mix; `usp_CheckPermission` and `usp_ListDocuments` timed directly against the database once a second), `memory.csv` (the
   managed heap of the answering API instance every 30 s, through the admin endpoint `GET /api/admin/runtime`) and `top-queries.csv` (the 10 slowest statements incl. EF Core's parameterized ones, needs VIEW SERVER STATE).
-- Memory: behind the load balancer each sample answers for one instance, so every instance gets its own trend; the soak fails when
-  any instance grows by more than 10 % after the warm-up, or when there are no samples.
+- Memory: behind the load balancer each sample answers for one instance, so every instance gets its own trend. Set
+  `DOCHUB_LOAD_API_INSTANCES` to the number of API instances (default 1): the soak fails when fewer instances were sampled, or when
+  any instance grows by more than 10 % after the warm-up. The load client sends no cookies (a sticky balancer would pin it to one
+  instance) and renews its connections every 30 s.
   Keep them as build artifacts. On Azure SQL, also read Query Store.
 - NBomber is free for personal use; running it for an organization needs an NBomber license (`NBomberRunner.WithLicense`).
 

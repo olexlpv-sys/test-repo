@@ -99,7 +99,8 @@ public sealed class LoadRunTests(LoadRunDatabase data) : IClassFixture<LoadRunDa
         var connection = target is null ? data.AdminConnectionString : Environment.GetEnvironmentVariable("DOCHUB_LOAD_CONNECTION")
             ?? throw new InvalidOperationException("DOCHUB_LOAD_TARGET needs DOCHUB_LOAD_CONNECTION (the target's database).");
         var ct = TestContext.Current.CancellationToken;
-        using var http = target is null ? data.CreateClient() : new HttpClient { BaseAddress = new Uri(target) };
+        // No cookies: a sticky load balancer (e.g. ARR affinity) would otherwise pin every request to one API instance.
+        using var http = target is null ? data.CreateClient() : new HttpClient(new SocketsHttpHandler { UseCookies = false, PooledConnectionLifetime = TimeSpan.FromSeconds(30) }) { BaseAddress = new Uri(target) };
         http.Timeout = Timeout.InfiniteTimeSpan; // each request has LoadProfile.RequestTimeout
         var catalog = await LoadCatalog.ReadAsync(connection, ct);
         Assert.NotEmpty(catalog.Documents);
@@ -242,9 +243,10 @@ public sealed class LoadRunTests(LoadRunDatabase data) : IClassFixture<LoadRunDa
             var last = recorder.Samples.Where(s => s.At > profile.Duration - TimeSpan.FromMinutes(10)).Select(s => s.Milliseconds).Order().ToList();
             Assert.True(LoadRecorder.Percentile(last, 95) <= LoadRecorder.Percentile(first, 95) * 1.1,
                 $"p95 drifted by more than 10 %: {LoadRecorder.Percentile(first, 95):0} ms → {LoadRecorder.Percentile(last, 95):0} ms.");
-            Assert.True(memory.InstancesWithTrend(LoadProfile.WarmUp) > 0, "No API memory samples (GET /api/admin/runtime).");
-            var growth = memory.GrowthAfter(LoadProfile.WarmUp);
-            Assert.True(growth <= 0.10, $"API memory grew by {growth:P0} over the soak (trend of an instance in memory.csv).");
+            var instances = int.TryParse(Environment.GetEnvironmentVariable("DOCHUB_LOAD_API_INSTANCES"), NumberStyles.None, CultureInfo.InvariantCulture, out var count) && count > 0
+                ? count
+                : 1;
+            Assert.Null(memory.Verdict(LoadProfile.WarmUp, instances));
         }
     }
 

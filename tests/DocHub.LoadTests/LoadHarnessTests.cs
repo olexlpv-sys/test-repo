@@ -168,9 +168,13 @@ public sealed class LoadHarnessTests
 
         Assert.Equal(2, sampler.InstancesWithTrend(TimeSpan.Zero));
         Assert.True(sampler.GrowthAfter(TimeSpan.Zero) > 0.10);
+        Assert.Contains("grew", sampler.Verdict(TimeSpan.Zero, 2), StringComparison.Ordinal);
         var flat = new MemorySampler(_ => Task.FromResult(("a", 1_000L)));
         using var stop2 = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
         await flat.RunAsync(clock, TimeSpan.FromMilliseconds(20), stop2.Token);
         Assert.Equal(0, flat.GrowthAfter(TimeSpan.Zero), 3);
+        Assert.Null(flat.Verdict(TimeSpan.Zero, 1));
+        // Behind a sticky load balancer only one of two instances answers: that is not a pass.
+        Assert.Contains("1 of 2", flat.Verdict(TimeSpan.Zero, 2), StringComparison.Ordinal);
     }
 }
