@@ -18,4 +18,13 @@ npm run e2e                                              # DOCHUB_WEB overrides 
 PLAYWRIGHT_CHROMIUM=/opt/pw-browsers/chromium npm run e2e # use a preinstalled Chromium
 ```
 
+The 2 000-section performance test (NFR-L6) is opt-in and runs against the production build:
+
+```bash
+npm run build && npx vite preview        # http://localhost:4173, same /api proxy
+DOCHUB_PERF=1 DOCHUB_WEB=http://localhost:4173 npm run e2e -- performance   # DOCHUB_PERF_DOC=<id> reuses a document
+```
+
+`e2e/collaboration.spec.ts` runs a support script through `docker exec dochub-sql` (skipped without the container).
+
 **Styling**: design tokens and the card/chip/tab classes live in `src/styles.css`; Mantine overrides (brand blue `#1e5bdc`, `variant="soft"` buttons, inputs, modals) in `src/theme.ts`.

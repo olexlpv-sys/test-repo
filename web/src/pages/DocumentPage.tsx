@@ -131,6 +131,7 @@ export function DocumentPage() {
     count: items.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 160,
+    initialRect: { width: 800, height: 900 }, // before the first measurement (and in tests)
     overscan: 4,
     getItemKey: (index) => {
       const item = items[index];

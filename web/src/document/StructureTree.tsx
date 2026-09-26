@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { ActionIcon, Button, Group, Menu, Modal, Select, Stack, Text, TextInput } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -87,6 +88,23 @@ export function StructureTree({
 
     return rows;
   }, [flat, collapsed]);
+
+  // Virtualized rows: a 2 000-node document mounts only the rows in view (NFR-L6).
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is the documented virtualizer here
+  const virtualizer = useVirtualizer({
+    count: visible.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 34,
+    initialRect: { width: 800, height: 900 }, // before the first measurement (and in tests)
+    overscan: 12,
+    getItemKey: (index) => visible[index]?.node.id ?? index,
+  });
+  const selectedIndex = visible.findIndex((f) => f.node.id === selectedId);
+  useEffect(() => {
+    if (selectedIndex >= 0) {
+      virtualizer.scrollToIndex(selectedIndex, { align: 'auto' }); // the selected node stays in view
+    }
+  }, [selectedIndex, virtualizer]);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['doc', documentId] });
   const toggle = (id: number) =>
@@ -218,14 +236,17 @@ export function StructureTree({
     setDrop(null);
   };
 
-  // Keyboard: ↑/↓ move between rows, ←/→ collapse/expand, Enter opens the section.
+  // Keyboard: ↑/↓ move between rows, Home/End jump, ←/→ collapse/expand, F2 renames (owner).
   const onKeyDown = (e: KeyboardEvent) => {
     const index = visible.findIndex((f) => f.node.id === selectedId);
     const current = visible[index];
     const focusRow = (row: FlatNode | undefined) => {
       if (row) {
         onSelect(row.node);
-        listRef.current?.querySelector<HTMLElement>(`[data-node-id="${row.node.id}"]`)?.focus();
+        virtualizer.scrollToIndex(visible.indexOf(row), { align: 'auto' });
+        requestAnimationFrame(() =>
+          listRef.current?.querySelector<HTMLElement>(`[data-node-id="${row.node.id}"]`)?.focus(),
+        );
       }
     };
     if (e.key === 'ArrowDown') {
@@ -234,6 +255,9 @@ export function StructureTree({
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       focusRow(visible[Math.max(0, index - 1)]);
+    } else if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      focusRow(e.key === 'Home' ? visible[0] : visible.at(-1));
     } else if (e.key === 'ArrowLeft' && current) {
       if (current.node.children.length > 0 && !collapsed.has(current.node.id)) {
         toggle(current.node.id);
@@ -276,171 +300,187 @@ export function StructureTree({
             {canEditStructure ? 'No sections yet — add the first node.' : 'This version has no sections.'}
           </Text>
         )}
-        {visible.map((f) => {
-          const { node, depth } = f;
-          const changes = summary.get(node.logicalNodeId);
-          const type = typeById.get(node.nodeTypeId);
-          const dropHere = drop?.targetId === node.id ? drop.place : undefined;
-          return (
-            <div
-              key={node.id}
-              role="treeitem"
-              aria-selected={node.id === selectedId}
-              aria-expanded={node.children.length > 0 ? !collapsed.has(node.id) : undefined}
-              aria-level={depth + 1}
-              tabIndex={node.id === selectedId || (selectedId === null && f === visible[0]) ? 0 : -1}
-              data-node-id={node.id}
-              data-testid={`tree-node-${node.id}`}
-              className="dh-tree-row"
-              data-selected={node.id === selectedId || undefined}
-              data-muted={!isEditable(node.logicalNodeId) || undefined}
-              data-drop={dropHere}
-              style={{ paddingLeft: 6 + depth * 16 }}
-              draggable={canEditStructure && renaming?.id !== node.id}
-              onDragStart={(e) => {
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/plain', String(node.id));
-                setDragging(node.id);
-              }}
-              onDragEnd={() => {
-                setDragging(null);
-                setDrop(null);
-              }}
-              onDragOver={(e) => onDragOver(e, f)}
-              onDragLeave={() => setDrop((d) => (d?.targetId === node.id ? null : d))}
-              onDrop={onDrop}
-              onClick={() => onSelect(node)}
-              onDoubleClick={() => canEditStructure && setRenaming({ id: node.id, title: node.title })}
-            >
-              <ActionIcon
-                size="xs"
-                variant="transparent"
-                color="gray"
-                aria-label={collapsed.has(node.id) ? 'Expand' : 'Collapse'}
-                style={{ visibility: node.children.length > 0 ? 'visible' : 'hidden' }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggle(node.id);
+        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+          {virtualizer.getVirtualItems().map((item) => {
+            const f = visible[item.index];
+            if (!f) {
+              return null;
+            }
+
+            const { node, depth } = f;
+            const changes = summary.get(node.logicalNodeId);
+            const type = typeById.get(node.nodeTypeId);
+            const dropHere = drop?.targetId === node.id ? drop.place : undefined;
+            return (
+              <div
+                key={item.key}
+                role="treeitem"
+                aria-selected={node.id === selectedId}
+                aria-expanded={node.children.length > 0 ? !collapsed.has(node.id) : undefined}
+                aria-level={depth + 1}
+                tabIndex={node.id === selectedId || (selectedId === null && f === visible[0]) ? 0 : -1}
+                data-node-id={node.id}
+                data-testid={`tree-node-${node.id}`}
+                className="dh-tree-row"
+                data-selected={node.id === selectedId || undefined}
+                data-muted={!isEditable(node.logicalNodeId) || undefined}
+                data-drop={dropHere}
+                style={{
+                  paddingLeft: 6 + depth * 16,
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  transform: `translateY(${item.start}px)`,
                 }}
-                tabIndex={-1}
+                ref={virtualizer.measureElement}
+                data-index={item.index}
+                draggable={canEditStructure && renaming?.id !== node.id}
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', String(node.id));
+                  setDragging(node.id);
+                }}
+                onDragEnd={() => {
+                  setDragging(null);
+                  setDrop(null);
+                }}
+                onDragOver={(e) => onDragOver(e, f)}
+                onDragLeave={() => setDrop((d) => (d?.targetId === node.id ? null : d))}
+                onDrop={onDrop}
+                onClick={() => onSelect(node)}
+                onDoubleClick={() => canEditStructure && setRenaming({ id: node.id, title: node.title })}
               >
-                {collapsed.has(node.id) ? '▸' : '▾'}
-              </ActionIcon>
-              <span className="dh-tree-number">{node.number}</span>
-              {renaming?.id === node.id ? (
-                <form
-                  style={{ flex: 1 }}
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (renaming.title.trim() && renaming.title !== node.title) {
-                      update.mutate({ node, title: renaming.title.trim() });
-                    } else {
-                      setRenaming(null);
-                    }
+                <ActionIcon
+                  size="xs"
+                  variant="transparent"
+                  color="gray"
+                  aria-label={collapsed.has(node.id) ? 'Expand' : 'Collapse'}
+                  style={{ visibility: node.children.length > 0 ? 'visible' : 'hidden' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggle(node.id);
                   }}
+                  tabIndex={-1}
                 >
-                  <TextInput
-                    size="xs"
-                    aria-label="Node title"
-                    autoFocus
-                    value={renaming.title}
-                    onChange={(e) => setRenaming({ id: node.id, title: e.currentTarget.value })}
-                    onBlur={() => setRenaming(null)}
-                    onKeyDown={(e) => e.key === 'Escape' && setRenaming(null)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </form>
-              ) : (
-                <span className="dh-tree-title">{node.title}</span>
-              )}
-              {type && <span className="dh-chip dh-tree-type">{type.name}</span>}
-              {changes && changes.changeCount > 0 && (
-                <span className="dh-tree-changes" title={`${changes.changeCount} change(s) since the baseline`}>
-                  ●{changes.changeCount}
-                </span>
-              )}
-              {(comments[node.logicalNodeId] ?? 0) > 0 && (
-                <span className="dh-tree-comments">💬{comments[node.logicalNodeId]}</span>
-              )}
-              {canEditStructure && (
-                <Menu position="bottom-end" withinPortal>
-                  <Menu.Target>
-                    <ActionIcon
-                      size="sm"
-                      variant="subtle"
-                      color="gray"
-                      aria-label={`Actions for ${node.title}`}
+                  {collapsed.has(node.id) ? '▸' : '▾'}
+                </ActionIcon>
+                <span className="dh-tree-number">{node.number}</span>
+                {renaming?.id === node.id ? (
+                  <form
+                    style={{ flex: 1 }}
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (renaming.title.trim() && renaming.title !== node.title) {
+                        update.mutate({ node, title: renaming.title.trim() });
+                      } else {
+                        setRenaming(null);
+                      }
+                    }}
+                  >
+                    <TextInput
+                      size="xs"
+                      aria-label="Node title"
+                      autoFocus
+                      value={renaming.title}
+                      onChange={(e) => setRenaming({ id: node.id, title: e.currentTarget.value })}
+                      onBlur={() => setRenaming(null)}
+                      onKeyDown={(e) => e.key === 'Escape' && setRenaming(null)}
                       onClick={(e) => e.stopPropagation()}
-                      tabIndex={-1}
-                    >
-                      ⋯
-                    </ActionIcon>
-                  </Menu.Target>
-                  <Menu.Dropdown>
-                    <Menu.Item
-                      onClick={() =>
-                        setAdding({
-                          parentId: node.id,
-                          position: null,
-                          title: '',
-                          typeId: firstType ? String(firstType.id) : null,
-                        })
-                      }
-                    >
-                      Add child
-                    </Menu.Item>
-                    <Menu.Item
-                      onClick={() =>
-                        setAdding({
-                          parentId: f.parent?.id ?? null,
-                          position: f.index + 1,
-                          title: '',
-                          typeId: String(node.nodeTypeId),
-                        })
-                      }
-                    >
-                      Add sibling below
-                    </Menu.Item>
-                    <Menu.Item onClick={() => setRenaming({ id: node.id, title: node.title })}>Rename</Menu.Item>
-                    <Menu.Sub>
-                      <Menu.Sub.Target>
-                        <Menu.Sub.Item>Change type</Menu.Sub.Item>
-                      </Menu.Sub.Target>
-                      <Menu.Sub.Dropdown>
-                        {activeTypes.map((t) => (
-                          <Menu.Item
-                            key={t.id}
-                            disabled={t.id === node.nodeTypeId}
-                            onClick={() => update.mutate({ node, typeId: t.id })}
-                          >
-                            {t.name}
-                          </Menu.Item>
-                        ))}
-                      </Menu.Sub.Dropdown>
-                    </Menu.Sub>
-                    <Menu.Divider />
-                    <Menu.Item disabled={f.index === 0} onClick={() => moveBy(f, 'up')}>
-                      Move up
-                    </Menu.Item>
-                    <Menu.Item disabled={f.index === f.siblings.length - 1} onClick={() => moveBy(f, 'down')}>
-                      Move down
-                    </Menu.Item>
-                    <Menu.Item disabled={f.index === 0} onClick={() => moveBy(f, 'indent')}>
-                      Indent
-                    </Menu.Item>
-                    <Menu.Item disabled={!f.parent} onClick={() => moveBy(f, 'outdent')}>
-                      Outdent
-                    </Menu.Item>
-                    <Menu.Divider />
-                    <Menu.Item color="red" onClick={() => confirmDelete(node)}>
-                      Delete
-                    </Menu.Item>
-                  </Menu.Dropdown>
-                </Menu>
-              )}
-            </div>
-          );
-        })}
+                    />
+                  </form>
+                ) : (
+                  <span className="dh-tree-title">{node.title}</span>
+                )}
+                {type && <span className="dh-chip dh-tree-type">{type.name}</span>}
+                {changes && changes.changeCount > 0 && (
+                  <span className="dh-tree-changes" title={`${changes.changeCount} change(s) since the baseline`}>
+                    ●{changes.changeCount}
+                  </span>
+                )}
+                {(comments[node.logicalNodeId] ?? 0) > 0 && (
+                  <span className="dh-tree-comments">💬{comments[node.logicalNodeId]}</span>
+                )}
+                {canEditStructure && (
+                  <Menu position="bottom-end" withinPortal>
+                    <Menu.Target>
+                      <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        color="gray"
+                        aria-label={`Actions for ${node.title}`}
+                        onClick={(e) => e.stopPropagation()}
+                        tabIndex={-1}
+                      >
+                        ⋯
+                      </ActionIcon>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      <Menu.Item
+                        onClick={() =>
+                          setAdding({
+                            parentId: node.id,
+                            position: null,
+                            title: '',
+                            typeId: firstType ? String(firstType.id) : null,
+                          })
+                        }
+                      >
+                        Add child
+                      </Menu.Item>
+                      <Menu.Item
+                        onClick={() =>
+                          setAdding({
+                            parentId: f.parent?.id ?? null,
+                            position: f.index + 1,
+                            title: '',
+                            typeId: String(node.nodeTypeId),
+                          })
+                        }
+                      >
+                        Add sibling below
+                      </Menu.Item>
+                      <Menu.Item onClick={() => setRenaming({ id: node.id, title: node.title })}>Rename</Menu.Item>
+                      <Menu.Sub>
+                        <Menu.Sub.Target>
+                          <Menu.Sub.Item>Change type</Menu.Sub.Item>
+                        </Menu.Sub.Target>
+                        <Menu.Sub.Dropdown>
+                          {activeTypes.map((t) => (
+                            <Menu.Item
+                              key={t.id}
+                              disabled={t.id === node.nodeTypeId}
+                              onClick={() => update.mutate({ node, typeId: t.id })}
+                            >
+                              {t.name}
+                            </Menu.Item>
+                          ))}
+                        </Menu.Sub.Dropdown>
+                      </Menu.Sub>
+                      <Menu.Divider />
+                      <Menu.Item disabled={f.index === 0} onClick={() => moveBy(f, 'up')}>
+                        Move up
+                      </Menu.Item>
+                      <Menu.Item disabled={f.index === f.siblings.length - 1} onClick={() => moveBy(f, 'down')}>
+                        Move down
+                      </Menu.Item>
+                      <Menu.Item disabled={f.index === 0} onClick={() => moveBy(f, 'indent')}>
+                        Indent
+                      </Menu.Item>
+                      <Menu.Item disabled={!f.parent} onClick={() => moveBy(f, 'outdent')}>
+                        Outdent
+                      </Menu.Item>
+                      <Menu.Divider />
+                      <Menu.Item color="red" onClick={() => confirmDelete(node)}>
+                        Delete
+                      </Menu.Item>
+                    </Menu.Dropdown>
+                  </Menu>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <Modal opened={adding !== null} onClose={() => setAdding(null)} title="New node">

@@ -29,3 +29,26 @@ class ResizeObserverStub {
 }
 window.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
 window.HTMLElement.prototype.scrollIntoView = () => {};
+
+// Mantine's autosizing textarea listens to font loading.
+Object.defineProperty(document, 'fonts', {
+  configurable: true,
+  value: { addEventListener: () => {}, removeEventListener: () => {}, ready: Promise.resolve() },
+});
+
+// jsdom lays nothing out: the virtualized scroll containers (TanStack Virtual reads offsetWidth/offsetHeight) get a
+// viewport-sized box so their first rows render.
+const scrollBox = (element: HTMLElement) =>
+  element.classList.contains('dh-page-scroll') || element.classList.contains('dh-tree-body');
+for (const [property, size] of [
+  ['offsetHeight', 900],
+  ['offsetWidth', 800],
+] as const) {
+  const original = Object.getOwnPropertyDescriptor(window.HTMLElement.prototype, property);
+  Object.defineProperty(window.HTMLElement.prototype, property, {
+    configurable: true,
+    get(this: HTMLElement) {
+      return scrollBox(this) ? size : ((original?.get?.call(this) as number | undefined) ?? 0);
+    },
+  });
+}
