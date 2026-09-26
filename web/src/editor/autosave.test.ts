@@ -180,4 +180,72 @@ describe('section autosave', () => {
     dirty.autosave.dispose();
     await vi.waitFor(() => expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1));
   });
+
+  it('saves an edit typed during a running save even when the section unmounts and the editor is destroyed', async () => {
+    let release: () => void = () => {};
+    const bodies: string[] = [];
+    fakeApi({
+      'PUT /api/nodes/5/content': async (r) => {
+        const json = (r.body as { contentJson: JSONContent }).contentJson;
+        bodies.push(JSON.stringify(json));
+        if (bodies.length === 1) {
+          await new Promise<void>((resolve) => (release = resolve)); // a slow first save
+        }
+
+        return view('', `r${bodies.length + 1}`, json);
+      },
+    });
+    const { autosave, editor, type } = setup();
+    type('One.');
+    autosave.changed(editor);
+    const first = autosave.flush();
+    await vi.waitFor(() => expect(bodies).toHaveLength(1));
+    type('One. Two.');
+    autosave.changed(editor);
+    autosave.dispose(); // leaving while the first save is in flight
+    (editor as unknown as { isDestroyed: boolean }).isDestroyed = true; // TipTap destroys the editor right after
+    release();
+    await first;
+    await vi.waitFor(() => expect(bodies).toHaveLength(2));
+    expect(bodies[1]).toContain('One. Two.');
+  });
+
+  it('does not re-send content the server rejected until it changes again', async () => {
+    vi.useFakeTimers();
+    let valid = false;
+    const { calls } = fakeApi({
+      'PUT /api/nodes/5/content': (r) =>
+        valid
+          ? view('', 'r2', (r.body as { contentJson: JSONContent }).contentJson)
+          : new Reply(400, { type: 'validation-failed', title: 'Invalid', errors: { contentJson: ['Bad.'] } }),
+    });
+    const { autosave, editor, type, statuses } = setup();
+    type('Bad.');
+    autosave.changed(editor);
+    await vi.advanceTimersByTimeAsync(AutosaveDelay * 4);
+    expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
+    expect(statuses.at(-1)?.kind).toBe('invalid');
+
+    valid = true;
+    type('Fixed.');
+    autosave.changed(editor);
+    await vi.advanceTimersByTimeAsync(AutosaveDelay + 10);
+    await vi.waitFor(() => expect(statuses.at(-1)?.kind).toBe('saved'));
+    expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(2);
+  });
+
+  it('shows content someone else saved when there are no local changes, and keeps local changes otherwise', () => {
+    fakeApi({});
+    const { autosave, editor, type, setContent } = setup();
+    autosave.attach(editor);
+    autosave.external(view('Start.', 'r1')); // same row version: nothing to do
+    expect(setContent).not.toHaveBeenCalled();
+    autosave.external(view('Theirs.', 'r2'));
+    expect(setContent.mock.calls.at(-1)?.[0]).toEqual(doc('Theirs.'));
+
+    type('Mine.');
+    autosave.changed(editor);
+    autosave.external(view('Newer theirs.', 'r3'));
+    expect(setContent).toHaveBeenCalledTimes(1);
+  });
 });

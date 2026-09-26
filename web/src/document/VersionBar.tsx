@@ -163,7 +163,15 @@ export function VersionBar({ document, version, roles, signatures, onSelectVersi
         </Group>
         <Group gap={8} wrap="wrap">
           {isDraft && roles?.canSign && mine && mine.state !== 'signed' && (
-            <Button onClick={() => setSigning(true)}>Sign</Button>
+            <Button
+              onClick={() => {
+                // A signature confirms the current content: reload every section's text first.
+                void queryClient.invalidateQueries({ queryKey: ['doc', document.id, 'content'] });
+                setSigning(true);
+              }}
+            >
+              Sign
+            </Button>
           )}
           {isDraft && mine?.state === 'signed' && (
             <Button variant="soft" color="red" loading={withdraw.isPending} onClick={() => withdraw.mutate()}>

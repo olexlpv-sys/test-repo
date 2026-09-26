@@ -37,7 +37,14 @@ export class Autosave {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private applyingRemote = false;
   private blocked = false;
+  /** A revision the server rejected as invalid: not re-sent until the next change. */
+  private rejectedRevision = -1;
+  /** The last content taken while the editor was alive: a save that runs after the editor was destroyed sends it. */
+  private snapshot: JSONContent | null = null;
+  private snapshotRevision = -1;
   private editor: Editor | null = null;
+  /** Finds the editor that is on screen now (TipTap puts it on its root element). */
+  private locate: () => Editor | null = () => null;
   /** Valid signatures the first edit would outdate (read by the focus handler). */
   signaturesToOutdate = 0;
 
@@ -45,8 +52,25 @@ export class Autosave {
     this.rowVersion = settings.content.rowVersion;
   }
 
+  /** The live editor (a destroyed instance — React StrictMode recreates editors — never replaces a live one). */
   attach(editor: Editor | null): void {
-    this.editor = editor;
+    if (editor && !editor.isDestroyed) {
+      this.editor = editor;
+    }
+  }
+
+  /** How to find the editor on screen; preferred over remembered instances. */
+  locateWith(locate: () => Editor | null): void {
+    this.locate = locate;
+  }
+
+  private live(): Editor | null {
+    const found = this.locate();
+    if (found && !found.isDestroyed) {
+      this.editor = found;
+    }
+
+    return this.editor && !this.editor.isDestroyed ? this.editor : null;
   }
 
   warnAbout(signatures: number): void {
@@ -59,6 +83,31 @@ export class Autosave {
 
   get dirty(): boolean {
     return this.revision !== this.savedRevision;
+  }
+
+  /** The content to send: the live editor's, else (destroyed on unmount) the snapshot taken before. */
+  private body(): JSONContent | null {
+    const editor = this.live();
+    if (editor) {
+      this.snapshot = toSchema(editor.getJSON(), this.settings.schema);
+      this.snapshotRevision = this.revision;
+    }
+
+    return this.snapshotRevision === this.revision ? this.snapshot : null;
+  }
+
+  /**
+   * The server's content changed without us (another window, a script; refetched on focus or remount): shown if there
+   * are no local changes, so nobody reads — or signs — text that is no longer there. With local changes the next save
+   * reports the conflict.
+   */
+  external(content: NodeContentView): void {
+    if (content.rowVersion === this.rowVersion || this.dirty || this.running) {
+      return;
+    }
+
+    this.rowVersion = content.rowVersion;
+    this.apply(content.contentJson);
   }
 
   /** A local change in `editor` (ignored while the editor is being set from the server). */
@@ -92,8 +141,8 @@ export class Autosave {
 
   /** Sets the editor from the server without counting it as a local change. */
   apply(json: unknown): void {
-    const editor = this.editor;
-    if (!editor || editor.isDestroyed) {
+    const editor = this.live();
+    if (!editor) {
       return;
     }
 
@@ -106,29 +155,34 @@ export class Autosave {
   }
 
   async save(): Promise<void> {
-    const editor = this.editor;
-    if (!editor || editor.isDestroyed || !this.dirty || this.blocked) {
+    if (!this.dirty || this.blocked || this.revision === this.rejectedRevision) {
       return;
     }
 
     if (this.running) {
+      this.body(); // take the content now: the editor may be destroyed when the running save returns
       await this.running;
       return this.save();
     }
 
-    this.running = this.send(editor, toSchema(editor.getJSON(), this.settings.schema));
+    const body = this.body();
+    if (!body) {
+      return;
+    }
+
+    this.running = this.send(body);
     try {
       await this.running;
     } finally {
       this.running = null;
     }
 
-    if (this.dirty && !this.blocked) {
+    if (this.dirty && !this.blocked && this.revision !== this.rejectedRevision) {
       this.schedule();
     }
   }
 
-  private async send(editor: Editor, body: JSONContent): Promise<void> {
+  private async send(body: JSONContent): Promise<void> {
     const { documentId, content, schema, queryClient, onStatus } = this.settings;
     const sent = this.revision;
     onStatus({ kind: 'saving' });
@@ -142,7 +196,8 @@ export class Autosave {
       this.rowVersion = saved.rowVersion;
       this.savedRevision = Math.max(this.savedRevision, sent);
       queryClient.setQueryData(keys.content(documentId, content.nodeId), saved);
-      if (this.revision === sent && !editor.isDestroyed && !sameContent(editor.getJSON(), saved.contentJson, schema)) {
+      const editor = this.live();
+      if (this.revision === sent && editor && !sameContent(editor.getJSON(), saved.contentJson, schema)) {
         this.apply(saved.contentJson);
       }
 
@@ -162,6 +217,7 @@ export class Autosave {
         onStatus({ kind: 'conflict' });
         this.settings.onConflict();
       } else if (error instanceof ApiError && error.errors) {
+        this.rejectedRevision = sent; // re-sent only after the next change
         const [path, messages] = Object.entries(error.errors)[0] ?? ['', []];
         onStatus({ kind: 'invalid', message: `${messages.join(' ')}${path ? ` (${path})` : ''}` });
       } else {
@@ -188,11 +244,13 @@ export class Autosave {
     }
   }
 
+  /** The section goes away: pending changes are saved from a snapshot (the editor itself is destroyed right after). */
   dispose(): void {
     if (this.timer) {
       clearTimeout(this.timer);
     }
 
+    this.body();
     void this.save();
   }
 }

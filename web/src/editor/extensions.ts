@@ -5,6 +5,7 @@ import Highlight from '@tiptap/extension-highlight';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
+import { ListItem } from '@tiptap/extension-list';
 import type { ContentSchemaInfo } from './contentSchema';
 
 /** Word units: twips (1/20 pt) for spacing and indents, half-points for font sizes (content-format.md §2). */
@@ -438,15 +439,18 @@ export function createExtensions(schema: ContentSchemaInfo, styleIds: Set<string
       heading: { levels: [1, 2, 3, 4, 5, 6] },
       link: { openOnClick: false, autolink: true, protocols: ['http', 'https', 'mailto'], defaultProtocol: 'https' },
       trailingNode: false,
+      listItem: false, // replaced below: Content Schema v1 allows fewer children
     }),
+    // Allowed children exactly as in Content Schema v1 (no tables, rules or page breaks in cells and list items).
+    ListItem.extend({ content: '(paragraph|heading) (paragraph|heading|bulletList|orderedList)*' }),
     TextStyle,
     Highlight.configure({ multicolor: true }),
     Subscript,
     Superscript,
     Table.configure({ resizable: true, allowTableNodeSelection: true }),
     TableRow,
-    TableHeader,
-    TableCell,
+    TableHeader.extend({ content: '(paragraph|heading|bulletList|orderedList)+' }),
+    TableCell.extend({ content: '(paragraph|heading|bulletList|orderedList)+' }),
     PageBreak,
     SmallCaps,
     AllCaps,

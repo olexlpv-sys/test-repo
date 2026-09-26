@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { Button, Group, Loader, Text, Tooltip, UnstyledButton } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import type { Extensions, JSONContent } from '@tiptap/core';
@@ -110,11 +110,13 @@ export const Section = memo(function Section(props: SectionProps) {
   const [mode, setMode] = useState<Mode>({ kind: 'edit' });
   const [status, setStatus] = useState<SaveStatus>({ kind: 'idle' });
   const [replacement, setReplacement] = useState<JSONContent | null>(null);
+  const clearReplacement = useCallback(() => setReplacement(null), []);
 
   const content = useQuery({
     queryKey: keys.content(documentId, node.id),
     queryFn: () => unwrap(api.GET('/api/nodes/{nodeId}/content', { params: { path: { nodeId: node.id } } })),
     staleTime: version.status === 'Draft' ? 0 : Infinity,
+    refetchOnWindowFocus: version.status === 'Draft', // others may have changed the draft meanwhile
   });
 
   // Compare with an entry, or the document-wide baseline: attributed diff (loaded only while shown).
@@ -271,6 +273,7 @@ export const Section = memo(function Section(props: SectionProps) {
           extensions={extensions}
           signaturesToOutdate={signaturesToOutdate}
           replacement={replacement}
+          onReplaced={clearReplacement}
           onStatus={setStatus}
         />
       ) : content.isError ? (

@@ -249,8 +249,29 @@ function LinkTool({ editor }: { editor: Editor }) {
   );
 }
 
+const editorIds = new WeakMap<Editor, number>();
+let nextEditorId = 1;
+const editorId = (editor: Editor | null) => {
+  if (!editor) {
+    return 0;
+  }
+
+  let id = editorIds.get(editor);
+  if (id === undefined) {
+    id = nextEditorId++;
+    editorIds.set(editor, id);
+  }
+
+  return id;
+};
+
 /** Word-like toolbar (T15 §3): Styles · Font · Paragraph · Insert · Table (contextual); acts on the focused section. */
-export function Ribbon({
+export function Ribbon(props: { editor: Editor | null; schema: ContentSchemaInfo; styles: ParagraphStyle[] }) {
+  // A new section editor gets a fresh toolbar state at once (not only after its next transaction).
+  return <RibbonFor key={editorId(props.editor)} {...props} />;
+}
+
+function RibbonFor({
   editor,
   schema,
   styles,
@@ -274,6 +295,7 @@ export function Ribbon({
             bullet: e.isActive('bulletList'),
             ordered: e.isActive('orderedList'),
             inTable: e.isActive('table'),
+            inListItem: e.isActive('listItem'),
             heading: e.isActive('heading') ? Number(e.getAttributes('heading').level) : 0,
             styleId: (currentBlockAttr(e, 'styleId') as string | null) ?? null,
             align: (currentBlockAttr(e, 'align') as string | null) ?? 'left',
@@ -525,7 +547,8 @@ export function Ribbon({
           </Menu.Dropdown>
         </Menu>
         <Divider orientation="vertical" />
-        {!disabled && (
+        {/* Tables and page breaks only at the top level: Content Schema v1 allows neither in table cells or list items. */}
+        {!disabled && !state?.inTable && !state?.inListItem && (
           <>
             <TablePicker
               onPick={(rows, cols) => ed.chain().focus().insertTable({ rows, cols, withHeaderRow: false }).run()}

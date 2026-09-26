@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Group, Modal, Text } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { EditorContent, useEditor } from '@tiptap/react';
@@ -20,8 +20,9 @@ interface Props {
   extensions: Extensions;
   /** Valid signatures the first edit would outdate (a warning before editing a draft that already has signatures). */
   signaturesToOutdate: number;
-  /** Content put into the editor as a normal edit ("Restore this text"); applied once per new object. */
+  /** Content put into the editor as a normal edit ("Restore this text"); applied once, then `onReplaced` clears it. */
   replacement?: JSONContent | null;
+  onReplaced?: () => void;
   onStatus?: (status: SaveStatus) => void;
 }
 
@@ -49,8 +50,18 @@ function warnBeforeEditing(editor: Editor, hub: EditorHub, versionId: number, si
 
 /** One section's text (one `NodeContent`), bound to TipTap with autosave and the conflict dialog (T15 §3). */
 export function SectionEditor(props: Props) {
-  const { documentId, versionId, content, editable, schema, extensions, signaturesToOutdate, replacement, onStatus } =
-    props;
+  const {
+    documentId,
+    versionId,
+    content,
+    editable,
+    schema,
+    extensions,
+    signaturesToOutdate,
+    replacement,
+    onReplaced,
+    onStatus,
+  } = props;
   const queryClient = useQueryClient();
   const hub = useEditorHub();
   const [conflict, setConflict] = useState(false);
@@ -104,8 +115,15 @@ export function SectionEditor(props: Props) {
     },
   });
 
+  // The editor on screen, found through its DOM element (TipTap sets `dom.editor`): robust against recreated instances.
+  const container = useRef<HTMLDivElement>(null);
   useEffect(() => {
     autosave.attach(editor);
+    autosave.locateWith(
+      () =>
+        (container.current?.querySelector('.ProseMirror') as (HTMLElement & { editor?: Editor }) | null)?.editor ??
+        null,
+    );
   }, [autosave, editor]);
 
   // Unmounting (scrolled out of the virtualized page, navigation): unsaved changes are saved.
@@ -117,21 +135,33 @@ export function SectionEditor(props: Props) {
     }
   }, [editor, editable]);
 
+  // A restore is one edit: applied once (a remount must not apply it again over later edits).
   useEffect(() => {
     if (replacement) {
       editor.commands.setContent(replacement, { emitUpdate: true });
       editor.commands.focus('end');
+      onReplaced?.();
     }
-  }, [editor, replacement]);
+  }, [editor, replacement, onReplaced]);
+
+  // Refetched content (someone else saved; focus or remount) is shown when there are no local changes.
+  useEffect(() => {
+    autosave.external(content);
+  }, [autosave, content]);
 
   return (
     <>
-      <EditorContent editor={editor} data-status={status.kind} />
+      <div ref={container}>
+        <EditorContent editor={editor} data-status={status.kind} />
+      </div>
+      {/* A decision is required: saving stays blocked until one of the two is chosen. */}
       <Modal
         opened={conflict}
-        onClose={() => setConflict(false)}
+        onClose={() => {}}
         title="Changed by someone else"
         closeOnClickOutside={false}
+        closeOnEscape={false}
+        withCloseButton={false}
       >
         <Text size="sm">
           This section was saved by someone else after you opened it. Keep their text, or overwrite it with yours?
