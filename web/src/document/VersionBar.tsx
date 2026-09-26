@@ -216,9 +216,17 @@ export function VersionBar({
               Discard draft
             </Button>
           )}
-          <Button variant="soft" color="gray" onClick={() => navigate(`/documents/${document.id}/compare`)}>
-            Compare…
-          </Button>
+          {hasSigned ? (
+            <Button variant="soft" color="gray" onClick={() => navigate(`/documents/${document.id}/compare`)}>
+              Compare…
+            </Button>
+          ) : (
+            <Tooltip label="No signed version to compare with yet">
+              <Button variant="soft" color="gray" disabled>
+                Compare…
+              </Button>
+            </Tooltip>
+          )}
           <Button variant="soft" color="gray" onClick={onPermissions}>
             {roles?.canManage ? 'Share / Permissions' : 'Permissions'}
           </Button>

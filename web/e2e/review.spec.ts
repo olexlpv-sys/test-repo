@@ -237,3 +237,44 @@ test('granting a role in the dialog updates the editor at once (my-permissions r
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('signature-progress')).toHaveText('Signatures 0 / 0');
 });
+
+test('before any signed version, Compare… is disabled and the compare page explains why', async ({ page, request }) => {
+  const doc = await newDocument(request, [{ title: 'Only', text: 'Draft only.' }]);
+  await openAs(page, Alice, `/documents/${doc.id}`);
+  await expect(page.getByRole('button', { name: 'Compare…' })).toBeDisabled();
+  await page.goto(`/documents/${doc.id}/compare`);
+  await expect(page.getByText(/No signed version to compare yet/)).toBeVisible();
+});
+
+test('the permission scope comes from the current draft even while an older version is on screen', async ({
+  page,
+  request,
+}) => {
+  const doc = await newDocument(request, [
+    { title: 'Kept', text: 'Kept.' },
+    { title: 'Dropped', text: 'Dropped in v2.' },
+  ]);
+  await request.post(`${apiBase}/api/documents/${doc.id}/permissions`, {
+    headers: as(Alice),
+    data: { userId: Carol, role: 'Approver' },
+  });
+  await request.post(`${apiBase}/api/versions/${doc.draftVersionId}/signatures`, { headers: as(Carol), data: {} });
+  const v2 = await (await request.post(`${apiBase}/api/documents/${doc.id}/drafts`, { headers: as(Alice) })).json();
+  const tree: { id: number; title: string; rowVersion: string }[] = await (
+    await request.get(`${apiBase}/api/versions/${v2.id}/tree`, { headers: as(Alice) })
+  ).json();
+  const dropped = tree.find((n) => n.title === 'Dropped');
+  await request.delete(
+    `${apiBase}/api/nodes/${dropped?.id}?rowVersion=${encodeURIComponent(dropped?.rowVersion ?? '')}`,
+    { headers: as(Alice) },
+  );
+  await request.post(`${apiBase}/api/versions/${v2.id}/signatures`, { headers: as(Carol), data: {} });
+  await request.post(`${apiBase}/api/documents/${doc.id}/drafts`, { headers: as(Alice) });
+
+  await openAs(page, Alice, `/documents/${doc.id}?version=${doc.draftVersionId}`); // v1, which still has "Dropped"
+  await expect(page.getByText('v1 is signed and read-only.')).toBeVisible();
+  await page.getByRole('button', { name: 'Share / Permissions' }).click();
+  await page.getByRole('dialog', { name: 'Share / Permissions' }).getByRole('combobox', { name: 'Scope' }).click();
+  await expect(page.getByRole('option', { name: /Kept/ })).toBeVisible();
+  await expect(page.getByRole('option', { name: /Dropped/ })).toHaveCount(0);
+});

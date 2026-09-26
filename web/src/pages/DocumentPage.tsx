@@ -49,6 +49,9 @@ export function DocumentPage() {
   const version = versions.find((v) => v.id === requested) ?? defaultVersion(versions);
   const isDraft = version?.status === 'Draft' && document.data?.status !== 'Deleted';
   const tree = useTree(documentId, version?.id ?? null);
+  // Grants are scoped to nodes of the current draft (else the latest signed version), whatever version is on screen.
+  const scopeVersion = defaultVersion(versions.filter((v) => v.status !== 'Deleted'));
+  const scopeTree = useTree(documentId, scopeVersion?.id ?? null);
   const signatures = useSignatures(documentId, version?.id ?? null, isDraft);
   const hasSigned = versions.some((v) => v.status === 'Signed');
 
@@ -236,7 +239,7 @@ export function DocumentPage() {
           opened={permissionsOpen}
           onClose={() => setPermissionsOpen(false)}
           canManage={myRoles?.canManage ?? false}
-          tree={tree.data ?? []}
+          tree={scopeTree.data ?? []}
         />
         <Group className="dh-toolbar-row" justify="space-between" wrap="nowrap" align="flex-start">
           <Ribbon
@@ -351,6 +354,7 @@ export function DocumentPage() {
               version={version}
               roles={myRoles}
               node={flat.find((f) => f.node.id === selectedId)?.node ?? null}
+              documentDeleted={document.data.status === 'Deleted'}
               onClose={() => setCommentsOpen(false)}
             />
           )}

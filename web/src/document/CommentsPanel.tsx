@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { ActionIcon, Button, Group, Stack, Switch, Text, Textarea, Tooltip } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,8 +14,13 @@ interface Props {
   roles: MyRoles | undefined;
   /** The node whose threads are shown under the document threads (the selected section). */
   node: TreeNode | null;
+  /** A deleted document is read-only: comments are shown, nothing is changed. */
+  documentDeleted: boolean;
   onClose: () => void;
 }
+
+/** Why nothing can be changed here (deleted document, discarded version), or null. */
+const ReadOnlyContext = createContext<string | null>(null);
 
 const commentsKey = (documentId: number) => ['doc', documentId, 'comments'] as const;
 
@@ -55,12 +60,17 @@ function useThreads(
 }
 
 /** Comments (T16 §2, FR-CM1/CM2): document-level threads and the selected node's threads; reply, edit, delete, resolve. */
-export function CommentsPanel({ documentId, version, roles, node, onClose }: Props) {
+export function CommentsPanel({ documentId, version, roles, node, documentDeleted, onClose }: Props) {
   const queryClient = useQueryClient();
   const [showResolved, setShowResolved] = useState(true);
   const [previous, setPrevious] = useState(false);
   const isDraft = version.status === 'Draft';
-  const canComment = (roles?.canComment ?? false) && version.status !== 'Deleted';
+  const readOnlyReason = documentDeleted
+    ? 'The document is deleted'
+    : version.status === 'Deleted'
+      ? 'Discarded versions take no comments'
+      : null;
+  const canComment = (roles?.canComment ?? false) && readOnlyReason === null;
 
   const include = { showResolved, previous: previous && isDraft };
   const documentThreads = useThreads(documentId, version.id, null, include);
@@ -80,67 +90,69 @@ export function CommentsPanel({ documentId, version, roles, node, onClose }: Pro
         </ActionIcon>
       </div>
       <div className="dh-comments-body">
-        <Group gap={16} mb={12}>
-          <Switch
-            size="xs"
-            label="Show resolved"
-            checked={showResolved}
-            onChange={(e) => setShowResolved(e.currentTarget.checked)}
-          />
-          {isDraft && (
+        <ReadOnlyContext.Provider value={readOnlyReason}>
+          <Group gap={16} mb={12}>
             <Switch
               size="xs"
-              label="From previous versions"
-              checked={previous}
-              onChange={(e) => setPrevious(e.currentTarget.checked)}
+              label="Show resolved"
+              checked={showResolved}
+              onChange={(e) => setShowResolved(e.currentTarget.checked)}
             />
-          )}
-        </Group>
+            {isDraft && (
+              <Switch
+                size="xs"
+                label="From previous versions"
+                checked={previous}
+                onChange={(e) => setPrevious(e.currentTarget.checked)}
+              />
+            )}
+          </Group>
 
-        <Text fw={500} size="sm" mb={6}>
-          Document
-        </Text>
-        <Threads
-          list={documentThreads.data}
-          loading={documentThreads.isPending}
-          roles={roles}
-          version={version}
-          onChanged={refresh}
-        />
-        <NewComment
-          version={version}
-          canComment={canComment}
-          logicalNodeId={null}
-          label="Comment on the document"
-          onAdded={refresh}
-        />
-
-        {node && (
-          <>
-            <Text fw={500} size="sm" mt={18} mb={6}>
-              {node.number} {node.title}
-            </Text>
-            <Threads
-              list={nodeThreads.data}
-              loading={nodeThreads.isPending}
-              roles={roles}
-              version={version}
-              onChanged={refresh}
-            />
-            <NewComment
-              version={version}
-              canComment={canComment}
-              logicalNodeId={node.logicalNodeId}
-              label={`Comment on ${node.number} ${node.title}`}
-              onAdded={refresh}
-            />
-          </>
-        )}
-        {!node && (
-          <Text size="sm" className="dh-muted" mt={16}>
-            Select a section to see and add its comments.
+          <Text fw={500} size="sm" mb={6}>
+            Document
           </Text>
-        )}
+          <Threads
+            list={documentThreads.data}
+            loading={documentThreads.isPending}
+            roles={roles}
+            version={version}
+            onChanged={refresh}
+          />
+          <NewComment
+            version={version}
+            canComment={canComment}
+            logicalNodeId={null}
+            label="Comment on the document"
+            onAdded={refresh}
+          />
+
+          {node && (
+            <>
+              <Text fw={500} size="sm" mt={18} mb={6}>
+                {node.number} {node.title}
+              </Text>
+              <Threads
+                list={nodeThreads.data}
+                loading={nodeThreads.isPending}
+                roles={roles}
+                version={version}
+                onChanged={refresh}
+              />
+              <NewComment
+                version={version}
+                canComment={canComment}
+                logicalNodeId={node.logicalNodeId}
+                label={`Comment on ${node.number} ${node.title}`}
+                onAdded={refresh}
+              />
+            </>
+          )}
+          {!node && (
+            <Text size="sm" className="dh-muted" mt={16}>
+              Select a section to see and add its comments.
+            </Text>
+          )}
+        </ReadOnlyContext.Provider>
       </div>
     </section>
   );
@@ -161,6 +173,7 @@ function NewComment({
   onAdded: () => Promise<void>;
   parentCommentId?: number;
 }) {
+  const readOnlyReason = useContext(ReadOnlyContext);
   const [body, setBody] = useState('');
   const add = useMutation({
     mutationFn: () =>
@@ -192,13 +205,7 @@ function NewComment({
       {canComment ? (
         input
       ) : (
-        <Tooltip
-          label={
-            version.status === 'Deleted'
-              ? 'Discarded versions take no comments'
-              : 'Only the owner, editors and approvers can comment'
-          }
-        >
+        <Tooltip label={readOnlyReason ?? 'Only the owner, editors and approvers can comment'}>
           <div>{input}</div>
         </Tooltip>
       )}
@@ -226,6 +233,7 @@ function Threads({
   version: VersionHeader;
   onChanged: () => Promise<void>;
 }) {
+  const readOnly = useContext(ReadOnlyContext);
   if (loading) {
     return (
       <Text size="sm" className="dh-muted">
@@ -260,7 +268,7 @@ function Threads({
           {!thread.resolvedAt && !thread.isDeleted && thread.versionId === version.id && (
             <NewComment
               version={version}
-              canComment={(roles?.canComment ?? false) && version.status !== 'Deleted'}
+              canComment={(roles?.canComment ?? false) && readOnly === null}
               logicalNodeId={thread.logicalNodeId}
               parentCommentId={thread.id}
               label={`Reply to ${thread.author.displayName}`}
@@ -289,7 +297,8 @@ function CommentItem({
   const { me } = useSession();
   const [editing, setEditing] = useState<string | null>(null);
   const mine = comment.author.id === me?.id;
-  const writable = version.status !== 'Deleted' && comment.versionId === version.id && !comment.isDeleted;
+  const readOnly = useContext(ReadOnlyContext);
+  const writable = readOnly === null && comment.versionId === version.id && !comment.isDeleted;
 
   const update = useMutation({
     mutationFn: (body: string) =>

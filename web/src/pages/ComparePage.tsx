@@ -7,6 +7,7 @@ import {
   Loader,
   SegmentedControl,
   Select,
+  Stack,
   Switch,
   Text,
   Tooltip,
@@ -76,7 +77,7 @@ export function ComparePage() {
       { replace: true },
     );
 
-  const ready = document.isSuccess && base !== '' && target !== '';
+  const ready = document.isSuccess && base !== '' && target !== '' && versions.some((v) => v.status === 'Signed');
   const comparison = useQuery({
     queryKey: ['doc', documentId, 'compare', base, target, !changedOnly],
     queryFn: () =>
@@ -115,6 +116,19 @@ export function ComparePage() {
       <Center h={300}>
         <Loader />
       </Center>
+    );
+  }
+
+  if (!versions.some((v) => v.status === 'Signed')) {
+    return (
+      <Stack gap={12} align="flex-start">
+        <Button variant="soft" color="gray" onClick={() => navigate(`/documents/${documentId}`)}>
+          ← Document
+        </Button>
+        <Text className="dh-muted">
+          No signed version to compare yet — versions can be compared once the first one is signed.
+        </Text>
+      </Stack>
     );
   }
 

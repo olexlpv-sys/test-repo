@@ -129,6 +129,7 @@ describe('comments panel', () => {
         version={draft}
         roles={roles({ isApprover: true, canComment: true, canResolve: true })}
         node={null}
+        documentDeleted={false}
         onClose={() => {}}
       />,
     );
@@ -165,6 +166,7 @@ describe('comments panel', () => {
         version={draft}
         roles={roles({ canComment: true })}
         node={null}
+        documentDeleted={false}
         onClose={() => {}}
       />,
     );
@@ -173,6 +175,34 @@ describe('comments panel', () => {
     expect(screen.getByTestId('comment-3')).toHaveTextContent('v1');
     expect(within(screen.getByTestId('thread-2')).queryByRole('group', { name: /Reply to/ })).not.toBeInTheDocument();
     expect(within(screen.getByTestId('thread-3')).queryByRole('group', { name: /Reply to/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('comments on a deleted document', () => {
+  it('are read-only, with the reason', async () => {
+    fakeApi({
+      'GET /api/versions/11/comments': (r) =>
+        r.query.get('scope') === 'document' ? [comment(1, 2, 'Alice', 'Mine.')] : [],
+    });
+    wrap(
+      <CommentsPanel
+        documentId={7}
+        version={draft}
+        roles={roles({ isOwner: true, canComment: true, canManage: true, canResolve: true })}
+        node={null}
+        documentDeleted
+        onClose={() => {}}
+      />,
+      2,
+    );
+    const mine = await screen.findByTestId('comment-1');
+    expect(within(mine).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(within(mine).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    expect(within(mine).queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument();
+    const input = within(screen.getByRole('group', { name: 'Comment on the document' })).getByRole('textbox');
+    expect(input).toBeDisabled();
+    await userEvent.hover(input.parentElement as HTMLElement);
+    expect(await screen.findByText('The document is deleted')).toBeInTheDocument();
   });
 });
 
