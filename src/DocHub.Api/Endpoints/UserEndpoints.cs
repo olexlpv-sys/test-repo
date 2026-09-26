@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using DocHub.Api.Auth;
 using DocHub.Api.Common;
 using DocHub.Api.Errors;
 using DocHub.Domain.Errors;
@@ -15,9 +16,11 @@ internal sealed class UserEndpoints : IEndpointModule
     {
         var group = endpoints.MapGroup("/api/users").WithTags("Users");
 
-        group.MapGet("", async Task<Ok<PagedResult<UserResponse>>> ([AsParameters] UserSearch query, DocHubDbContext db, CancellationToken ct) =>
+        group.MapGet("", async Task<Ok<PagedResult<UserResponse>>> ([AsParameters] UserSearch query, DocHubDbContext db, ICurrentUser user, CancellationToken ct) =>
             {
-                var users = db.Users.AsNoTracking().Where(u => u.IsActive);
+                // Inactive users only for admins (the Admin tab's user list shows the whole seed, T17).
+                var includeInactive = query.IncludeInactive && user.IsAdmin;
+                var users = db.Users.AsNoTracking().Where(u => includeInactive || u.IsActive);
                 if (!string.IsNullOrWhiteSpace(query.Search))
                 {
                     // Prefix search (LIKE 'x%', wildcards escaped by EF) on the indexed login, display name and e-mail.
@@ -36,7 +39,7 @@ internal sealed class UserEndpoints : IEndpointModule
             })
             .WithValidation<UserSearch>()
             .WithName("ListUsers")
-            .WithSummary("Active users, paged; search = prefix of login, display name or e-mail.");
+            .WithSummary("Active users (admins: includeInactive for all), paged; search = prefix of login, display name or e-mail.");
 
         group.MapGet("/{id:int}", async Task<Ok<UserResponse>> (int id, DocHubDbContext db, CancellationToken ct) =>
             {
@@ -53,7 +56,8 @@ internal sealed class UserEndpoints : IEndpointModule
     public sealed record UserSearch(
         [property: StringLength(100)] string? Search = null,
         [property: Range(1, int.MaxValue)] int Page = 1,
-        [property: Range(1, UserSearch.MaxPageSize)] int PageSize = UserSearch.DefaultPageSize)
+        [property: Range(1, UserSearch.MaxPageSize)] int PageSize = UserSearch.DefaultPageSize,
+        bool IncludeInactive = false)
     {
         public const int DefaultPageSize = 20;
         public const int MaxPageSize = 100;

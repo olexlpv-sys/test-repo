@@ -103,7 +103,11 @@ const ParagraphFormat = Extension.create<Options>({
         attributes: {
           styleId: {
             default: null,
-            parseHTML: (element) => styleIdFrom(element, styleIds),
+            parseHTML: (element) => {
+              const id = styleIdFrom(element, styleIds);
+              // <hN class="ds-style-HeadingN"> is the renderer's fallback for a heading without a style, not a style.
+              return /^H[1-6]$/.test(element.tagName) && id === `Heading${element.tagName.slice(1)}` ? null : id;
+            },
             // Like the server renderer: a heading without its own style uses HeadingN of the catalog.
             renderHTML: (attrs) =>
               attrs.styleId

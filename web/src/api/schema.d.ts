@@ -458,7 +458,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Active users, paged; search = prefix of login, display name or e-mail. */
+        /** Active users (admins: includeInactive for all), paged; search = prefix of login, display name or e-mail. */
         get: operations["ListUsers"];
         put?: never;
         post?: never;
@@ -2457,6 +2457,7 @@ export interface operations {
                 Search?: string;
                 Page?: number;
                 PageSize?: number;
+                IncludeInactive?: boolean;
             };
             header?: never;
             path?: never;

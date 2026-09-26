@@ -67,3 +67,14 @@ describe('admin tab (T17)', () => {
     expect(calls.filter((c) => c.path === '/api/admin/audit').length).toBe(before);
   });
 });
+
+describe('audit date range', () => {
+  it('counts calendar days, so a range across a daylight-saving change is not cut short', async () => {
+    const { rangeError } = await import('./auditRange');
+    expect(rangeError('2026-10-01', '2026-10-31')).toBeNull(); // 31 days incl. the October DST change
+    expect(rangeError('2026-03-01', '2026-03-31')).toBeNull();
+    expect(rangeError('2026-10-01', '2026-11-01')).toBe('The date range can be at most 31 days.');
+    expect(rangeError('2026-10-05', '2026-10-01')).toBe('"From" is after "To".');
+    expect(rangeError('', '2026-10-01')).toMatch(/Choose a date range/);
+  });
+});

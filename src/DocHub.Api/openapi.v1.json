@@ -1526,7 +1526,7 @@
         "tags": [
           "Users"
         ],
-        "summary": "Active users, paged; search = prefix of login, display name or e-mail.",
+        "summary": "Active users (admins: includeInactive for all), paged; search = prefix of login, display name or e-mail.",
         "operationId": "ListUsers",
         "parameters": [
           {
@@ -1558,6 +1558,14 @@
               "type": "integer",
               "format": "int32",
               "default": 20
+            }
+          },
+          {
+            "name": "IncludeInactive",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
             }
           }
         ],

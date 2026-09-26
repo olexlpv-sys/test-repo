@@ -37,6 +37,18 @@ public sealed class DictionaryEndpointsTests(DocHubApiFactory factory) : IClassF
     }
 
     [Fact]
+    public async Task Admins_can_list_inactive_users_too_others_cannot()
+    {
+        var admin = await ApiClient.ExpectAsync(factory, TestUsers.Admin, HttpMethod.Get, "/api/users?pageSize=100&includeInactive=true", null, HttpStatusCode.OK);
+        var ids = admin.GetProperty("items").EnumerateArray().Select(u => u.GetProperty("id").GetInt32()).ToList();
+        Assert.Contains(TestUsers.System, ids);
+        Assert.Equal(ids.Count, admin.GetProperty("totalCount").GetInt32());
+
+        var alice = await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, "/api/users?pageSize=100&includeInactive=true", null, HttpStatusCode.OK);
+        Assert.DoesNotContain(TestUsers.System, alice.GetProperty("items").EnumerateArray().Select(u => u.GetProperty("id").GetInt32()));
+    }
+
+    [Fact]
     public async Task A_huge_page_number_is_an_empty_page()
     {
         var page = await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, "/api/users?page=2147483647&pageSize=100", null, HttpStatusCode.OK);

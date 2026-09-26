@@ -42,12 +42,48 @@ const pt = (twips: unknown) => (typeof twips === 'number' ? twips / 20 : '');
 const halfPt = (value: unknown) => (typeof value === 'number' ? value / 2 : '');
 
 function set(properties: Props, key: string, value: unknown): Props {
-  const removed = value === null || value === undefined || value === '' || value === false;
+  // false stays: it overrides a flag inherited from the based-on style.
+  const removed = value === null || value === undefined || value === '';
   return Object.fromEntries([
     ...Object.entries(properties).filter(([k]) => k !== key),
     ...(removed ? [] : [[key, value] as const]),
   ]);
 }
+
+/** A formatting flag: inherited from the based-on style, or explicitly on or off. */
+function Flag({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: unknown;
+  onChange: (value: boolean | null) => void;
+}) {
+  return (
+    <Select
+      label={label}
+      w={130}
+      allowDeselect={false}
+      data={[
+        { value: 'inherit', label: 'Inherit' },
+        { value: 'on', label: 'On' },
+        { value: 'off', label: 'Off' },
+      ]}
+      value={value === true ? 'on' : value === false ? 'off' : 'inherit'}
+      onChange={(v) => onChange(v === 'on' ? true : v === 'off' ? false : null)}
+      comboboxProps={{ withinPortal: true }}
+    />
+  );
+}
+
+const lineSpacings = [
+  { value: '240', label: 'Single' },
+  { value: '259', label: '1.08 (Word default)' },
+  { value: '276', label: '1.15' },
+  { value: '360', label: '1.5' },
+  { value: '480', label: 'Double' },
+];
 
 function Preview({ style }: { style: Pick<Style, 'styleId' | 'kind'> }) {
   const cls = `ds-style-${style.styleId}`;
@@ -330,26 +366,10 @@ export function ContentStylesAdmin() {
                 />
               </SimpleGrid>
               <Group gap={20}>
-                <Checkbox
-                  label="Bold"
-                  checked={p.bold === true}
-                  onChange={(e) => update('bold', e.currentTarget.checked)}
-                />
-                <Checkbox
-                  label="Italic"
-                  checked={p.italic === true}
-                  onChange={(e) => update('italic', e.currentTarget.checked)}
-                />
-                <Checkbox
-                  label="Strikethrough"
-                  checked={p.strike === true}
-                  onChange={(e) => update('strike', e.currentTarget.checked)}
-                />
-                <Checkbox
-                  label="Small caps"
-                  checked={p.smallCaps === true}
-                  onChange={(e) => update('smallCaps', e.currentTarget.checked)}
-                />
+                <Flag label="Bold" value={p.bold} onChange={(v) => update('bold', v)} />
+                <Flag label="Italic" value={p.italic} onChange={(v) => update('italic', v)} />
+                <Flag label="Strikethrough" value={p.strike} onChange={(v) => update('strike', v)} />
+                <Flag label="Small caps" value={p.smallCaps} onChange={(v) => update('smallCaps', v)} />
               </Group>
 
               {form.kind !== 'Character' && (
@@ -383,12 +403,13 @@ export function ContentStylesAdmin() {
                     <Select
                       label="Line spacing"
                       clearable
-                      data={[
-                        { value: '240', label: 'Single' },
-                        { value: '276', label: '1.15' },
-                        { value: '360', label: '1.5' },
-                        { value: '480', label: 'Double' },
-                      ]}
+                      data={
+                        // Any stored value is shown, not only the presets.
+                        typeof p.lineSpacing === 'number' &&
+                        !lineSpacings.some((l) => l.value === String(p.lineSpacing))
+                          ? [...lineSpacings, { value: String(p.lineSpacing), label: (p.lineSpacing / 240).toFixed(2) }]
+                          : lineSpacings
+                      }
                       value={
                         typeof p.lineSpacing === 'number' && (p.lineRule ?? 'auto') === 'auto'
                           ? String(p.lineSpacing)
@@ -435,11 +456,7 @@ export function ContentStylesAdmin() {
                       onChange={(v) => update('shading', /^#[0-9a-fA-F]{6}$/.test(v) ? v.toUpperCase() : null)}
                     />
                   </SimpleGrid>
-                  <Checkbox
-                    label="Keep with next"
-                    checked={p.keepWithNext === true}
-                    onChange={(e) => update('keepWithNext', e.currentTarget.checked)}
-                  />
+                  <Flag label="Keep with next" value={p.keepWithNext} onChange={(v) => update('keepWithNext', v)} />
                 </>
               )}
 

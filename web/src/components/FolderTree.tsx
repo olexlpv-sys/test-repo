@@ -62,10 +62,12 @@ interface FolderTreeProps {
   onSelect: (id: number) => void;
   /** Management actions (new, rename, move, delete) — admins only (T14; reused by the Admin tab). */
   manage: boolean;
+  /** A folder was deleted (the Admin tab clears its selection). */
+  onDeleted?: (id: number) => void;
 }
 
 /** The virtual-folder tree (FR-UI1, FR-F5): expand/collapse, select; admins also create, rename, move and delete folders. */
-export function FolderTree({ selectedId, onSelect, manage }: FolderTreeProps) {
+export function FolderTree({ selectedId, onSelect, manage, onDeleted }: FolderTreeProps) {
   const queryClient = useQueryClient();
   const folders = useFolderTree();
   const data = useMemo(() => toTreeData(folders.data ?? []), [folders.data]);
@@ -111,7 +113,10 @@ export function FolderTree({ selectedId, onSelect, manage }: FolderTreeProps) {
     mutationFn: ({ id, rowVersion }: { id: number; rowVersion: string }) =>
       unwrap(api.DELETE('/api/folders/{id}', { params: { path: { id }, query: { rowVersion } } })),
     meta: { silent: true },
-    onSuccess: () => void refresh(),
+    onSuccess: (_result, { id }) => {
+      onDeleted?.(id);
+      void refresh();
+    },
     onError: (error) =>
       notifications.show({
         color: 'red',

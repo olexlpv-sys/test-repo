@@ -12,6 +12,7 @@ export function FoldersAdmin() {
     queryKey: ['folders', 'details', selected ?? 0],
     queryFn: () => unwrap(api.GET('/api/folders/{id}', { params: { path: { id: selected ?? 0 } } })),
     enabled: selected !== null,
+    meta: { silent: true },
   });
   const all = useQuery({
     queryKey: ['documents', 'admin-count', selected ?? 0],
@@ -27,7 +28,12 @@ export function FoldersAdmin() {
   return (
     <Grid gap={20}>
       <Grid.Col span={{ base: 12, md: 4 }}>
-        <FolderTree selectedId={selected} onSelect={setSelected} manage />
+        <FolderTree
+          selectedId={selected}
+          onSelect={setSelected}
+          onDeleted={(id) => id === selected && setSelected(null)}
+          manage
+        />
       </Grid.Col>
       <Grid.Col span={{ base: 12, md: 8 }}>
         {selected === null ? (
@@ -41,7 +47,7 @@ export function FoldersAdmin() {
                     Path
                   </div>
                   <div className="dh-field-value" style={{ textAlign: 'left' }}>
-                    {[...folder.data.path.map((p) => p.name), folder.data.name].join(' / ')}
+                    {folder.data.path.map((p) => p.name).join(' / ')}
                   </div>
                   <div className="dh-field-label" style={{ textAlign: 'left', marginTop: 12 }}>
                     Documents (deleted included)

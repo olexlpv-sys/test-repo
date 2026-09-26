@@ -6,7 +6,7 @@ import { api, unwrap } from '../api/client';
 export function UsersAdmin() {
   const users = useQuery({
     queryKey: ['users', 'admin-list'],
-    queryFn: () => unwrap(api.GET('/api/users', { params: { query: { PageSize: 100 } } })),
+    queryFn: () => unwrap(api.GET('/api/users', { params: { query: { PageSize: 100, IncludeInactive: true } } })),
   });
   return (
     <section className="dh-card" aria-label="Users">

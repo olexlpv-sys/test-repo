@@ -15,6 +15,7 @@ import { notifications } from '@mantine/notifications';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api, unwrap } from '../api/client';
+import { rangeError } from './auditRange';
 
 const PageSize = 50;
 const tables = [
@@ -59,17 +60,6 @@ const initial = (): Filters => ({
   from: day(-7),
   to: day(0),
 });
-
-const MaxRangeDays = 31;
-
-function rangeError(from: string, to: string): string | null {
-  if (!from || !to) {
-    return 'Choose a date range (at most 31 days).';
-  }
-
-  const days = (new Date(`${to}T00:00:00`).getTime() - new Date(`${from}T00:00:00`).getTime()) / 86_400_000;
-  return days < 0 ? '"From" is after "To".' : days > MaxRangeDays - 1 ? 'The date range can be at most 31 days.' : null;
-}
 
 function pretty(json: string | null | undefined): string {
   if (!json) {

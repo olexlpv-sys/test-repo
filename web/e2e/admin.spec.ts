@@ -288,3 +288,96 @@ test('tamper findings are listed and reconciliation can be run now', async ({ pa
   await page.getByRole('button', { name: 'Run reconciliation now' }).click();
   await expect(page.getByText('Reconciliation finished')).toBeVisible({ timeout: 30_000 });
 });
+
+test('a pasted heading takes no explicit style from the fallback class, so changing its level restyles it', async ({
+  page,
+  request,
+}) => {
+  const doc = await newDocument(request);
+  const node = await (
+    await request.post(`${apiBase}/api/versions/${doc.draftVersionId}/nodes`, {
+      headers: as(Alice),
+      data: { title: 'Paste', nodeTypeId: 2 },
+    })
+  ).json();
+  await openAs(page, Alice, `/documents/${doc.id}`);
+  const text = page.getByTestId(`section-${node.id}`).getByLabel('Section text');
+  await text.click();
+  await text.evaluate((element) => {
+    const data = new DataTransfer();
+    data.setData('text/html', '<h1 class="ds-style-Heading1">Alpha</h1>'); // what copying a heading from the editor puts on the clipboard
+    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await page.keyboard.press('Control+Alt+2');
+  await expect(page.getByTestId('save-status')).toContainText('Saved', { timeout: 10_000 });
+  const stored = JSON.stringify(
+    (await (await request.get(`${apiBase}/api/nodes/${node.id}/content`, { headers: as(Alice) })).json()).contentJson,
+  );
+  expect(stored).toContain('"level":2');
+  expect(stored).not.toContain('styleId');
+  await expect(text.locator('h2')).toHaveClass(/ds-style-Heading2/);
+});
+
+test('admin details: whole seed incl. inactive users, folder path once, stored line spacing shown, inherited bold switched off', async ({
+  page,
+  request,
+}) => {
+  await openAs(page, Admin, '/admin?tab=users');
+  await expect(page.getByTestId('user-system')).toContainText('No'); // inactive
+
+  await page.getByRole('tab', { name: 'Folders' }).click();
+  await page.getByTestId('folder-1').getByText('General').click();
+  await expect(page.getByTestId('folder-details')).toContainText(/Path\s*General\s*Documents/);
+
+  await page.getByRole('tab', { name: 'Content styles' }).click();
+  await page.getByTestId('style-Normal').getByRole('button', { name: 'Edit' }).click();
+  await expect(page.getByRole('dialog').getByRole('combobox', { name: 'Line spacing' })).toHaveValue(
+    '1.08 (Word default)',
+  );
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+
+  const styleId = `E2eChar${suffix()}`;
+  await page.getByRole('button', { name: 'New character style' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New character style' });
+  await dialog.getByLabel('Style id').fill(styleId);
+  await dialog.getByLabel('Name').fill('E2E not bold');
+  await dialog.getByRole('combobox', { name: 'Based on' }).click();
+  await page.getByRole('option', { name: 'Strong' }).click();
+  await dialog.getByRole('combobox', { name: 'Bold' }).click();
+  await page.getByRole('option', { name: 'Off' }).click();
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog).toBeHidden();
+  const styles: { id: number; styleId: string; properties: Record<string, unknown>; rowVersion: string }[] = await (
+    await request.get(`${apiBase}/api/content-styles`, { headers: as(Admin) })
+  ).json();
+  const created = styles.find((s) => s.styleId === styleId);
+  expect(created?.properties).toEqual({ bold: false });
+  await expect(page.getByTestId(`style-${styleId}`).locator(`.ds-style-${styleId}`)).toHaveCSS('font-weight', '400');
+  await request.delete(
+    `${apiBase}/api/content-styles/${created?.id}?rowVersion=${encodeURIComponent(created?.rowVersion ?? '')}`,
+    { headers: as(Admin) },
+  );
+});
+
+test('deleting the selected folder clears the Folders view without an error', async ({ page, request }) => {
+  const created = await (
+    await request.post(`${apiBase}/api/folders`, {
+      headers: as(Admin),
+      data: { parentFolderId: null, name: `To delete ${suffix()}` },
+    })
+  ).json();
+  await openAs(page, Admin, '/admin?tab=folders');
+  await page.getByTestId(`folder-${created.id}`).getByText(created.name).click();
+  await expect(page.getByTestId('folder-details')).toBeVisible();
+  await page
+    .getByTestId(`folder-${created.id}`)
+    .getByRole('button', { name: `Actions for ${created.name}` })
+    .click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await page
+    .getByRole('dialog', { name: /Delete folder/ })
+    .getByRole('button', { name: 'Delete' })
+    .click();
+  await expect(page.getByTestId('folder-details')).toHaveCount(0);
+  await expect(page.getByText(/was not found/)).toHaveCount(0);
+});

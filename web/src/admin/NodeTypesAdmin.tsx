@@ -239,6 +239,7 @@ export function NodeTypesAdmin() {
               />
               <NumberInput
                 label="Sort order"
+                allowDecimal={false}
                 value={form.sortOrder}
                 onChange={(v) => setForm({ ...form, sortOrder: Number(v) || 0 })}
                 error={fieldError(save.error, 'sortOrder')}
