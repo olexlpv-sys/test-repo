@@ -206,9 +206,9 @@ public sealed class AttributedDiffTests
         };
 
         var ops = AttributedDiff.Diff(Service, baseline, steps).Blocks.SelectMany(b => b.Ops ?? []).Where(o => o.Op != "equal").ToList();
-        // Alice's move shows as delete + re-insert of the paragraph; only Bob's word is his.
-        Assert.Equal(("insert", "remains ", "Bob"), ops.Where(o => o.By!.DisplayName == "Bob").Select(o => (o.Op, o.Text, o.By!.DisplayName)).Single());
-        Assert.All(ops.Where(o => !o.Text.Contains("remains", StringComparison.Ordinal)), o => Assert.Equal("Alice", o.By!.DisplayName));
+        // Alice's move shows as delete + re-insert of the paragraph (hers); only Bob's word change is his.
+        Assert.Equal(["delete stays", "insert remains"], ops.Where(o => o.By!.DisplayName == "Bob").Select(o => $"{o.Op} {o.Text.Trim()}"));
+        Assert.All(ops.Where(o => o.By!.DisplayName != "Bob"), o => Assert.Equal("Alice", o.By!.DisplayName));
     }
 
     [Fact]
@@ -220,6 +220,24 @@ public sealed class AttributedDiffTests
         watch.Stop();
         Assert.Equal("inserted", diff.Blocks[1].Status);
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(3), $"took {watch.Elapsed.TotalMilliseconds:F0} ms");
+    }
+
+    [Fact]
+    public void Swapping_a_long_paragraph_is_attributed_in_linear_time()
+    {
+        var words = string.Join(' ', Enumerable.Range(0, 16000).Select(i => $"word{i % 997}"));
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var diff = AttributedDiff.Diff(Service, Doc("Small A.", words), [new ContentStep(Doc(words, "Small A."), Alice)]);
+        watch.Stop();
+        Assert.All(diff.Blocks.SelectMany(b => b.Ops ?? []).Where(o => o.Op != "equal"), o => Assert.Equal("Alice", o.By!.DisplayName));
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(3), $"took {watch.Elapsed.TotalMilliseconds:F0} ms");
+    }
+
+    [Fact]
+    public void Numbers_beyond_double_are_kept_as_written()
+    {
+        var diff = Service.Diff(Doc("x"), """{"type":"doc","content":[{"type":"heading","attrs":{"level":1e400},"content":[{"type":"text","text":"x"}]}]}""");
+        Assert.NotEmpty(diff.Html);
     }
 
     [Fact]

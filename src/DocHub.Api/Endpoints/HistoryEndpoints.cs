@@ -112,9 +112,12 @@ internal sealed class HistoryEndpoints : IEndpointModule
                     : until.StartsWith("e:", StringComparison.Ordinal) && long.TryParse(until.AsSpan(2), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var e) ? e
                     : throw DomainException.Validation("until must be current or e:{entryId}.");
 
-                // The state being tracked: the draft, else the current version.
+                // The state being tracked: the draft, else the current version, else (flag cleared by a script) the latest signed one.
                 var target = await db.DocumentVersions.AsNoTracking().Where(v => v.DocumentId == id && (v.Status == Domain.Entities.VersionStatus.Draft || v.IsCurrent))
-                    .OrderBy(v => v.Status).FirstOrDefaultAsync(ct) ?? throw DomainException.NotFound("Current version of document", id);
+                    .OrderBy(v => v.Status).FirstOrDefaultAsync(ct)
+                    ?? await db.DocumentVersions.AsNoTracking().Where(v => v.DocumentId == id && v.Status == Domain.Entities.VersionStatus.Signed)
+                        .OrderByDescending(v => v.VersionNumber).FirstOrDefaultAsync(ct)
+                    ?? throw DomainException.NotFound("Current version of document", id);
                 var baseline = await tracking.BaselineAsync(target, since, ct);
 
                 // Cached per node, baseline and last change (NFR-L9): any new change of the node gives a new key.

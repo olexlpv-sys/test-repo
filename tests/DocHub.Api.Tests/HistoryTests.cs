@@ -355,6 +355,30 @@ public sealed class HistoryTests(DocHubApiFactory factory) : IClassFixture<DocHu
         Assert.DoesNotContain(move.GetProperty("changes").EnumerateArray(), c => c.GetProperty("field").GetString() is "parentNodeId" or "sortOrder");
     }
 
+    [Fact]
+    public async Task Script_numbers_beyond_double_and_script_current_flag_changes_are_shown()
+    {
+        var (documentId, v1, nodes) = await _arrange.SignedAsync();
+        var logical = await LogicalAsync(nodes[0]);
+        await using (var dbo = await SqlSession.OpenAsync(factory.AdminConnectionString))
+        {
+            await dbo.ExecuteAsync("""UPDATE app.NodeContent SET ContentJson = N'{"type":"doc","content":[{"type":"heading","attrs":{"level":1e400},"content":[{"type":"text","text":"huge"}]}]}' WHERE NodeId = @n;""", ("@n", nodes[0]));
+            await dbo.ExecuteAsync("UPDATE app.DocumentVersion SET IsCurrent = 0 WHERE Id = @v;", ("@v", v1));
+        }
+
+        var feed = (await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/documents/{documentId}/history?source=Script", null, HttpStatusCode.OK))
+            .GetProperty("items").EnumerateArray().ToList();
+        Assert.Contains(feed, e => e.GetProperty("kind").GetString() == "ContentChanged");
+        var flag = Assert.Single(feed, e => e.GetProperty("kind").GetString() == "VersionChanged");
+        Assert.Contains(flag.GetProperty("changes").EnumerateArray(), c => c.GetProperty("field").GetString() == "isCurrent");
+
+        var entry = (await HistoryAsync(documentId, logical))[0].GetProperty("id").GetInt64();
+        await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/history/entries/{entry}/diff", null, HttpStatusCode.OK);
+        await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/history/entries/{entry}/content", null, HttpStatusCode.OK);
+        await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/documents/{documentId}/nodes/{logical}/changes?since=d:2000-01-01", null, HttpStatusCode.OK);
+        await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/versions/{v1}/change-summary?since=d:2000-01-01", null, HttpStatusCode.OK);
+    }
+
     private async Task<List<JsonElement>> HistoryAsync(int documentId, Guid logicalNodeId) =>
         (await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, $"/api/documents/{documentId}/nodes/{logicalNodeId}/history?pageSize=200", null, HttpStatusCode.OK))
             .GetProperty("items").EnumerateArray().ToList();

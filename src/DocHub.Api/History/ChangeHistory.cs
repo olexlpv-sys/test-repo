@@ -257,14 +257,15 @@ public sealed class ChangeHistory(DocHubDbContext db, IContentDiffService diff)
     private static readonly HashSet<string> Hidden = new(StringComparer.Ordinal)
     {
         "ContentJson", "ContentHtml", "PlainText", "ContentHash", "ModifiedAt", "ModifiedByUserId", "CreatedAt", "CreatedByUserId", "RowVersion", "DerivedStale",
-        "DocumentVersionId", "LogicalNodeId", "SchemaVersion", "SignedContentHash", "ContentChangeLogId", "IsCurrent",
+        "DocumentVersionId", "LogicalNodeId", "SchemaVersion", "SignedContentHash", "ContentChangeLogId",
     };
 
     /// <summary>The kind of an entry (from table, operation and changed columns) and its field changes.</summary>
     public static (string Kind, List<FieldChange> Changes) Describe(IReadOnlyList<ChangeLogRow> group)
     {
         var changes = group.Where(r => r.Operation == "U")
-            .SelectMany(r => r.Columns.Where(c => !Hidden.Contains(c)).Select(c => new FieldChange(Field(c), r.Old(c), r.New(c))))
+            // The API moves the current-version flag as bookkeeping (new draft, discard); a script doing it is a change.
+            .SelectMany(r => r.Columns.Where(c => !Hidden.Contains(c) && !(c == "IsCurrent" && r.Source == "App")).Select(c => new FieldChange(Field(c), r.Old(c), r.New(c))))
             .ToList();
         // The copy into a new draft collapses per node; its version row stays a VersionCreated entry.
         if (group.Any(r => r.OperationContext == CopyContext && r.TableName is "app.DocumentNode" or "app.NodeContent"))

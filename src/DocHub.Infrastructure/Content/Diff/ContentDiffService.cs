@@ -108,7 +108,8 @@ public sealed partial class ContentDiffService : IContentDiffService
             case JsonValueKind.String:
                 return JsonValue.Create(element.GetString());
             case JsonValueKind.Number:
-                return element.TryGetInt64(out var l) ? JsonValue.Create(l) : JsonValue.Create(element.GetDouble());
+                // Kept as written (1e400 has no double), like the stored text.
+                return JsonValue.Create(element.Clone());
             case JsonValueKind.True:
                 return JsonValue.Create(true);
             case JsonValueKind.False:
