@@ -350,6 +350,24 @@ public sealed class AttributedDiffTests
     }
 
     [Theory]
+    [InlineData("Bob removes this whole long sentence here.")]
+    [InlineData("Bob cuts xx.")]
+    public void Text_moved_away_next_to_a_large_deletion_keeps_its_mover(string removed)
+    {
+        var baseline = Doc($"Keep this. {removed} Short.", "Next para is here.", "Tail.");
+        var steps = new[]
+        {
+            new ContentStep(Doc($"Keep this. {removed}", "Short. Next para is here.", "Tail."), Alice),
+            new ContentStep(Doc("Keep this.", "Short. Next para is here.", "Tail."), Bob),
+        };
+
+        var ops = AttributedDiff.Diff(Service, baseline, steps).Blocks.SelectMany(b => b.Ops ?? []).Where(o => o.Op != "equal").ToList();
+        Assert.All(ops.Where(o => o.Text.Contains("Short", StringComparison.Ordinal) || o.Text.Contains("Keep", StringComparison.Ordinal)),
+            o => Assert.Equal("Alice", o.By!.DisplayName));
+        Assert.Contains(ops, o => o.Op == "delete" && o.By!.DisplayName == "Bob" && o.Text.Contains(removed.TrimEnd('.'), StringComparison.Ordinal));
+    }
+
+    [Theory]
     [InlineData("swap")]
     [InlineData("reverse")]
     public void Moving_many_paragraphs_at_once_is_attributed_in_linear_time(string kind)

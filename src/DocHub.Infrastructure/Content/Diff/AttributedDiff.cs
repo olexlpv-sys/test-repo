@@ -58,8 +58,14 @@ public static class AttributedDiff
 
         // Baseline characters that survive: who moved / restructured them (for deletes the final diff shows of moved text).
         var movedBy = new Dictionary<int, DiffAuthor>();
+        var placedBy = new Dictionary<int, DiffAuthor>();
         foreach (var c in state.SelectMany(b => b))
         {
+            if (c is { BaselineIndex: { } p, PlacedBy: { } placer })
+            {
+                placedBy[p] = placer;
+            }
+
             // Deletes of text that went elsewhere belong to whoever moved it away (before any later split of it), else to whoever
             // restructured it; being pushed out of order by someone else's move is the weakest reason.
             if (c.BaselineIndex is { } i && (c.MovedBy ?? c.PlacedBy ?? c.DisplacedBy) is { } by)
@@ -99,7 +105,7 @@ public static class AttributedDiff
                     return block;
                 }
 
-                return block with { Ops = BlockOps(baseStart, baseBlock, finalBlock, deletedBy, movedBy, last) };
+                return block with { Ops = BlockOps(baseStart, baseBlock, finalBlock, deletedBy, movedBy, placedBy, last) };
             }
 
             return block with
@@ -123,7 +129,7 @@ public static class AttributedDiff
     /// </summary>
     private static List<DiffOp> BlockOps(
         int baseStart, List<(char C, string Marks)> baseBlock, List<CharInfo> finalBlock, Dictionary<int, DiffAuthor> deletedBy, Dictionary<int, DiffAuthor> movedBy,
-        DiffAuthor? last)
+        Dictionary<int, DiffAuthor> placedBy, DiffAuthor? last)
     {
         // Character by character: (op, char, author — null when unknown, changes, reformatted by).
         var chars = new List<(string Op, char C, DiffAuthor? By, IReadOnlyList<string>? Changes, DiffAuthor? FormatBy)>(finalBlock.Count + baseBlock.Count);
@@ -134,22 +140,24 @@ public static class AttributedDiff
         void FlushDeletes(int until)
         {
             // One stretch of deleted baseline text. Characters carried elsewhere (text moved between blocks) take who moved or
-            // restructured them — unless the stretch was mostly deleted outright: then the leftovers the token diff happened to
-            // carry along belong to that deletion too, so one deleted passage has one author.
-            var stretch = new List<(char C, DiffAuthor? Deleted, DiffAuthor? Moved)>();
+            // restructured them — unless the stretch was mostly deleted outright and they were carried into a block the same
+            // change restructured: those are leftovers of that rewrite (the token diff happened to keep them), so one deleted
+            // passage has one author. Text another change moved away keeps its mover.
+            var stretch = new List<(char C, DiffAuthor? Deleted, DiffAuthor? Moved, DiffAuthor? Placed)>();
             for (; baseStart >= 0 && next < until && next < end; next++)
             {
                 if (!surviving.Contains(next))
                 {
-                    stretch.Add((baseBlock[next - baseStart].C, deletedBy.GetValueOrDefault(next), movedBy.GetValueOrDefault(next)));
+                    stretch.Add((baseBlock[next - baseStart].C, deletedBy.GetValueOrDefault(next), movedBy.GetValueOrDefault(next), placedBy.GetValueOrDefault(next)));
                 }
             }
 
-            var explicitCount = stretch.Count(d => d.Deleted is not null);
-            var dominant = explicitCount * 2 > stretch.Count ? stretch.Where(d => d.Deleted is not null).Select(d => d.Deleted).MaxBy(a => a!.EntryId) : null;
-            foreach (var (c, deleted, moved) in stretch)
+            var deleters = stretch.Where(d => d.Deleted is not null).Select(d => d.Deleted!.EntryId).ToHashSet();
+            var mostlyDeleted = deleters.Count > 0 && stretch.Count(d => d.Deleted is not null) * 2 > stretch.Count;
+            foreach (var (c, deleted, moved, placed) in stretch)
             {
-                chars.Add(("delete", c, deleted ?? dominant ?? moved, null, null));
+                var leftover = mostlyDeleted && deleted is null && placed is not null && deleters.Contains(placed.EntryId);
+                chars.Add(("delete", c, deleted ?? (leftover ? placed : moved), null, null));
             }
         }
 
