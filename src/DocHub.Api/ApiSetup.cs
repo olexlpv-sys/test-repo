@@ -12,6 +12,9 @@ using DocHub.Infrastructure.Content;
 using DocHub.Infrastructure.Export;
 using DocHub.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 
 namespace DocHub.Api;
@@ -64,6 +67,7 @@ internal static class ApiSetup
             .AllowAnyMethod()));
 
         services.AddHealthChecks().AddDbContextCheck<DocHubDbContext>("database");
+        AddTelemetry(builder);
         services.AddOpenApi(options => options
             .AddDocumentTransformer<TestModeSecuritySchemeTransformer>()
             .AddSchemaTransformer<UtcDateTimeSchemaTransformer>());
@@ -146,6 +150,30 @@ internal static class ApiSetup
         }
 
         return app;
+    }
+
+    /// <summary>
+    /// OpenTelemetry traces and metrics (T19 §4: load tuning) — requests, SQL commands, GC/memory — exported over OTLP when an
+    /// endpoint is configured (<c>OTEL_EXPORTER_OTLP_ENDPOINT</c>, or <c>OpenTelemetry:Enabled</c> with the exporter defaults).
+    /// </summary>
+    private static void AddTelemetry(WebApplicationBuilder builder)
+    {
+        var configuration = builder.Configuration;
+        if (string.IsNullOrWhiteSpace(configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]) && !configuration.GetValue<bool>("OpenTelemetry:Enabled"))
+        {
+            return;
+        }
+
+        builder.Services.AddOpenTelemetry()
+            .ConfigureResource(resource => resource.AddService("DocHub.Api"))
+            .WithTracing(tracing => tracing
+                .AddAspNetCoreInstrumentation(options => options.Filter = context => context.Request.Path != "/health")
+                .AddSqlClientInstrumentation()
+                .AddOtlpExporter())
+            .WithMetrics(metrics => metrics
+                .AddAspNetCoreInstrumentation()
+                .AddRuntimeInstrumentation()
+                .AddOtlpExporter());
     }
 
     private static void AddAuthentication(WebApplicationBuilder builder)

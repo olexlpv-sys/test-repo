@@ -20,6 +20,32 @@ public sealed class HostingTests(DocHubApiFactory factory, SqlServerContainerFix
         Assert.Equal("Healthy", await response.Content.ReadAsStringAsync(Ct));
     }
 
+    [Fact]
+    public async Task Telemetry_is_registered_only_when_configured()
+    {
+        Assert.Null(factory.Services.GetService(typeof(OpenTelemetry.Trace.TracerProvider)));
+
+        await using var traced = new TelemetryApiFactory(server);
+        await traced.InitializeAsync();
+        using var client = traced.CreateClientFor(TestUsers.Alice);
+        using var response = await client.GetAsync(new Uri("/api/me", UriKind.Relative), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(traced.Services.GetService(typeof(OpenTelemetry.Trace.TracerProvider)));
+        Assert.NotNull(traced.Services.GetService(typeof(OpenTelemetry.Metrics.MeterProvider)));
+    }
+
+    private sealed class TelemetryApiFactory(SqlServerContainerFixture server) : DocHubApiFactory(server)
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.UseSetting("OpenTelemetry:Enabled", "true");
+            // No collector in tests: the exporter just fails to send, which it does in the background.
+            builder.UseSetting("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:9");
+        }
+    }
+
     [Theory]
     [InlineData("/openapi/v1.json")]
     [InlineData("/scalar")]

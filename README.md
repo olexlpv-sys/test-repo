@@ -56,6 +56,8 @@ PDF export (T20) renders with headless Chromium through Playwright and stores fi
 installed one. Where Chromium can't create its sandbox (a container running as root), set `Export:Renderer:Sandbox=false`.
 The export tests use `PLAYWRIGHT_CHROMIUM` (default `/opt/pw-browsers/chromium` when present) and start their own Azurite container.
 
+Load and performance testing (data generator, NBomber traffic mix, UI probe): [docs/runbooks/load-testing.md](docs/runbooks/load-testing.md).
+
 ## Documentation
 
 - [Requirements](docs/requirements/README.md) — one file per area, plus the decisions log
