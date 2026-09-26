@@ -172,7 +172,7 @@ public sealed class ChangeHistory(DocHubDbContext db, IContentDiffService diff)
                     "SELECT [ChangeLogId] AS [Value] FROM [audit].[vSignedVersionTampering] WHERE [DocumentId] = @d", Parameter("@d", documentId))
                 .ToListAsync(cancellationToken)).ToHashSet();
 
-        return groups.Select(g =>
+        var entries = groups.Select(g =>
             {
                 var primary = Primary(g);
                 var (kind, changes) = Describe(g);
@@ -190,8 +190,55 @@ public sealed class ChangeHistory(DocHubDbContext db, IContentDiffService diff)
                     user, script ? "Script" : "App", script ? g.First().DbLogin : null, g.Select(r => r.Ticket).FirstOrDefault(t => t != null),
                     g.Select(r => r.Reason).FirstOrDefault(t => t != null), summary, changes, contentRow is not null, g.Any(r => tampered.Contains(r.Id)));
             })
+            // Bookkeeping without a visible change (the current-version flag moving to a new draft) is no history entry.
+            .Where(e => !(e.Kind == "VersionChanged" && e.Changes.Count == 0))
             .OrderByDescending(e => e.ChangedAt).ThenByDescending(e => e.Id)
             .ToList();
+        return await WithParentTitlesAsync(entries, cancellationToken);
+    }
+
+    /// <summary>T11 rule 3: moves show the old and new parent by title (also of parents deleted since), not by internal ids.</summary>
+    private async Task<List<HistoryEntry>> WithParentTitlesAsync(List<HistoryEntry> entries, CancellationToken ct)
+    {
+        var parentIds = entries.Where(e => e.Kind == "NodeMoved")
+            .SelectMany(e => e.Changes.Where(c => c.Field == "parentNodeId").SelectMany(c => new[] { c.Old, c.New }))
+            .Select(id => int.TryParse(id, out var n) ? n : 0).Where(n => n > 0).Distinct().ToList();
+        if (parentIds.Count == 0)
+        {
+            return entries;
+        }
+
+        var titles = await db.DocumentNodes.AsNoTracking().Where(n => parentIds.Contains(n.Id)).ToDictionaryAsync(n => n.Id, n => n.Title, ct);
+        foreach (var missing in parentIds.Where(id => !titles.ContainsKey(id)))
+        {
+            var row = (await db.Database.SqlQueryRaw<ChangeLogRow>(
+                    "SELECT TOP (1) " + Columns + " FROM [audit].[ChangeLog] WHERE [TableName] = N'app.DocumentNode' AND [EntityId] = @id ORDER BY [Id] DESC",
+                    Parameter("@id", missing)).ToListAsync(ct)).FirstOrDefault();
+            if ((row?.Operation == "D" ? row.Old("Title") : row?.New("Title")) is { } title)
+            {
+                titles[missing] = title;
+            }
+        }
+
+        string? Title(string? id) => int.TryParse(id, out var n) ? titles.GetValueOrDefault(n, "(unknown section)") : null;
+        return entries.Select(e =>
+        {
+            if (e.Kind != "NodeMoved")
+            {
+                return e;
+            }
+
+            var parent = e.Changes.FirstOrDefault(c => c.Field == "parentNodeId");
+            var changes = e.Changes.Where(c => c.Field is not ("parentNodeId" or "sortOrder")).ToList();
+            if (parent is null)
+            {
+                return e with { Changes = changes, Summary = "Reordered among its siblings" };
+            }
+
+            var (from, to) = (Title(parent.Old), Title(parent.New));
+            changes.Insert(0, new FieldChange("parent", from, to));
+            return e with { Changes = changes, Summary = $"Moved from \"{from ?? "top level"}\" to \"{to ?? "top level"}\"" };
+        }).ToList();
     }
 
     /// <summary>Rows of one request (CorrelationId) and one entity (node, else table + id) form one entry; script rows stand alone.</summary>
@@ -210,7 +257,7 @@ public sealed class ChangeHistory(DocHubDbContext db, IContentDiffService diff)
     private static readonly HashSet<string> Hidden = new(StringComparer.Ordinal)
     {
         "ContentJson", "ContentHtml", "PlainText", "ContentHash", "ModifiedAt", "ModifiedByUserId", "CreatedAt", "CreatedByUserId", "RowVersion", "DerivedStale",
-        "DocumentVersionId", "LogicalNodeId", "SchemaVersion", "SignedContentHash", "ContentChangeLogId",
+        "DocumentVersionId", "LogicalNodeId", "SchemaVersion", "SignedContentHash", "ContentChangeLogId", "IsCurrent",
     };
 
     /// <summary>The kind of an entry (from table, operation and changed columns) and its field changes.</summary>
@@ -219,7 +266,8 @@ public sealed class ChangeHistory(DocHubDbContext db, IContentDiffService diff)
         var changes = group.Where(r => r.Operation == "U")
             .SelectMany(r => r.Columns.Where(c => !Hidden.Contains(c)).Select(c => new FieldChange(Field(c), r.Old(c), r.New(c))))
             .ToList();
-        if (group.Any(r => r.OperationContext == CopyContext))
+        // The copy into a new draft collapses per node; its version row stays a VersionCreated entry.
+        if (group.Any(r => r.OperationContext == CopyContext && r.TableName is "app.DocumentNode" or "app.NodeContent"))
         {
             return ("CopiedToNewDraft", changes);
         }

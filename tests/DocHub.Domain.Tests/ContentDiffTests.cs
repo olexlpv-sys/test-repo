@@ -94,6 +94,23 @@ public sealed class ContentDiffTests
     }
 
     [Fact]
+    public void Characters_outside_the_basic_plane_are_never_split()
+    {
+        var diff = Service.Diff(Doc(P("Mood \U0001F600 ok")), Doc(P("Mood \U0001F601 ok")));
+        var ops = Assert.Single(diff.Blocks).Ops!;
+        Assert.Equal([("equal", "Mood "), ("delete", "\U0001F600"), ("insert", "\U0001F601"), ("equal", " ok")], ops.Select(o => (o.Op, o.Text)));
+        Assert.DoesNotContain("\uFFFD", diff.Html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Script_stored_duplicate_keys_are_read_last_one_wins()
+    {
+        const string duplicate = """{"type":"doc","type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"old text here","text":"new text here"}]}]}""";
+        var diff = Service.Diff(Doc(P("old text here")), duplicate);
+        Assert.Equal([("delete", "old"), ("insert", "new")], Assert.Single(diff.Blocks).Ops!.Where(o => o.Op != "equal").Select(o => (o.Op, o.Text)));
+    }
+
+    [Fact]
     public void Unreadable_or_empty_states_diff_as_empty_documents()
     {
         Assert.Equal(["inserted"], Service.Diff("not json", Doc(P("x"))).Blocks.Select(b => b.Status));
@@ -167,12 +184,42 @@ public sealed class AttributedDiffTests
         // Inserted within the range: shown as Alice's insert (with Bob's bold applied), not as Bob's text.
         Assert.All(ops.Where(o => o.Op == "insert"), o => Assert.Equal("Alice", o.By!.DisplayName));
         Assert.Contains("Scope", string.Concat(ops.Where(o => o.Op == "insert").Select(o => o.Text)), StringComparison.Ordinal);
+        // ...and Bob is recorded as the one who reformatted it.
+        var bolded = Assert.Single(ops, o => o.Op == "insert" && o.FormatBy is not null);
+        Assert.Equal(("Scope", "Bob"), (bolded.Text, bolded.FormatBy!.DisplayName));
 
         // Bolding baseline text is Bob's format change.
         var formatted = AttributedDiff.Diff(Service, Doc("Scope matters."),
             [new ContentStep("""{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Scope","marks":[{"type":"bold"}]},{"type":"text","text":" matters."}]}]}""", Bob)]);
         var format = Assert.Single(Assert.Single(formatted.Blocks).Ops!, o => o.Op == "format");
         Assert.Equal(("Scope", "Bob"), (format.Text, format.By!.DisplayName));
+    }
+
+    [Fact]
+    public void Rewritten_and_moved_paragraphs_keep_their_author_for_spaces_and_punctuation()
+    {
+        var baseline = Doc("Alpha beta gamma delta.", "Second paragraph stays here.", "Third one moves around.");
+        var steps = new[]
+        {
+            new ContentStep(Doc("Third one moves around.", "Completely new wording now.", "Second paragraph stays here."), Alice),
+            new ContentStep(Doc("Third one moves around.", "Completely new wording now.", "Second paragraph remains here."), Bob),
+        };
+
+        var ops = AttributedDiff.Diff(Service, baseline, steps).Blocks.SelectMany(b => b.Ops ?? []).Where(o => o.Op != "equal").ToList();
+        // Alice's move shows as delete + re-insert of the paragraph; only Bob's word is his.
+        Assert.Equal(("insert", "remains ", "Bob"), ops.Where(o => o.By!.DisplayName == "Bob").Select(o => (o.Op, o.Text, o.By!.DisplayName)).Single());
+        Assert.All(ops.Where(o => !o.Text.Contains("remains", StringComparison.Ordinal)), o => Assert.Equal("Alice", o.By!.DisplayName));
+    }
+
+    [Fact]
+    public void A_long_new_paragraph_is_attributed_in_linear_time()
+    {
+        var words = string.Join(' ', Enumerable.Range(0, 8000).Select(i => $"word{i % 997}"));
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var diff = AttributedDiff.Diff(Service, Doc("Start."), [new ContentStep(Doc("Start.", words), Alice)]);
+        watch.Stop();
+        Assert.Equal("inserted", diff.Blocks[1].Status);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(3), $"took {watch.Elapsed.TotalMilliseconds:F0} ms");
     }
 
     [Fact]

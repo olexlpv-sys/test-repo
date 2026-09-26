@@ -99,32 +99,30 @@ public static class AttributedDiff
     /// </summary>
     private static List<DiffOp> BlockOps(int baseStart, List<(char C, string Marks)> baseBlock, List<CharInfo> finalBlock, Dictionary<int, DiffAuthor> deletedBy, DiffAuthor? last)
     {
-        var ops = new List<DiffOp>();
-        void Add(string op, char c, DiffAuthor? by, IReadOnlyList<string>? changes = null)
-        {
-            if (ops.Count > 0 && ops[^1].Op == op && Equals(ops[^1].By, by)
-                && (ops[^1].Changes is null ? changes is null : changes is not null && ops[^1].Changes!.SequenceEqual(changes, StringComparer.Ordinal)))
-            {
-                ops[^1] = ops[^1] with { Text = ops[^1].Text + c };
-            }
-            else
-            {
-                ops.Add(new DiffOp(op, c.ToString(), changes, op == "equal" ? null : by));
-            }
-        }
-
-        bool Here(CharInfo c) => c.BaselineIndex is { } i && i >= baseStart && i < baseStart + baseBlock.Count && baseStart >= 0;
+        // Character by character: (op, char, author — null when unknown, changes, reformatted by).
+        var chars = new List<(string Op, char C, DiffAuthor? By, IReadOnlyList<string>? Changes, DiffAuthor? FormatBy)>(finalBlock.Count + baseBlock.Count);
+        bool Here(CharInfo c) => baseStart >= 0 && c.BaselineIndex is { } i && i >= baseStart && i < baseStart + baseBlock.Count;
         var surviving = finalBlock.Where(Here).Select(c => c.BaselineIndex!.Value).ToHashSet();
+        var end = baseStart + baseBlock.Count;
         var next = baseStart; // next baseline index not yet emitted
         void FlushDeletes(int until)
         {
-            for (; next < until && next < baseStart + baseBlock.Count; next++)
+            for (; baseStart >= 0 && next < until && next < end; next++)
             {
                 if (!surviving.Contains(next))
                 {
-                    Add("delete", baseBlock[next - baseStart].C, deletedBy.TryGetValue(next, out var d) ? d : last);
+                    // Deleted here but carried elsewhere (text moved between blocks): the author comes from its neighbours.
+                    chars.Add(("delete", baseBlock[next - baseStart].C, deletedBy.GetValueOrDefault(next), null, null));
                 }
             }
+        }
+
+        // The next surviving baseline index after each position (linear, precomputed).
+        var nextSurvivor = new int[finalBlock.Count + 1];
+        nextSurvivor[finalBlock.Count] = end;
+        for (var i = finalBlock.Count - 1; i >= 0; i--)
+        {
+            nextSurvivor[i] = Here(finalBlock[i]) ? finalBlock[i].BaselineIndex!.Value : nextSurvivor[i + 1];
         }
 
         for (var i = 0; i < finalBlock.Count; i++)
@@ -135,31 +133,59 @@ public static class AttributedDiff
                 FlushDeletes(c.BaselineIndex!.Value);
                 next = Math.Max(next, c.BaselineIndex!.Value + 1);
                 var baseMarks = baseBlock[c.BaselineIndex!.Value - baseStart].Marks;
-                if (baseMarks == c.Marks)
-                {
-                    Add("equal", c.C, null);
-                }
-                else
-                {
-                    Add("format", c.C, c.FormatBy ?? last, InlineDiff.FormatChanges(baseMarks, c.Marks));
-                }
-
+                chars.Add(baseMarks == c.Marks ? ("equal", c.C, null, null, null) : ("format", c.C, c.FormatBy, InlineDiff.FormatChanges(baseMarks, c.Marks), null));
                 continue;
             }
 
-            // An insert: deletions it replaces come first (up to the next surviving baseline character).
-            var nextSurvivor = finalBlock.Skip(i + 1).Where(Here).Select(x => x.BaselineIndex!.Value).DefaultIfEmpty(baseStart + baseBlock.Count).First();
-            if (baseStart >= 0)
-            {
-                FlushDeletes(nextSurvivor);
-            }
-
-            Add("insert", c.C, c.InsertedBy ?? c.FormatBy ?? last);
+            // An insert: the deletions it replaces come first (up to the next surviving baseline character).
+            FlushDeletes(nextSurvivor[i + 1]);
+            var formatBy = c.InsertedBy is not null && c.FormatBy is not null && !Equals(c.FormatBy, c.InsertedBy) ? c.FormatBy : null;
+            chars.Add(("insert", c.C, c.InsertedBy, null, formatBy));
         }
 
-        if (baseStart >= 0)
+        FlushDeletes(end);
+
+        // Unknown authors (characters the fold carried across blocks, e.g. spaces matched between rewritten paragraphs) take
+        // the author of the nearest changed neighbour of the same kind, else the last change.
+        for (var i = 0; i < chars.Count; i++)
         {
-            FlushDeletes(baseStart + baseBlock.Count);
+            if (chars[i].Op == "equal" || chars[i].By is not null)
+            {
+                continue;
+            }
+
+            DiffAuthor? found = null;
+            for (var d = 1; found is null && (i - d >= 0 || i + d < chars.Count); d++)
+            {
+                if (i - d >= 0 && chars[i - d].Op == chars[i].Op && chars[i - d].By is { } before)
+                {
+                    found = before;
+                }
+                else if (i + d < chars.Count && chars[i + d].Op == chars[i].Op && chars[i + d].By is { } after)
+                {
+                    found = after;
+                }
+                else if ((i - d < 0 || chars[i - d].Op != chars[i].Op) && (i + d >= chars.Count || chars[i + d].Op != chars[i].Op))
+                {
+                    break; // left the run of this kind on both sides
+                }
+            }
+
+            chars[i] = chars[i] with { By = found ?? last };
+        }
+
+        var ops = new List<DiffOp>();
+        foreach (var (op, c, by, changes, formatBy) in chars)
+        {
+            if (ops.Count > 0 && ops[^1].Op == op && Equals(ops[^1].By, by) && Equals(ops[^1].FormatBy, formatBy)
+                && (ops[^1].Changes is null ? changes is null : changes is not null && ops[^1].Changes!.SequenceEqual(changes, StringComparer.Ordinal)))
+            {
+                ops[^1] = ops[^1] with { Text = ops[^1].Text + c };
+            }
+            else
+            {
+                ops.Add(new DiffOp(op, c.ToString(), changes, op == "equal" ? null : by, formatBy));
+            }
         }
 
         return ops;

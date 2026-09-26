@@ -1408,6 +1408,116 @@
         }
       }
     },
+    "/api/documents/{id}/compare": {
+      "get": {
+        "tags": [
+          "Compare"
+        ],
+        "summary": "Compares two versions (base=versionId|latestSigned, target=versionId|draft): summary and one merged tree; unchanged branches are left out unless includeUnchanged.",
+        "operationId": "CompareVersions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "base",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeUnchanged",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comparison"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{id}/compare/nodes/{logicalNodeId}": {
+      "get": {
+        "tags": [
+          "Compare"
+        ],
+        "summary": "Content diff of one node between two versions (same format as the history diff).",
+        "operationId": "CompareNode",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "logicalNodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "base",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentDiff"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/audit/reconcile": {
       "post": {
         "tags": [
@@ -3144,6 +3254,165 @@
           }
         }
       },
+      "CompareNode": {
+        "required": [
+          "logicalNodeId",
+          "status",
+          "changes",
+          "base",
+          "target",
+          "contentStats",
+          "children"
+        ],
+        "type": "object",
+        "properties": {
+          "logicalNodeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "base": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NodeSide"
+              }
+            ]
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NodeSide"
+              }
+            ]
+          },
+          "contentStats": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DiffStats"
+              }
+            ]
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompareNode"
+            }
+          }
+        }
+      },
+      "CompareSummary": {
+        "required": [
+          "added",
+          "removed",
+          "moved",
+          "renamed",
+          "typeChanged",
+          "contentChanged",
+          "unchanged"
+        ],
+        "type": "object",
+        "properties": {
+          "added": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "removed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "moved": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "renamed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "typeChanged": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "contentChanged": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "unchanged": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "Comparison": {
+        "required": [
+          "base",
+          "target",
+          "summary",
+          "tree"
+        ],
+        "type": "object",
+        "properties": {
+          "base": {
+            "$ref": "#/components/schemas/VersionRef"
+          },
+          "target": {
+            "$ref": "#/components/schemas/VersionRef"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CompareSummary"
+          },
+          "tree": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompareNode"
+            }
+          }
+        }
+      },
       "ContentDiff": {
         "required": [
           "blocks",
@@ -3672,6 +3941,16 @@
             }
           },
           "by": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DiffAuthor"
+              }
+            ]
+          },
+          "formatBy": {
             "oneOf": [
               {
                 "type": "null"
@@ -4850,6 +5129,33 @@
           }
         }
       },
+      "NodeSide": {
+        "required": [
+          "title",
+          "number",
+          "nodeType",
+          "parentLogicalNodeId"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "nodeType": {
+            "type": "string"
+          },
+          "parentLogicalNodeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
       "NodeTypeResponse": {
         "required": [
           "id",
@@ -5835,6 +6141,26 @@
           }
         }
       },
+      "VersionRef": {
+        "required": [
+          "versionId",
+          "label"
+        ],
+        "type": "object",
+        "properties": {
+          "versionId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
       "VersionStatus": {
         "enum": [
           "Draft",
@@ -5881,6 +6207,9 @@
     },
     {
       "name": "Comments"
+    },
+    {
+      "name": "Compare"
     },
     {
       "name": "Node types"

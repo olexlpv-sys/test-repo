@@ -303,6 +303,58 @@ public sealed class HistoryTests(DocHubApiFactory factory) : IClassFixture<DocHu
     private async Task<string> NodeRowVersionAsync(int nodeId) =>
         (await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, $"/api/nodes/{nodeId}", null, HttpStatusCode.OK)).GetProperty("rowVersion").GetString()!;
 
+    [Fact]
+    public async Task Script_content_with_duplicate_keys_does_not_break_history_badges_or_track_changes()
+    {
+        var (documentId, v1, nodes) = await _arrange.SignedAsync();
+        var draft = (await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Post, $"/api/documents/{documentId}/drafts", null, HttpStatusCode.Created)).GetProperty("id").GetInt32();
+        var logical = await LogicalAsync(nodes[0]);
+        var draftNode = await NodeOfAsync(draft, logical);
+        await using (var dbo = await SqlSession.OpenAsync(factory.AdminConnectionString))
+        {
+            await dbo.ExecuteAsync("""UPDATE app.NodeContent SET ContentJson = N'{"type":"doc","type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"dup"}]}]}' WHERE NodeId = @n;""", ("@n", draftNode));
+        }
+
+        var entry = (await HistoryAsync(documentId, logical))[0];
+        Assert.Equal("Script", entry.GetProperty("source").GetString());
+        await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/documents/{documentId}/history", null, HttpStatusCode.OK);
+        var diff = await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/history/entries/{entry.GetProperty("id").GetInt64()}/diff", null, HttpStatusCode.OK);
+        Assert.Contains("dup", diff.GetProperty("html").GetString()!, StringComparison.Ordinal);
+        await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/documents/{documentId}/nodes/{logical}/changes", null, HttpStatusCode.OK);
+        await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/versions/{draft}/change-summary", null, HttpStatusCode.OK);
+        await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/versions/{v1}/change-summary", null, HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task A_new_draft_is_a_version_created_entry_and_moves_name_the_parents()
+    {
+        var (documentId, v1) = await _arrange.CreateAsync();
+        var chapter1 = await AddNodeAsync(v1, "Chapter 1");
+        var chapter2 = await AddNodeAsync(v1, "Chapter 2");
+        await _arrange.GrantAsync(documentId, TestUsers.Carol);
+        await _arrange.SignAsync(v1, TestUsers.Carol);
+        var draft = (await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Post, $"/api/documents/{documentId}/drafts", null, HttpStatusCode.Created)).GetProperty("id").GetInt32();
+
+        var feed = (await ApiClient.ExpectAsync(factory, TestUsers.Bob, HttpMethod.Get, $"/api/documents/{documentId}/history?pageSize=200", null, HttpStatusCode.OK))
+            .GetProperty("items").EnumerateArray().ToList();
+        var created = feed.Where(e => e.GetProperty("kind").GetString() == "VersionCreated").Select(e => e.GetProperty("versionId").GetInt32()).ToList();
+        Assert.Contains(draft, created);
+        Assert.All(feed.Where(e => e.GetProperty("kind").GetString() == "CopiedToNewDraft"), e => Assert.NotEqual(JsonValueKind.Null, e.GetProperty("logicalNodeId").ValueKind));
+        Assert.Equal(2, feed.Count(e => e.GetProperty("kind").GetString() == "CopiedToNewDraft"));
+        Assert.DoesNotContain(feed, e => e.GetProperty("kind").GetString() == "VersionChanged");
+
+        var logical2 = await LogicalAsync(chapter2);
+        var moving = await NodeOfAsync(draft, logical2);
+        await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Post, $"/api/nodes/{moving}/move",
+            new { newParentNodeId = await NodeOfAsync(draft, await LogicalAsync(chapter1)), rowVersion = await NodeRowVersionAsync(moving) }, HttpStatusCode.OK);
+        var move = (await HistoryAsync(documentId, logical2))[0];
+        Assert.Equal("NodeMoved", move.GetProperty("kind").GetString());
+        Assert.Equal("Moved from \"top level\" to \"Chapter 1\"", move.GetProperty("summary").GetString());
+        var parent = move.GetProperty("changes").EnumerateArray().Single(c => c.GetProperty("field").GetString() == "parent");
+        Assert.Equal((JsonValueKind.Null, "Chapter 1"), (parent.GetProperty("old").ValueKind, parent.GetProperty("new").GetString()));
+        Assert.DoesNotContain(move.GetProperty("changes").EnumerateArray(), c => c.GetProperty("field").GetString() is "parentNodeId" or "sortOrder");
+    }
+
     private async Task<List<JsonElement>> HistoryAsync(int documentId, Guid logicalNodeId) =>
         (await ApiClient.ExpectAsync(factory, TestUsers.Alice, HttpMethod.Get, $"/api/documents/{documentId}/nodes/{logicalNodeId}/history?pageSize=200", null, HttpStatusCode.OK))
             .GetProperty("items").EnumerateArray().ToList();

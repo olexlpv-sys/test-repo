@@ -12,8 +12,11 @@ namespace DocHub.Infrastructure.Content.Diff;
 /// <summary>Who made a change (track changes, T11 §2a); absent in a plain two-state diff.</summary>
 public sealed record DiffAuthor(long EntryId, int? UserId, string? DisplayName, string Source, string? Ticket, DateTime ChangedAt);
 
-/// <summary>One run of a text block diff: <c>equal</c>, <c>insert</c>, <c>delete</c> or <c>format</c> (same text, other formatting).</summary>
-public sealed record DiffOp(string Op, string Text, IReadOnlyList<string>? Changes = null, DiffAuthor? By = null);
+/// <summary>
+/// One run of a text block diff: <c>equal</c>, <c>insert</c>, <c>delete</c> or <c>format</c> (same text, other formatting).
+/// In track changes, <c>by</c> made the change; <c>formatBy</c> reformatted text another author inserted within the range.
+/// </summary>
+public sealed record DiffOp(string Op, string Text, IReadOnlyList<string>? Changes = null, DiffAuthor? By = null, DiffAuthor? FormatBy = null);
 
 /// <summary>A table cell of a diff: its runs (paragraphs joined by line breaks) and its blocks.</summary>
 public sealed record DiffCell(string Status, IReadOnlyList<DiffOp> Ops, IReadOnlyList<DiffBlock> Blocks);
@@ -58,22 +61,60 @@ public sealed partial class ContentDiffService : IContentDiffService
         return new ContentDiff(blocks, ContentHtmlRenderer.Render(document.ToJsonString()).Html, new DiffStats(stats.Inserted, stats.Deleted));
     }
 
-    /// <summary>A document from stored JSON: lone surrogates repaired, anything unreadable → empty.</summary>
+    /// <summary>
+    /// A document from stored JSON: lone surrogates repaired, duplicate keys resolved (the last one wins — JSON a script
+    /// stored may have them), anything unreadable → empty. The tree is built eagerly, so reading it never throws later.
+    /// </summary>
     public static JsonObject ParseDocument(string? json)
     {
-        if (string.IsNullOrEmpty(json))
+        if (!string.IsNullOrEmpty(json))
         {
-            return new JsonObject { ["type"] = "doc", ["content"] = new JsonArray() };
+            try
+            {
+                using var document = JsonDocument.Parse(ContentSchema.RepairLoneSurrogates(json), new JsonDocumentOptions { MaxDepth = CanonicalJson.MaxDepth });
+                if (ToNode(document.RootElement) is JsonObject root)
+                {
+                    return root;
+                }
+            }
+            catch (Exception e) when (e is JsonException or ArgumentException or InvalidOperationException)
+            {
+            }
         }
 
-        try
+        return new JsonObject { ["type"] = "doc", ["content"] = new JsonArray() };
+    }
+
+    private static JsonNode? ToNode(JsonElement element)
+    {
+        switch (element.ValueKind)
         {
-            return JsonNode.Parse(ContentSchema.RepairLoneSurrogates(json), documentOptions: new JsonDocumentOptions { MaxDepth = CanonicalJson.MaxDepth }) as JsonObject
-                ?? new JsonObject { ["type"] = "doc", ["content"] = new JsonArray() };
-        }
-        catch (Exception e) when (e is JsonException or ArgumentException or InvalidOperationException)
-        {
-            return new JsonObject { ["type"] = "doc", ["content"] = new JsonArray() };
+            case JsonValueKind.Object:
+                var obj = new JsonObject();
+                foreach (var property in element.EnumerateObject())
+                {
+                    obj[property.Name] = ToNode(property.Value);
+                }
+
+                return obj;
+            case JsonValueKind.Array:
+                var array = new JsonArray();
+                foreach (var item in element.EnumerateArray())
+                {
+                    array.Add(ToNode(item));
+                }
+
+                return array;
+            case JsonValueKind.String:
+                return JsonValue.Create(element.GetString());
+            case JsonValueKind.Number:
+                return element.TryGetInt64(out var l) ? JsonValue.Create(l) : JsonValue.Create(element.GetDouble());
+            case JsonValueKind.True:
+                return JsonValue.Create(true);
+            case JsonValueKind.False:
+                return JsonValue.Create(false);
+            default:
+                return null;
         }
     }
 
@@ -816,6 +857,7 @@ internal static partial class InlineDiff
             ? (halfPoints / 2m).ToString("0.#", CultureInfo.InvariantCulture) + "pt"
             : ContentDiffService.Describe(value);
 
-    [GeneratedRegex(@"\w+|\s+|[^\w\s]", RegexOptions.CultureInvariant)]
+    // A surrogate pair (emoji, rare CJK) is one unit, never split.
+    [GeneratedRegex(@"\w+|\s+|[\uD800-\uDBFF][\uDC00-\uDFFF]|[^\w\s]", RegexOptions.CultureInvariant)]
     private static partial Regex TokenPattern();
 }
