@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { alice, baseRoutes, fakeApi, Reply } from '../test/fakeApi';
@@ -286,7 +286,10 @@ describe('document form (T15)', () => {
 
       await userEvent.click(screen.getAllByLabelText('Changes since')[0] as HTMLElement);
       await userEvent.click(await screen.findByRole('option', { name: 'A date…' }));
-      await userEvent.type(screen.getByLabelText('Since date'), '2026-09-26');
+      // A mistyped 5-digit year is ignored (it used to blank the page), the corrected date is used.
+      fireEvent.change(screen.getByLabelText('Since date'), { target: { value: '20266-09-26' } });
+      expect(screen.getByTestId('section-101')).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Since date'), { target: { value: '2026-09-26' } });
 
       await waitFor(() =>
         expect(

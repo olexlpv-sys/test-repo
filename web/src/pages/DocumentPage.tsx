@@ -5,7 +5,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useParams, useSearchParams } from 'react-router-dom';
 import type { Editor } from '@tiptap/core';
 import { api, unwrap } from '../api/client';
-import { localDayStart } from '../app/localDays';
+import { isLocalDate, localDayStart } from '../app/localDays';
 import {
   defaultVersion,
   flatten,
@@ -62,7 +62,7 @@ export function DocumentPage() {
   const [baseline, setBaseline] = useState('latestSigned');
   const [date, setDate] = useState('');
   // A chosen date means the start of that local day (times on the page are shown in local time).
-  const since = baseline === 'date' ? (date ? `d:${localDayStart(date)}` : 'latestSigned') : baseline;
+  const since = baseline === 'date' ? (isLocalDate(date) ? `d:${localDayStart(date)}` : 'latestSigned') : baseline;
   const summary = useChangeSummary(documentId, version?.id ?? null, since);
   const summaryMap = useMemo(
     () => new Map((summary.data?.nodes ?? []).map((n) => [n.logicalNodeId, n])),

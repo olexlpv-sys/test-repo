@@ -10,7 +10,12 @@ export function localDate(offsetDays = 0, now = new Date()): string {
   return `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
 }
 
-/** Local midnight at the start of the day, as an ISO UTC instant. */
+/** Whether a date input's value is a complete, valid yyyy-mm-dd (browsers allow e.g. a 5-digit year while typing). */
+export function isLocalDate(date: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(`${date}T00:00:00`));
+}
+
+/** Local midnight at the start of the day, as an ISO UTC instant. Call only with a valid date ({@link isLocalDate}). */
 export function localDayStart(date: string): string {
   return new Date(`${date}T00:00:00`).toISOString();
 }

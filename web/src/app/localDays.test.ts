@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { VersionHeader } from '../document/api';
 import { sinceText } from '../document/historyText';
-import { localDate, localDayEnd, localDayStart } from './localDays';
+import { isLocalDate, localDate, localDayEnd, localDayStart } from './localDays';
 
 // Node applies a changed TZ at once; each test picks the zone it needs.
 const originalTz = process.env.TZ;
@@ -21,6 +21,13 @@ describe('local calendar days (times are shown in local time, days picked by the
     // 25 October: clocks go back, the day ends at 23:00 UTC.
     expect(localDayStart('2026-10-25')).toBe('2026-10-24T22:00:00.000Z');
     expect(localDayEnd('2026-10-25')).toBe('2026-10-25T22:59:59.999Z');
+  });
+
+  it('accepts only complete, valid dates', () => {
+    expect(isLocalDate('2026-09-26')).toBe(true);
+    expect(isLocalDate('20266-09-26')).toBe(false);
+    expect(isLocalDate('2026-13-01')).toBe(false);
+    expect(isLocalDate('')).toBe(false);
   });
 
   it('knows today by the local clock', () => {

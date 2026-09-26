@@ -1,9 +1,15 @@
+import { isLocalDate } from '../app/localDays';
+
 /** The audit API needs `from` and `to` at most 31 days apart. */
 const MaxRangeDays = 31;
 
 export function rangeError(from: string, to: string): string | null {
   if (!from || !to) {
     return 'Choose a date range (at most 31 days).';
+  }
+
+  if (!isLocalDate(from) || !isLocalDate(to)) {
+    return 'Enter valid dates.';
   }
 
   // Calendar days (compared as dates): a daylight-saving change must not make 31 days count as 30.96 or 31.04.

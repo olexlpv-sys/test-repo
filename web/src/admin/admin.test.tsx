@@ -104,5 +104,8 @@ describe('audit date range', () => {
     expect(rangeError('2026-10-01', '2026-11-01')).toBe('The date range can be at most 31 days.');
     expect(rangeError('2026-10-05', '2026-10-01')).toBe('"From" is after "To".');
     expect(rangeError('', '2026-10-01')).toMatch(/Choose a date range/);
+    // A mistyped year (date inputs accept up to 6 digits) is rejected instead of breaking the query.
+    expect(rangeError('20266-09-26', '2026-10-01')).toBe('Enter valid dates.');
+    expect(rangeError('2026-10-01', '2026-02-30x')).toBe('Enter valid dates.');
   });
 });
